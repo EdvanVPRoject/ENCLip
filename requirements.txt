@@ -1,0 +1,12 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+faster-whisper>=1.1.0
+yt-dlp>=2025.1.15
+# Inference langsung dari file GGUF:
+llama-cpp-python>=0.3.0
+imageio-ffmpeg>=0.5.1
+opencv-python>=4.10.0
+PyQt6>=6.8.0
+PyInstaller>=6.10.0
+python-dotenv>=1.0.1
+google-genai>=0.2.0
