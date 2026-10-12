@@ -91,14 +91,14 @@ Berbeda dari layanan web berbasis langganan bulanan yang mahal, ENCLip berjalan 
    ```cmd
    install_dependencies.bat
    ```
-   *(atau `setup_environment.bat`. Skrip ini otomatis membuat virtual environment `.venv`, mengupgrade pip, dan memasang seluruh dependensi yang dibutuhkan).*
+   *Skrip ini otomatis membuat virtual environment `.venv`, mengupgrade pip, dan memasang seluruh dependensi yang dibutuhkan.*
 
 3. **Buka Aplikasi**:
-   Klik dua kali pada file:
+   Cukup klik dua kali pada file:
    ```cmd
-   run_desktop.bat
+   start.bat
    ```
-   *Saat aplikasi dibuka, tab **Setup Environment & Dependensi** langsung memeriksa seluruh kesiapan sistem secara interaktif.*
+   *Aplikasi akan langsung terbuka secara native. Saat aplikasi dibuka, tab **Setup Environment & Dependensi** langsung memeriksa seluruh kesiapan sistem secara interaktif.*
 
 ---
 
