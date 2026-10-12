@@ -17,7 +17,7 @@
 
 ---
 
-## 🚀 Sekilas Tentang ENCLip
+## Sekilas Tentang ENCLip
 
 **ENCLip** adalah aplikasi desktop native (Windows) yang dirancang untuk mempermudah kreator konten, streamer, podcaster, dan video editor dalam mengubah video berdurasi panjang menjadi klip-klip highlight vertikal (Shorts, TikTok, Reels) atau klip tematik secara otomatis.
 
@@ -28,12 +28,12 @@ Berbeda dari layanan web berbasis langganan bulanan yang mahal, ENCLip berjalan 
 
 ---
 
-## ✨ Fitur Unggulan
+## Fitur Unggulan
 
 ### 1. 100% Native Desktop & Clean Interface
 - Tampilan modern, responsif, dan elegan berbasis **PyQt6**.
 - **Tanpa CMD Pop-up**: Semua proses latar belakang (FFmpeg, Whisper, PyTorch) dieksekusi tanpa jendela hitam yang mengganggu.
-- **Terminal Terpadu**: Dilengkapi panel laci `[ ⌨ Terminal ]` di dalam aplikasi untuk memantau proses ekstraksi, transcoding, dan AI secara real-time.
+- **Terminal Terpadu**: Dilengkapi panel laci `[ Terminal ]` di dalam aplikasi untuk memantau proses ekstraksi, transcoding, dan AI secara real-time.
 
 ### 2. Transkripsi Suara & Deteksi AI
 - **Speech-to-Text Presisi**: Menggunakan model *Faster-Whisper* (Small, Medium, Large-v3) atau *Google Gemini Audio*.
@@ -68,11 +68,11 @@ Berbeda dari layanan web berbasis langganan bulanan yang mahal, ENCLip berjalan 
 
 ### 6. Kontrol Render & Penguncian Aman
 - Semua input dikunci selama render berjalan untuk mencegah konflik pengaturan.
-- Dilengkapi tombol **✕ Batal & Edit Kembali** untuk menghentikan proses yang sedang berlangsung secara instan dan membuka kembali pengaturan video.
+- Dilengkapi tombol **Batal & Edit Kembali** untuk menghentikan proses yang sedang berlangsung secara instan dan membuka kembali pengaturan video.
 
 ---
 
-## 🛠️ Persyaratan Sistem
+## Persyaratan Sistem
 
 - **Sistem Operasi**: Windows 10 / Windows 11 (64-bit)
 - **Python**: Versi 3.10 atau lebih baru (jika menjalankan dari source code)
@@ -82,20 +82,20 @@ Berbeda dari layanan web berbasis langganan bulanan yang mahal, ENCLip berjalan 
 
 ---
 
-## 📦 Panduan Instalasi & Menjalankan
+## Panduan Instalasi & Menjalankan
 
-### ⚡ Cara 1: Unduh Aplikasi Siap Pakai (.exe) — Direkomendasikan
+### Cara 1: Unduh Aplikasi Siap Pakai (.exe) — Direkomendasikan
 Untuk pengguna umum / kreator yang ingin langsung menggunakan aplikasi tanpa instalasi teknis:
 
 1. Unduh paket rilis resmi di GitHub Releases:
-   👉 **[Download ENCLip v1.0.0 (Windows)](https://github.com/EdvanVPRoject/ENCLip/releases/latest)**
+   **[Download ENCLip v1.0.0 (Windows)](https://github.com/EdvanVPRoject/ENCLip/releases/latest)**
 2. Ekstrak file zip `ENCLip-Windows-v1.0.0.zip` ke folder komputer Anda.
 3. Klik dua kali **`ENCLip.exe`**.
 4. Aplikasi langsung terbuka dan siap digunakan! Tidak perlu install Python, tidak ada script CMD rumit.
 
 ---
 
-### 💻 Cara 2: Menjalankan dari Source Code (Khusus Pengembang / Developer)
+### Cara 2: Menjalankan dari Source Code (Khusus Pengembang / Developer)
 Bagi pengembang yang ingin memodifikasi atau menjalankan langsung dari source code Python:
 
 1. **Clone repository ini**:
@@ -117,7 +117,7 @@ Bagi pengembang yang ingin memodifikasi atau menjalankan langsung dari source co
 
 ---
 
-## 🔑 Cara Mendapatkan Google Gemini API Key (100% Gratis)
+## Cara Mendapatkan Google Gemini API Key (100% Gratis)
 
 Jika Anda ingin menggunakan pemrosesan AI Cloud super cepat tanpa membebani CPU/GPU lokal:
 
@@ -133,7 +133,7 @@ Jika Anda ingin menggunakan pemrosesan AI Cloud super cepat tanpa membebani CPU/
 
 ---
 
-## 📁 Struktur Direktori Proyek
+## Struktur Direktori Proyek
 
 ```
 ENCLip/
@@ -153,6 +153,6 @@ ENCLip/
 
 ---
 
-## ⚖️ Lisensi
+## Lisensi
 
 Proyek ini dirilis di bawah lisensi [MIT License](LICENSE). Bebas digunakan, dimodifikasi, dan dikembangkan untuk kebutuhan pribadi maupun komersial.

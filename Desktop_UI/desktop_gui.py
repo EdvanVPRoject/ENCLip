@@ -694,7 +694,7 @@ class ReviewClipCardWidget(QFrame):
         info_col.addLayout(title_row)
 
         # Time range badge
-        time_text = f"⏱ {format_time(start_sec)} – {format_time(end_sec)} ({int(dur_sec)}s)"
+        time_text = f"{format_time(start_sec)} – {format_time(end_sec)} ({int(dur_sec)}s)"
         time_lbl = QLabel(time_text)
         time_lbl.setStyleSheet("font-size: 11px; font-weight: 600; color: #60A5FA; background: transparent;")
         info_col.addWidget(time_lbl)
@@ -800,7 +800,7 @@ class ResultClipCardWidget(QFrame):
         status_row = QHBoxLayout()
         status_row.setSpacing(6)
 
-        success_badge = QLabel("✓ Berhasil")
+        success_badge = QLabel("Berhasil")
         success_badge.setStyleSheet("font-size: 11px; font-weight: 700; color: #38BDF8; background: #0C2138; border: 1px solid #1D4ED8; border-radius: 4px; padding: 2px 8px;")
         status_row.addWidget(success_badge)
         status_row.addStretch()
@@ -1160,7 +1160,7 @@ MODELS_CATALOG = [
         "type": "gguf",
         "filename": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
         "url": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf",
-        "specs": "⚡ Rekomendasi: RAM 4 GB+ | CPU Dual-Core / Laptop Standar",
+        "specs": "Rekomendasi: RAM 4 GB+ | CPU Dual-Core / Laptop Standar",
         "desc": "Model analisis super hemat daya, sangat cepat untuk deteksi momen menarik tanpa memberatkan laptop.",
     },
     {
@@ -1170,7 +1170,7 @@ MODELS_CATALOG = [
         "type": "gguf",
         "filename": "qwen2.5-1.5b-instruct-q4_k_m.gguf",
         "url": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
-        "specs": "⚡ Rekomendasi: RAM 8 GB+ | CPU 4-Core atau GPU 2-4 GB VRAM",
+        "specs": "Rekomendasi: RAM 8 GB+ | CPU 4-Core atau GPU 2-4 GB VRAM",
         "desc": "Keseimbangan ideal antara kecepatan rendering dan kecerdasan kontekstual memahami isi percakapan video.",
     },
     {
@@ -1180,7 +1180,7 @@ MODELS_CATALOG = [
         "type": "gguf",
         "filename": "qwen2.5-7b-instruct-q4_k_m.gguf",
         "url": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf",
-        "specs": "⚡ Rekomendasi: RAM 16 GB+ | GPU RTX 6-8 GB+ VRAM",
+        "specs": "Rekomendasi: RAM 16 GB+ | GPU RTX 6-8 GB+ VRAM",
         "desc": "Kualitas setara AI Cloud, penalaran mendalam, deteksi hook & punchline video yang sangat tajam.",
     },
     {
@@ -1190,7 +1190,7 @@ MODELS_CATALOG = [
         "type": "whisper",
         "filename": "faster-whisper-small",
         "url": "small",
-        "specs": "⚡ Rekomendasi: RAM 4 GB+ | CPU 4-Core atau GPU 2 GB VRAM",
+        "specs": "Rekomendasi: RAM 4 GB+ | CPU 4-Core atau GPU 2 GB VRAM",
         "desc": "Speech-to-text akurat dan cepat untuk audio percakapan Bahasa Indonesia & Inggris sehari-hari.",
     },
     {
@@ -1200,7 +1200,7 @@ MODELS_CATALOG = [
         "type": "whisper",
         "filename": "faster-whisper-medium",
         "url": "medium",
-        "specs": "⚡ Rekomendasi: RAM 8 GB+ | GPU 4 GB+ VRAM",
+        "specs": "Rekomendasi: RAM 8 GB+ | GPU 4 GB+ VRAM",
         "desc": "Presisi tinggi untuk transkripsi audio dengan musik latar belakang atau vokal bising.",
     },
 ]
@@ -1456,7 +1456,7 @@ class HermesDesktop(QMainWindow):
         right_layout.setContentsMargins(0, 0, 4, 0)
         right_layout.setSpacing(8)
 
-        self.terminal_toggle_btn = QPushButton("⌨ Terminal")
+        self.terminal_toggle_btn = QPushButton("Terminal")
         self.terminal_toggle_btn.setObjectName("navButton")
         self.terminal_toggle_btn.setCheckable(True)
         self.terminal_toggle_btn.setToolTip("Buka / Tutup Terminal Log Konsol")
@@ -1504,7 +1504,7 @@ class HermesDesktop(QMainWindow):
             "name": "Python Runtime & Interpreter",
             "status": "OK",
             "is_ok": True,
-            "badge": "✓ TERPASANG & SIAP",
+            "badge": "TERPASANG & SIAP",
             "color": "#10B981",
             "details": f"{py_type} v{py_ver} — Executable: {sys.executable}",
             "desc": "Inti runtime untuk mengeksekusi logika backend, AI orchestration, dan antarmuka desktop.",
@@ -1533,7 +1533,7 @@ class HermesDesktop(QMainWindow):
             "name": "FFmpeg Multimedia Engine",
             "status": "OK" if ffmpeg_ok else "MISSING",
             "is_ok": ffmpeg_ok,
-            "badge": "✓ TERPASANG & SIAP" if ffmpeg_ok else "⚠ BELUM TERDETEKSI",
+            "badge": "TERPASANG & SIAP" if ffmpeg_ok else "BELUM TERDETEKSI",
             "color": "#10B981" if ffmpeg_ok else "#EF4444",
             "details": f"{ffmpeg_ver_str} — {ffmpeg_bin or 'Tidak ditemukan di PATH'}",
             "desc": "FFmpeg diperlukan untuk decoding video, pemotongan klip 9:16 / 16:9, dan penempelan subtitle.",
@@ -1554,7 +1554,7 @@ class HermesDesktop(QMainWindow):
             "name": "Faster-Whisper (Audio Transcription)",
             "status": "OK" if fw_ok else "MISSING",
             "is_ok": fw_ok,
-            "badge": "✓ TERPASANG & SIAP" if fw_ok else "⚠ BELUM TERPASANG",
+            "badge": "TERPASANG & SIAP" if fw_ok else "BELUM TERPASANG",
             "color": "#10B981" if fw_ok else "#F59E0B",
             "details": f"Faster-Whisper {fw_ver} (CTranslate2 Engine)",
             "desc": "Modul AI transkripsi suara ke teks dengan timestamp kata-per-kata presisi tinggi.",
@@ -1576,7 +1576,7 @@ class HermesDesktop(QMainWindow):
             "name": "yt-dlp Video Downloader",
             "status": "OK" if yt_ok else "MISSING",
             "is_ok": yt_ok,
-            "badge": "✓ TERPASANG & SIAP" if yt_ok else "⚠ BELUM TERPASANG",
+            "badge": "TERPASANG & SIAP" if yt_ok else "BELUM TERPASANG",
             "color": "#10B981" if yt_ok else "#F59E0B",
             "details": f"yt-dlp {yt_ver}",
             "desc": "Modul pengunduh video YouTube, Shorts, dan platform online dengan pemilihan resolusi otomatis.",
@@ -1593,15 +1593,15 @@ class HermesDesktop(QMainWindow):
 
         if gemini_key:
             ai_status_text = "Google Gemini Pro Cloud Terkonfigurasi (Kunci API aktif)"
-            ai_badge = "✓ GEMINI CLOUD SIAP"
+            ai_badge = "GEMINI CLOUD SIAP"
             ai_color = "#10B981"
         elif gguf_files:
             ai_status_text = f"Model AI Lokal Terdeteksi ({len(gguf_files)} model GGUF di folder models)"
-            ai_badge = "✓ MODEL LOKAL SIAP"
+            ai_badge = "MODEL LOKAL SIAP"
             ai_color = "#10B981"
         else:
             ai_status_text = "Tersedia Rule-Based Fallback (Kunci Gemini / Model Lokal dapat diset di tab Buat clip)"
-            ai_badge = "ℹ READY (FALLBACK MODE)"
+            ai_badge = "READY (FALLBACK MODE)"
             ai_color = "#3B82F6"
 
         items.append({
@@ -1629,7 +1629,7 @@ class HermesDesktop(QMainWindow):
             "name": "Direktori Kerja & Penyimpanan Data",
             "status": "OK" if dir_ok else "ERROR",
             "is_ok": dir_ok,
-            "badge": "✓ FOLDER KERJA SIAP" if dir_ok else "⚠ GAGAL MEMBUAT",
+            "badge": "FOLDER KERJA SIAP" if dir_ok else "GAGAL MEMBUAT",
             "color": "#10B981" if dir_ok else "#EF4444",
             "details": f"Folder kerja aktif: {', '.join(dirs_created)} (di Core_Data/)",
             "desc": "Penyimpanan video mentah yang diunduh, model AI lokal offline, dan hasil render klip.",
@@ -1721,7 +1721,7 @@ class HermesDesktop(QMainWindow):
 
         if hasattr(self, "setup_summary_lbl"):
             if all_ok:
-                self.setup_summary_lbl.setText("🎉 Semua komponen sistem & dependensi telah terverifikasi dan siap digunakan!")
+                self.setup_summary_lbl.setText("Semua komponen sistem & dependensi telah terverifikasi dan siap digunakan!")
                 self.setup_summary_lbl.setStyleSheet("color: #10B981; font-size: 13px; font-weight: 600;")
             else:
                 self.setup_summary_lbl.setText("Perhatian: Beberapa dependensi belum lengkap atau belum terdeteksi. Silakan klik tombol 'Pasang / Update Dependensi'.")
@@ -1738,7 +1738,7 @@ class HermesDesktop(QMainWindow):
         self.log_terminal("Memulai instalasi dependensi di background...")
         if hasattr(self, "btn_setup_install"):
             self.btn_setup_install.setEnabled(False)
-            self.btn_setup_install.setText("⏳ Sedang Memasang...")
+            self.btn_setup_install.setText("Sedang Memasang...")
 
         self.dep_worker = DependencyInstallWorker()
         self.dep_worker.output_line.connect(self.log_terminal)
@@ -1748,7 +1748,7 @@ class HermesDesktop(QMainWindow):
     def on_dep_install_finished(self, success: bool, msg: str) -> None:
         if hasattr(self, "btn_setup_install"):
             self.btn_setup_install.setEnabled(True)
-            self.btn_setup_install.setText("⚡ Pasang / Update Dependensi Otomatis")
+            self.btn_setup_install.setText("Pasang / Update Dependensi Otomatis")
 
         self.refresh_setup_status()
         if success:
@@ -1795,7 +1795,7 @@ class HermesDesktop(QMainWindow):
         top_btn_row = QHBoxLayout()
         top_btn_row.setSpacing(10)
 
-        btn_refresh_top = QPushButton("🔄 Periksa Ulang")
+        btn_refresh_top = QPushButton("Periksa Ulang")
         btn_refresh_top.setFixedHeight(36)
         btn_refresh_top.setStyleSheet("""
             QPushButton {
@@ -1815,7 +1815,7 @@ class HermesDesktop(QMainWindow):
         btn_refresh_top.clicked.connect(self.refresh_setup_status)
         top_btn_row.addWidget(btn_refresh_top)
 
-        btn_next_top = QPushButton("Lanjut ke Video ➔")
+        btn_next_top = QPushButton("Lanjut ke Video")
         btn_next_top.setFixedHeight(36)
         btn_next_top.setStyleSheet("""
             QPushButton {
@@ -1858,14 +1858,14 @@ class HermesDesktop(QMainWindow):
         bottom_layout = QVBoxLayout(bottom_box)
         bottom_layout.setSpacing(12)
 
-        self.setup_summary_lbl = QLabel("🎉 Semua komponen sistem & dependensi telah terverifikasi dan siap digunakan!")
+        self.setup_summary_lbl = QLabel("Semua komponen sistem & dependensi telah terverifikasi dan siap digunakan!")
         self.setup_summary_lbl.setStyleSheet("color: #10B981; font-size: 13px; font-weight: 600;")
         bottom_layout.addWidget(self.setup_summary_lbl)
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(12)
 
-        self.btn_setup_install = QPushButton("⚡ Pasang / Update Dependensi Otomatis")
+        self.btn_setup_install = QPushButton("Pasang / Update Dependensi Otomatis")
         self.btn_setup_install.setFixedHeight(40)
         self.btn_setup_install.setStyleSheet("""
             QPushButton {
@@ -1885,7 +1885,7 @@ class HermesDesktop(QMainWindow):
         self.btn_setup_install.clicked.connect(self.install_dependencies_in_background)
         btn_row.addWidget(self.btn_setup_install)
 
-        btn_models = QPushButton("📥 Model AI Offline")
+        btn_models = QPushButton("Model AI Offline")
         btn_models.setFixedHeight(40)
         btn_models.setStyleSheet("""
             QPushButton {
@@ -1905,7 +1905,7 @@ class HermesDesktop(QMainWindow):
         btn_models.clicked.connect(lambda: self.switch_tab(5))
         btn_row.addWidget(btn_models)
 
-        btn_next_bottom = QPushButton("Lanjut ke Pilih Video ➔")
+        btn_next_bottom = QPushButton("Lanjut ke Pilih Video")
         btn_next_bottom.setFixedHeight(40)
         btn_next_bottom.setStyleSheet("""
             QPushButton {
@@ -2359,7 +2359,7 @@ class HermesDesktop(QMainWindow):
         self.start_button.clicked.connect(self.start_process)
         action_row.addWidget(self.start_button, 1)
 
-        self.cancel_button = QPushButton("✕ Batal & Edit Kembali")
+        self.cancel_button = QPushButton("Batal & Edit Kembali")
         self.cancel_button.setFixedHeight(36)
         self.cancel_button.setStyleSheet("""
             QPushButton {
@@ -2868,15 +2868,15 @@ class HermesDesktop(QMainWindow):
         content.setReadOnly(True)
         content.setHtml("""
         <div style="font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #CBD5E1;">
-          <h2 style="color: #60A5FA; margin-top: 0;">🚀 1. Panduan Cepat Pemula (3 Langkah Mudah)</h2>
+          <h2 style="color: #60A5FA; margin-top: 0;">1. Panduan Cepat Pemula (3 Langkah Mudah)</h2>
           <p>ENCLip dirancang agar siapapun — termasuk pengguna awam — dapat langsung memotong video panjang menjadi klip viral ber-subtitle tanpa pengaturan teknis yang rumit:</p>
           <ol>
-            <li><b>Langkah 1: Setup Lingkungan (Tab Setup):</b> Saat aplikasi dibuka, periksa status sistem. Jika ada yang bertanda kuning/oranye, cukup klik satu tombol <b>"⚡ Pasang / Update Dependensi Otomatis"</b>. Semua modul akan disiapkan secara otomatis di latar belakang.</li>
+            <li><b>Langkah 1: Setup Lingkungan (Tab Setup):</b> Saat aplikasi dibuka, periksa status sistem. Jika ada yang bertanda kuning/oranye, cukup klik satu tombol <b>"Pasang / Update Dependensi Otomatis"</b>. Semua modul akan disiapkan secara otomatis di latar belakang.</li>
             <li><b>Langkah 2: Masukkan Video (Tab Video):</b> Masukkan tautan video YouTube / Shorts, atau seret langsung file video (MP4, MKV, dsb.) dari laptop/komputer Anda ke kotak unduh.</li>
             <li><b>Langkah 3: Atur & Render (Tab Buat clip):</b> Pilih rasio (misalnya 9:16 vertikal untuk TikTok/Reels/Shorts), pilih gaya subtitle, lalu klik tombol biru <b>"Mulai Render Video"</b>!</li>
           </ol>
 
-          <h2 style="color: #60A5FA;">🎬 2. Fitur Editor & Review Timeline Interaktif</h2>
+          <h2 style="color: #60A5FA;">2. Fitur Editor & Review Timeline Interaktif</h2>
           <p>Setelah AI menganalisis video dan mentranskripsi suara, Anda dapat meninjau serta menyunting klip sebelum hasil akhir dirender:</p>
           <ul>
             <li><b>Sunting Subtitle:</b> Klik tombol <i>Sunting</i> pada alat timeline untuk memperbaiki ejaan kata, mengubah teks terjemahan, atau menyesuaikan tanda baca secara instan.</li>
@@ -2886,10 +2886,10 @@ class HermesDesktop(QMainWindow):
             <li><b>Geser Posisi Subtitle Bebas:</b> Pada layar pratinjau, Anda dapat langsung mengklik dan menyeret (drag) kotak subtitle ke posisi manapun yang Anda inginkan di layar!</li>
           </ul>
 
-          <h2 style="color: #60A5FA;">🎙️ 3. Subtitle Realtime & Anti-Delay (Sinkronisasi Kata Presisi)</h2>
+          <h2 style="color: #60A5FA;">3. Subtitle Realtime & Anti-Delay (Sinkronisasi Kata Presisi)</h2>
           <p>ENCLip dilengkapi sistem <b>Word-Level Timestamping</b> dari model AI Whisper. Kata-kata dikelompokkan secara cerdas menjadi 3–5 kata (~1.5–2 detik) dan disinkronkan langsung dengan gelombang suara pembicara. Teks tidak akan tertunda (delay) dan berganti tepat saat orang berbicara.</p>
 
-          <h2 style="color: #60A5FA;">🧠 4. Pilihan Otak AI: Google Gemini Cloud vs Model AI Lokal</h2>
+          <h2 style="color: #60A5FA;">4. Pilihan Otak AI: Google Gemini Cloud vs Model AI Lokal</h2>
           <table border="1" cellpadding="8" style="border-collapse: collapse; border-color: #334155; width: 100%; margin-top: 8px; margin-bottom: 8px;">
             <tr style="background: #1E293B; color: #F8FAFC;">
               <th>Fitur & Karakteristik</th>
@@ -2928,7 +2928,7 @@ class HermesDesktop(QMainWindow):
             <li>Di aplikasi ENCLip, buka tab <b>Buat clip</b> &gt; pilih <b>Google Gemini Pro (Cloud)</b>, tempelkan kunci di kolom API Key, lalu klik <b>Tes</b>. Kunci akan otomatis disimpan untuk selamanya!</li>
           </ol>
 
-          <h2 style="color: #60A5FA;">📁 5. Lokasi Penyimpanan File Kerja</h2>
+          <h2 style="color: #60A5FA;">5. Lokasi Penyimpanan File Kerja</h2>
           <p>Seluruh berkas Anda disimpan secara rapi di dalam direktori <code>Core_Data/</code>:</p>
           <ul>
             <li><code>Core_Data/VideoMentah/</code> : Menyimpan video sumber yang diunduh atau diimpor. Video di sini dapat digunakan kembali kapan saja tanpa perlu download ulang.</li>
@@ -2936,11 +2936,11 @@ class HermesDesktop(QMainWindow):
             <li><code>Core_Data/models/</code> : Folder penyimpanan model AI offline (GGUF dan model transkripsi Whisper).</li>
           </ul>
 
-          <h2 style="color: #60A5FA;">❓ 6. Pertanyaan Umum & Solusi Kendala (FAQ)</h2>
+          <h2 style="color: #60A5FA;">6. Pertanyaan Umum & Solusi Kendala (FAQ)</h2>
           <ul>
             <li><b>Bagaimana jika komputer saya spek standar atau tidak memiliki kartu grafis (GPU)?</b><br/>Pilihlah penyedia AI <i>Google Gemini Pro (Cloud)</i> dan gunakan preset render video <i>FAST</i> atau <i>ULTRAFAST</i>. Cara ini sangat hemat RAM dan proses tetap super ngebut.</li>
             <li><b>Apakah video tanpa orang bicara (misal rekaman game tanpa mikrofon atau pemandangan) bisa dipotong?</b><br/>Tentu bisa! Ubah mode klip menjadi <i>"Bagi berdasarkan durasi"</i> (misal tiap 60 detik) atau <i>"Bagi berdasarkan jumlah"</i>, bukan Highlight otomatis.</li>
-            <li><b>Bagaimana jika saya ingin membatalkan render yang sedang berjalan?</b><br/>Cukup klik tombol merah <i>"✕ Batal & Edit Kembali"</i>. Render akan langsung dihentikan secara aman dan Anda dapat menyesuaikan kembali pengaturan.</li>
+            <li><b>Bagaimana jika saya ingin membatalkan render yang sedang berjalan?</b><br/>Cukup klik tombol merah <i>"Batal & Edit Kembali"</i>. Render akan langsung dihentikan secara aman dan Anda dapat menyesuaikan kembali pengaturan.</li>
             <li><b>Subtitle menutupi bagian penting video, bagaimana memindahkannya?</b><br/>Di tab <i>Buat clip</i>, Anda dapat langsung mengklik dan menyeret (drag) teks subtitle pada layar pratinjau ke atas, tengah, atau bawah sesuai selera!</li>
           </ul>
         </div>
@@ -3464,7 +3464,7 @@ class HermesDesktop(QMainWindow):
             if path == "gemini": continue
             self.model_file_combo.addItem(Path(path).name, path)
             self.model_file_combo.setItemData(self.model_file_combo.count() - 1, path, Qt.ItemDataRole.ToolTipRole)
-        self.model_file_combo.addItem("☁ Gemini Pro API", "gemini")
+        self.model_file_combo.addItem("Gemini Pro API", "gemini")
         self.model_file_combo.setItemData(self.model_file_combo.count() - 1, "Gunakan API Google Gemini", Qt.ItemDataRole.ToolTipRole)
         selected_index = self.model_file_combo.findData(current) if current else -1
         if selected_index < 0 and self.model_file_combo.count() > 0:
@@ -3502,7 +3502,7 @@ class HermesDesktop(QMainWindow):
     def test_gemini_connection(self) -> None:
         key = self.gemini_key_edit.text().strip()
         if not key:
-            self.gemini_status_badge.setText("✕ Kunci API kosong")
+            self.gemini_status_badge.setText("Kunci API kosong")
             self.gemini_status_badge.setStyleSheet("color: #ef4444; background: #2d1515; border: 1px solid #7f1d1d; border-radius: 4px; padding: 4px 8px; font-weight: 600;")
             return
         self.gemini_status_badge.setText("Menguji koneksi...")
@@ -3512,7 +3512,7 @@ class HermesDesktop(QMainWindow):
             from google import genai
             client = genai.Client(api_key=key)
             client.models.get(model="gemini-3.8-flash")
-            self.gemini_status_badge.setText("✓ Terhubung (Gemini Aktif)")
+            self.gemini_status_badge.setText("Terhubung (Gemini Aktif)")
             self.gemini_status_badge.setStyleSheet("color: #10b981; background: #064e3b; border: 1px solid #047857; border-radius: 4px; padding: 4px 8px; font-weight: 600;")
             QSettings("VanClipper", "VanClipper").setValue("gemini_api_key", key)
             QSettings("VanClipper", "VanClipper").setValue("gemini_api_key_saved", True)
@@ -3523,11 +3523,11 @@ class HermesDesktop(QMainWindow):
         except Exception as exc:
             err_msg = str(exc)
             if "API_KEY_INVALID" in err_msg or "400" in err_msg:
-                text = "✕ Kunci API tidak valid"
+                text = "Kunci API tidak valid"
             elif "429" in err_msg:
-                text = "✕ Kuota API habis"
+                text = "Kuota API habis"
             else:
-                text = f"✕ Gagal: {err_msg[:28]}"
+                text = f"Gagal: {err_msg[:28]}"
             self.gemini_status_badge.setText(text)
             self.gemini_status_badge.setStyleSheet("color: #ef4444; background: #2d1515; border: 1px solid #7f1d1d; border-radius: 4px; padding: 4px 8px; font-weight: 600;")
             self.log_terminal(f"Uji coba Google Gemini API Key gagal: {err_msg}")
@@ -3821,7 +3821,7 @@ class HermesDesktop(QMainWindow):
         right_col.addLayout(btn_row1)
 
         btn_row2 = QHBoxLayout()
-        btn_back_review = QPushButton("✕ Batal & Edit Pengaturan")
+        btn_back_review = QPushButton("Batal & Edit Pengaturan")
         btn_back_review.setMinimumHeight(42)
         btn_back_review.setMinimumWidth(180)
         btn_back_review.setStyleSheet("""
@@ -3942,7 +3942,7 @@ class HermesDesktop(QMainWindow):
         btn_center_box = QHBoxLayout()
         btn_center_box.addStretch()
 
-        self.open_results_button = QPushButton("📁 BUKA FOLDER HASIL")
+        self.open_results_button = QPushButton("BUKA FOLDER HASIL")
         self.open_results_button.setObjectName("primary")
         self.open_results_button.setMinimumHeight(46)
         self.open_results_button.setStyleSheet("font-size: 14px; font-weight: 800; padding: 0 36px; border-radius: 8px;")
@@ -5033,7 +5033,7 @@ class HermesDesktop(QMainWindow):
 
         header = QHBoxLayout()
         header.setContentsMargins(0, 0, 0, 0)
-        lbl = QLabel("⌨ Terminal & Log Sistem")
+        lbl = QLabel("Terminal & Log Sistem")
         lbl.setStyleSheet("font-size: 11px; font-weight: 700; color: #94a3b8; background: transparent;")
         header.addWidget(lbl)
         header.addStretch()
@@ -5044,7 +5044,7 @@ class HermesDesktop(QMainWindow):
         btn_clear.clicked.connect(lambda: self.terminal_box.clear() if hasattr(self, "terminal_box") else None)
         header.addWidget(btn_clear)
 
-        btn_close = QPushButton("✕ Tutup")
+        btn_close = QPushButton("Tutup")
         btn_close.setFixedHeight(22)
         btn_close.setStyleSheet("background: #1e293b; color: #cbd5e1; border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: 600;")
         btn_close.clicked.connect(self.toggle_terminal_drawer)
@@ -5111,7 +5111,7 @@ class HermesDesktop(QMainWindow):
         header_text.addWidget(subtitle)
         header_row.addLayout(header_text, 1)
 
-        btn_open_folder = QPushButton("📁 Buka Folder Model")
+        btn_open_folder = QPushButton("Buka Folder Model")
         btn_open_folder.setFixedHeight(36)
         btn_open_folder.setStyleSheet("""
             QPushButton {
@@ -5225,7 +5225,7 @@ class HermesDesktop(QMainWindow):
                     is_installed = False
 
             if is_installed:
-                status_lbl.setText("✓ Sudah Terpasang")
+                status_lbl.setText("Sudah Terpasang")
                 status_lbl.setStyleSheet("color: #10b981; font-weight: 700; font-size: 12px;")
                 btn_dl.setText("Pasang Ulang")
                 btn_dl.setStyleSheet("background: #1e293b; color: #94a3b8; border: 1px solid #334155; border-radius: 6px; padding: 4px 10px; font-size: 11px;")
@@ -5285,7 +5285,7 @@ class HermesDesktop(QMainWindow):
         card["btn_dl"].setEnabled(True)
 
         if success:
-            card["status_lbl"].setText("✓ Sudah Terpasang")
+            card["status_lbl"].setText("Sudah Terpasang")
             card["status_lbl"].setStyleSheet("color: #10b981; font-weight: 700; font-size: 12px;")
             card["btn_dl"].setText("Pasang Ulang")
             card["btn_dl"].setStyleSheet("background: #1e293b; color: #94a3b8; border: 1px solid #334155; border-radius: 6px; padding: 4px 10px; font-size: 11px;")
@@ -5293,7 +5293,7 @@ class HermesDesktop(QMainWindow):
             self.scan_project_models()
             QMessageBox.information(self, "Model Terpasang", f"Model {card['info']['name']} berhasil diunduh dan telah ditambahkan ke daftar model aktif!")
         else:
-            card["status_lbl"].setText("✕ Gagal")
+            card["status_lbl"].setText("Gagal")
             card["status_lbl"].setStyleSheet("color: #ef4444; font-weight: 700; font-size: 12px;")
             card["btn_dl"].setText("Coba Lagi")
             card["btn_dl"].setStyleSheet("background: #2563eb; color: #ffffff; border-radius: 6px; padding: 4px 14px; font-weight: 600; font-size: 12px;")
