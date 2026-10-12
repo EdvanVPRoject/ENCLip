@@ -8,9 +8,9 @@ if exist "dist\VanClipper\VanClipper.exe" (
     exit /b 0
 )
 
-if not exist ".venv\Scripts\python.exe" (
+if not exist "..\.venv\Scripts\python.exe" (
     echo Membuat environment Python lokal...
-    python -m venv .venv
+    python -m venv ..\.venv
     if errorlevel 1 (
         echo Gagal membuat virtual environment. Pastikan Python terpasang dan bisa dipanggil dari PATH.
         pause
@@ -19,7 +19,7 @@ if not exist ".venv\Scripts\python.exe" (
 )
 
 echo Memastikan dependency terpasang...
-".venv\Scripts\python.exe" -m pip install -r requirements.txt
+"..\.venv\Scripts\python.exe" -m pip install -r ..\requirements.txt
 if errorlevel 1 (
     echo Instalasi dependency gagal.
     pause
@@ -27,5 +27,5 @@ if errorlevel 1 (
 )
 
 echo Menjalankan VanClipper Desktop...
-".venv\Scripts\python.exe" desktop_app.py
+"..\.venv\Scripts\python.exe" desktop_gui.py
 pause

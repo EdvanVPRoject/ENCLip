@@ -10,11 +10,26 @@ const currentTimeLabel = document.querySelector('#video-current-time');
 const totalTimeLabel = document.querySelector('#video-total-time');
 const setManualStartButton = document.querySelector('#set-manual-start');
 const setManualEndButton = document.querySelector('#set-manual-end');
+const modelSelect = document.querySelector('#model-select');
+const llmLabelText = document.querySelector('#llm-label-text');
+const llmCheckbox = form.elements.use_local_llm;
 let activeJobId = null;
 let reviewJob = null;
 const clipMode = document.querySelector('#clip-mode');
 const smartDurationMode = document.querySelector('#smart-duration-mode');
 let timer;
+
+// ── Dynamic label: update checkbox text based on model selection ──
+function updateModelLabel() {
+  const model = modelSelect.value;
+  if (model === 'gemini') {
+    llmLabelText.textContent = 'Gunakan Gemini API';
+    llmCheckbox.checked = true;
+  } else {
+    llmLabelText.textContent = 'Gunakan AI lokal';
+  }
+}
+modelSelect.addEventListener('change', updateModelLabel);
 
 clipMode.addEventListener('change', () => {
   document.querySelector('#smart-options').classList.toggle('hidden', clipMode.value !== 'smart');
@@ -33,6 +48,7 @@ smartDurationMode.addEventListener('change', () => {
 renderButton.addEventListener('click', async () => {
   if (!activeJobId) return;
   renderButton.disabled = true;
+  renderButton.classList.add('loading');
   reviewPanel.classList.add('hidden');
   progressPanel.classList.remove('hidden');
   document.querySelector('#status-message').textContent = 'Menyiapkan render...';
@@ -48,6 +64,7 @@ renderButton.addEventListener('click', async () => {
     poll(activeJobId);
   } catch (error) {
     renderButton.disabled = false;
+    renderButton.classList.remove('loading');
     showError(error.message);
   }
 });
@@ -99,6 +116,7 @@ form.addEventListener('submit', async (event) => {
   results.classList.add('hidden');
   progressPanel.classList.remove('hidden');
   submitButton.disabled = true;
+  submitButton.classList.add('loading');
   document.querySelector('#error-message').textContent = '';
   const data = Object.fromEntries(new FormData(form));
   data.clip_count = Number(data.clip_count || 0);
@@ -127,6 +145,12 @@ async function poll(id) {
     document.querySelector('#status-message').textContent = job.message;
     document.querySelector('#progress-value').textContent = `${job.progress}%`;
     document.querySelector('#progress-bar').style.width = `${job.progress}%`;
+    const subMsg = document.querySelector('#sub-status-message');
+    if (subMsg) {
+      subMsg.textContent = job.sub_message || job.message;
+      document.querySelector('#sub-progress-value').textContent = `${job.sub_progress || 0}%`;
+      document.querySelector('#sub-progress-bar').style.width = `${job.sub_progress || 0}%`;
+    }
     if (job.status === 'awaiting_render') return showReview(job);
     if (job.status === 'completed') return renderResults(job);
     if (job.status === 'failed') return showError(job.error || 'Proses gagal');
@@ -138,7 +162,9 @@ async function poll(id) {
 
 function renderResults(job) {
   submitButton.disabled = false;
+  submitButton.classList.remove('loading');
   renderButton.disabled = false;
+  renderButton.classList.remove('loading');
   reviewPanel.classList.add('hidden');
   results.classList.remove('hidden');
   document.querySelector('#result-count').textContent = `${job.clips.length} CLIP`;
@@ -153,6 +179,7 @@ function showReview(job) {
   activeJobId = job.id;
   reviewJob = job;
   submitButton.disabled = true;
+  submitButton.classList.remove('loading');
   reviewPanel.classList.remove('hidden');
   document.querySelector('#review-info').textContent = `${job.clips.length} CLIP · TRANSKRIP SIAP`;
   document.querySelector('#review-subtitle-style').value = form.elements.subtitle_style.value;
@@ -168,8 +195,10 @@ function showReview(job) {
 
 function updateSubtitlePreview() {
   const style = document.querySelector('#review-subtitle-style').value;
+  const aspect = document.querySelector('#review-aspect-ratio')?.value || '16:9';
   const preview = document.querySelector('#subtitle-preview');
   preview.className = `subtitle-preview ${style}`;
+  preview.setAttribute('data-aspect', aspect);
   const sampleText = reviewJob?.transcript?.[0]?.text || 'Ini contoh tampilan subtitle';
   document.querySelector('#preview-caption').textContent = sampleText;
 }
@@ -190,6 +219,7 @@ function renderReviewClips(job) {
 
 function showError(message) {
   submitButton.disabled = false;
+  submitButton.classList.remove('loading');
   document.querySelector('#status-message').textContent = 'Ada yang perlu diperiksa';
   document.querySelector('#error-message').textContent = message;
 }

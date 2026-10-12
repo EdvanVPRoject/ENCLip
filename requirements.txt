@@ -10,3 +10,4 @@ PyQt6>=6.8.0
 PyInstaller>=6.10.0
 python-dotenv>=1.0.1
 google-genai>=0.2.0
+playwright>=1.40.0

@@ -1,18 +1,44 @@
-__pycache__/
+# Python virtual environments & bytecode
 .venv/
+env/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyInstaller & Build artifacts
+build/
+dist/
+Desktop_UI/build/
+Desktop_UI/dist/
+*.spec
+!Desktop_UI/VanClipper.spec
+*.manifest
+*.exe
+
+# Large AI Model files (Do NOT commit heavy weights)
+*.gguf
+*.bin
+*.pt
+*.onnx
+models/*
+!models/.gitkeep
+Core_Data/models/*
+!Core_Data/models/.gitkeep
+model_paths.json
+Core_Data/model_paths.json
+
+# Video Raw & Render Outputs (User data)
 data/*
 !data/.gitkeep
 VideoMentah/*
 !VideoMentah/.gitkeep
 HasilClip/*
 !HasilClip/.gitkeep
-*.pyc
-.env
-.env.*
-!.env.example
-models/*
-!models/.gitkeep
-*.gguf
+Core_Data/VideoMentah/*
+!Core_Data/VideoMentah/.gitkeep
+Core_Data/HasilClip/*
+!Core_Data/HasilClip/.gitkeep
 *.mp4
 *.mov
 *.mkv
@@ -21,11 +47,20 @@ models/*
 *.m4v
 *.wav
 *.srt
-model_paths.json
-build/
-dist/
-*.spec
-!VanClipper.spec
-*.log
+*.tmp
+
+# Secrets & Environment variables
+.env
+.env.*
+!.env.example
 credentials/
 secrets/
+*.log
+
+# IDE & OS files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
