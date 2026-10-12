@@ -16,6 +16,7 @@ Desktop_UI/dist/
 *.manifest
 *.exe
 *.lnk
+*.zip
 
 # Large AI Model files (Do NOT commit heavy weights)
 *.gguf

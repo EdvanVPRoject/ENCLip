@@ -9,6 +9,12 @@
   <i>100% Offline dengan Model Lokal (Whisper & Qwen GGUF) atau Cloud Super Cepat via Google Gemini 3.8 Flash</i>
 </p>
 
+<p align="center">
+  <a href="https://github.com/EdvanVPRoject/ENCLip/releases/latest">
+    <img src="https://img.shields.io/badge/Download-ENCLip%20v1.0.0%20(Windows%20.exe)-00C853?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Executable" />
+  </a>
+</p>
+
 ---
 
 ## 🚀 Sekilas Tentang ENCLip
@@ -78,7 +84,19 @@ Berbeda dari layanan web berbasis langganan bulanan yang mahal, ENCLip berjalan 
 
 ## 📦 Panduan Instalasi & Menjalankan
 
-### Cara 1: Menjalankan dari Source Code (Paling Cepat)
+### ⚡ Cara 1: Unduh Aplikasi Siap Pakai (.exe) — Direkomendasikan
+Untuk pengguna umum / kreator yang ingin langsung menggunakan aplikasi tanpa instalasi teknis:
+
+1. Unduh paket rilis resmi di GitHub Releases:
+   👉 **[Download ENCLip v1.0.0 (Windows)](https://github.com/EdvanVPRoject/ENCLip/releases/latest)**
+2. Ekstrak file zip `ENCLip-Windows-v1.0.0.zip` ke folder komputer Anda.
+3. Klik dua kali **`ENCLip.exe`**.
+4. Aplikasi langsung terbuka dan siap digunakan! Tidak perlu install Python, tidak ada script CMD rumit.
+
+---
+
+### 💻 Cara 2: Menjalankan dari Source Code (Khusus Pengembang / Developer)
+Bagi pengembang yang ingin memodifikasi atau menjalankan langsung dari source code Python:
 
 1. **Clone repository ini**:
    ```bash
@@ -86,34 +104,15 @@ Berbeda dari layanan web berbasis langganan bulanan yang mahal, ENCLip berjalan 
    cd ENCLip
    ```
 
-2. **Jalankan Setup Otomatis (Sekali Klik)**:
-   Cukup klik dua kali pada file:
-   ```cmd
-   install_dependencies.bat
+2. **Buat virtual environment & install dependensi**:
+   ```bash
+   python -m venv .venv
+   .venv\Scripts\pip install -r requirements.txt
    ```
-   *Skrip ini otomatis membuat virtual environment `.venv`, mengupgrade pip, dan memasang seluruh dependensi yang dibutuhkan.*
 
-3. **Buka Aplikasi**:
-   Cukup klik dua kali pada file:
-   ```cmd
-   start.bat
-   ```
-   *Aplikasi akan langsung terbuka secara native. Saat aplikasi dibuka, tab **Setup Environment & Dependensi** langsung memeriksa seluruh kesiapan sistem secara interaktif.*
-
----
-
-### Cara 2: Kompilasi ke File Executable (.exe)
-
-Jika Anda ingin membuat versi file `.exe` mandiri untuk didistribusikan:
-
-1. Pastikan langkah setup dependensi di atas sudah selesai.
-2. Jalankan skrip kompilasi:
-   ```cmd
-   build_desktop.bat
-   ```
-3. Hasil kompilasi `.exe` siap digunakan di folder:
-   ```
-   Desktop_UI\dist\ENCLip\ENCLip.exe
+3. **Jalankan aplikasi**:
+   ```bash
+   .venv\Scripts\python Desktop_UI\desktop_gui.py
    ```
 
 ---
@@ -149,9 +148,6 @@ ENCLip/
 │   ├── VideoMentah/        # Lokasi video sumber yang diimpor/diunduh
 │   └── HasilClip/          # Lokasi hasil potongan klip video per folder
 ├── requirements.txt        # Daftar dependensi Python
-├── setup_environment.bat   # Skrip setup otomatis environment & dependensi
-├── run_desktop.bat         # Shortcut menjalankan aplikasi langsung
-├── build_desktop.bat       # Skrip kompilasi aplikasi ke .exe
 └── README.md               # Dokumentasi lengkap proyek
 ```
 
