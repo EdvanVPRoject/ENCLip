@@ -9,7 +9,7 @@ echo.
 
 if not exist ".venv\Scripts\python.exe" (
     echo [ERROR] Virtual environment .venv belum ditemukan!
-    echo Silakan jalankan setup_environment.bat terlebih dahulu.
+    echo Silakan jalankan install_dependencies.bat terlebih dahulu.
     echo.
     pause
     exit /b 1
