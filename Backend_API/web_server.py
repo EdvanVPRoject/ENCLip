@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 import uuid
 import logging
 from collections import deque
@@ -70,7 +71,7 @@ app.mount("/raw", StaticFiles(directory=RAW_VIDEO_DIR), name="raw")
 
 
 class CreateJobRequest(BaseModel):
-    url: str = Field(min_length=8)
+    url: str = Field(min_length=1)
     clip_count: int = Field(default=0, ge=0, le=200)
     language: str = Field(default="id", min_length=2, max_length=10)
     min_duration: int = Field(default=0, ge=0, le=3600)
@@ -80,6 +81,14 @@ class CreateJobRequest(BaseModel):
     max_clips: int = Field(default=10, ge=1, le=200)
     clip_mode: str = Field(default="smart", pattern="^(smart|split_count|split_duration)$")
     clip_profile: str = Field(default="auto", pattern="^(auto|live|standard|manual)$")
+    clip_flavor: str = Field(
+        default="spicy_drama",
+        pattern="^(spicy_drama|viral_all|funny_blunder|deep_meat|hype_rage)$",
+    )
+    use_audio_energy: bool = Field(default=True)
+    snap_sentence_bounds: bool = Field(default=True)
+    trim_opening_filler: bool = Field(default=True)
+    spicy_headline_hook: bool = Field(default=True)
     split_count: int = Field(default=10, ge=1, le=500)
     segment_duration: int = Field(default=120, ge=5, le=3600)
     use_local_llm: bool = True
@@ -90,27 +99,65 @@ class CreateJobRequest(BaseModel):
     video_encoder: str = Field(default="auto")
     aspect_ratio: str = Field(default="9:16", pattern="^(16:9|9:16|4:3|1:1)$")
     framing: str = Field(default="fit", pattern="^(fit|crop)$")
-    layout: str = Field(default="standard", pattern="^(standard|facecam_top)$")
+    layout: str = Field(default="standard", pattern="^(standard|facecam_top|podcast_split)$")
     subtitle_style: str = Field(default="bold", pattern="^(classic|bold|highlight|minimal|neon|karaoke|box|none)$")
     subtitle_position: str = Field(default="auto", pattern="^(auto|top|center|bottom|free)$")
     subtitle_color: str = Field(default="auto", pattern="^(auto|white|yellow|cyan|red|green|pink|#[0-9A-Fa-f]{6})$")
+    subtitle_active_color: str = Field(default="#FFDD00")
     subtitle_x: float = Field(default=0.15, ge=0, le=1)
     subtitle_y: float = Field(default=0.78, ge=0, le=1)
     subtitle_max_lines: int = Field(default=2, ge=-1, le=5)
     subtitle_font_size: int = Field(default=14, ge=8, le=36)
+    subtitle_mode: str = Field(default="active_highlight", pattern="^(phrase|single_word|active_highlight)$")
+    bgm_path: str = Field(default="")
+    bgm_volume: float = Field(default=0.18, ge=0.0, le=1.0)
+    voice_volume: float = Field(default=1.0, ge=0.1, le=2.0)
+    bgm_autoduck: bool = Field(default=True)
+    audio_loudnorm: bool = Field(default=False)
+    censor_profanity: bool = Field(default=False)
+    watermark_text: str = Field(default="", max_length=80)
+    watermark_image_path: str = Field(default="")
+    watermark_position: str = Field(default="top_right", pattern="^(top_right|top_left|bottom_right|bottom_left|center|free)$")
+    watermark_opacity: float = Field(default=0.65, ge=0.05, le=1.0)
+    hook_banner_enabled: bool = Field(default=False)
+    hook_banner_text: str = Field(default="", max_length=120)
+    hook_banner_duration: int = Field(default=4, ge=0, le=300)
+    facecam_crop: list[float] | None = None
+    mirror_video: bool = Field(default=False)
+    speed_shift: bool = Field(default=False)
+    color_boost: bool = Field(default=False)
 
 
 class RenderRequest(BaseModel):
     subtitle_style: str = Field(default="bold", pattern="^(classic|bold|highlight|minimal|neon|karaoke|box|none)$")
     aspect_ratio: str = Field(default="9:16", pattern="^(16:9|9:16|4:3|1:1)$")
     framing: str = Field(default="fit", pattern="^(fit|crop)$")
-    layout: str = Field(default="standard", pattern="^(standard|facecam_top)$")
+    layout: str = Field(default="standard", pattern="^(standard|facecam_top|podcast_split)$")
     subtitle_position: str = Field(default="auto", pattern="^(auto|top|center|bottom|free)$")
     subtitle_color: str = Field(default="auto", pattern="^(auto|white|yellow|cyan|red|green|pink|#[0-9A-Fa-f]{6})$")
+    subtitle_active_color: str = Field(default="#FFDD00")
     subtitle_x: float = Field(default=0.15, ge=0, le=1)
     subtitle_y: float = Field(default=0.78, ge=0, le=1)
     subtitle_max_lines: int = Field(default=2, ge=-1, le=5)
     subtitle_font_size: int = Field(default=14, ge=8, le=36)
+    subtitle_mode: str = Field(default="active_highlight", pattern="^(phrase|single_word|active_highlight)$")
+    bgm_path: str = Field(default="")
+    bgm_volume: float = Field(default=0.18, ge=0.0, le=1.0)
+    voice_volume: float = Field(default=1.0, ge=0.1, le=2.0)
+    bgm_autoduck: bool = Field(default=True)
+    audio_loudnorm: bool = Field(default=False)
+    censor_profanity: bool = Field(default=False)
+    watermark_text: str = Field(default="", max_length=80)
+    watermark_image_path: str = Field(default="")
+    watermark_position: str = Field(default="top_right", pattern="^(top_right|top_left|bottom_right|bottom_left|center|free)$")
+    watermark_opacity: float = Field(default=0.65, ge=0.05, le=1.0)
+    hook_banner_enabled: bool = Field(default=False)
+    hook_banner_text: str = Field(default="", max_length=120)
+    hook_banner_duration: int = Field(default=4, ge=0, le=300)
+    facecam_crop: list[float] | None = None
+    mirror_video: bool = Field(default=False)
+    speed_shift: bool = Field(default=False)
+    color_boost: bool = Field(default=False)
 
 
 class ManualClipRequest(BaseModel):
@@ -532,6 +579,7 @@ def group_words_into_cues(words: list[Any], max_words: int = 5, max_chars: int =
         return []
     cues: list[dict[str, Any]] = []
     curr_words: list[str] = []
+    curr_word_objs: list[dict[str, Any]] = []
     curr_start: float | None = None
     curr_end: float = 0.0
 
@@ -557,14 +605,17 @@ def group_words_into_cues(words: list[Any], max_words: int = 5, max_chars: int =
                 "start": round(curr_start if curr_start is not None else 0.0, 2),
                 "end": round(curr_end, 2),
                 "text": " ".join(curr_words),
+                "words": list(curr_word_objs),
             })
             curr_words = [w_text]
+            curr_word_objs = [{"word": w_text, "start": round(w_start, 2), "end": round(w_end, 2)}]
             curr_start = w_start
             curr_end = w_end
         else:
             if curr_start is None:
                 curr_start = w_start
             curr_words.append(w_text)
+            curr_word_objs.append({"word": w_text, "start": round(w_start, 2), "end": round(w_end, 2)})
             curr_end = max(curr_end, w_end)
 
     if curr_words and curr_start is not None:
@@ -572,6 +623,7 @@ def group_words_into_cues(words: list[Any], max_words: int = 5, max_chars: int =
             "start": round(curr_start, 2),
             "end": round(curr_end, 2),
             "text": " ".join(curr_words),
+            "words": list(curr_word_objs),
         })
     return cues
 
@@ -750,6 +802,187 @@ CLIP_PROFILE_GUIDANCE = {
     "manual": "Jangan membuat clip otomatis. Video akan direview untuk penambahan clip manual.",
 }
 
+CLIP_FLAVOR_PROFILES: dict[str, dict[str, Any]] = {
+    "spicy_drama": {
+        "label": "Spicy / Drama / Kontroversi",
+        "prompt_rule": (
+            "FOKUS UTAMA: Cari momen paling SPICY, DRAMA, DEBAT PANAS, SINDIRAN, PENGAKUAN MENGEJUTKAN, "
+            "pembongkaran rahasia (spill tea), opini kontroversial, konflik antar orang, nominal uang/gaji, "
+            "atau kalimat pedas yang memancing perdebatan di kolom komentar. Mulai klip tepat di pernyataan pemicu konflik!"
+        ),
+        "headline_rule": (
+            "Buat judul Headline 3-7 kata yang SPICY, provokatif, menimbulkan curiosity gap tinggi, "
+            "atau menyorot pernyataan paling kontroversial/pedas di klip ini."
+        ),
+        "keywords": {
+            "jujur", "bohong", "bongkar", "rahasia", "parah", "gila", "benci", "muak", "marah",
+            "kesal", "sindir", "nyindir", "berani", "egois", "munafik", "selingkuh", "putus",
+            "pecat", "bangkrut", "hutang", "miliar", "juta", "duit", "uang", "gaji", "bayar",
+            "curang", "kasus", "drama", "ribut", "debat", "salah", "ngawur", "hancur", "kapok",
+            "nyesel", "ternyata", "padahal", "jangan", "bahaya", "korban", "pelaku", "bukti", "fakta",
+        },
+        "energy_weight": 1.65,
+        "ideal_min": 20,
+        "ideal_max": 52,
+    },
+    "viral_all": {
+        "label": "Viral FYP (Hook Kuat & Plot Twist)",
+        "prompt_rule": (
+            "FOKUS UTAMA: Cari momen dengan potensi VIRAL FYP tertinggi. Harus memiliki Hook kuat di "
+            "3 detik pertama (kalimat pembuka yang menghentikan orang scroll), alur cerita yang padat, "
+            "dan ditutup dengan Plot Twist atau payoff yang memuaskan."
+        ),
+        "headline_rule": "Buat judul Headline 3-7 kata yang sangat catchy, bikin penasaran di 3 detik pertama, dan viral-ready.",
+        "keywords": {
+            "ternyata", "rahasia", "cara", "jangan", "pernah", "alasan", "kenapa", "mengapa",
+            "pertama", "terakhir", "paling", "terbaik", "terburuk", "fakta", "bukti", "kaget",
+            "mustahil", "ajaib", "solusi", "kesalahan", "fatal", "untung", "rugi",
+        },
+        "energy_weight": 1.35,
+        "ideal_min": 22,
+        "ideal_max": 55,
+    },
+    "funny_blunder": {
+        "label": "Komedi / Ngakak / Blunder",
+        "prompt_rule": (
+            "FOKUS UTAMA: Cari momen paling LUCU, NGAKAK, BLUNDER konyol, salah ngomong, roasting "
+            "antar teman, atau reaksi spontan yang mengundang tawa. Sertakan setup singkat sebelum kelucuan "
+            "dan tawa pecah setelahnya."
+        ),
+        "headline_rule": "Buat judul Headline yang kocak, menyorot kebodohan/blunder, atau punchline komedinya.",
+        "keywords": {
+            "haha", "wkwk", "anjir", "astaga", "waduh", "kocak", "lucu", "ngakak", "blunder",
+            "bodoh", "tolol", "konyol", "malu", "jatuh", "gagal", "salah", "ketawa", "asli",
+        },
+        "energy_weight": 1.85,
+        "ideal_min": 15,
+        "ideal_max": 42,
+    },
+    "deep_meat": {
+        "label": "Daging / Insight / Mindblowing",
+        "prompt_rule": (
+            "FOKUS UTAMA: Cari kutipan paling BERBOBOT ('daging'), prinsip hidup, strategi bisnis/uang, "
+            "nasihat menohok, atau perspektif cerdas yang membuat penonton menyimpan (save/bookmark) video ini."
+        ),
+        "headline_rule": "Buat judul Headline yang tegas, berwibawa, dan merangkum insight emas di dalam klip.",
+        "keywords": {
+            "prinsip", "kunci", "sukses", "kaya", "mental", "strategi", "ilmu", "pelajaran",
+            "hidup", "masa", "depan", "investasi", "bisnis", "kerja", "fokus", "disiplin", "paham",
+        },
+        "energy_weight": 1.0,
+        "ideal_min": 28,
+        "ideal_max": 58,
+    },
+    "hype_rage": {
+        "label": "Hype Tinggi / Teriakan / Rage Gaming",
+        "prompt_rule": (
+            "FOKUS UTAMA: Cari momen dengan energi suara dan tensi paling meledak: teriakan kaget, "
+            "rage/marah saat main game, momen clutch menegangkan, atau reaksi heboh maksimal."
+        ),
+        "headline_rule": "Buat judul Headline penuh energi yang menggambarkan ketegangan/ledakan emosi momen tersebut.",
+        "keywords": {
+            "anjing", "anjir", "gila", "mati", "menang", "kalah", "clutch", "hoki", "curang",
+            "lari", "tolong", "awas", "kena", "habis", "pecah", "meledak",
+        },
+        "energy_weight": 2.4,
+        "ideal_min": 14,
+        "ideal_max": 38,
+    },
+}
+
+FILLER_STARTERS = {"eh", "ee", "emm", "anu", "jadi", "nah", "oke", "terus", "umm", "uh", "ya"}
+
+
+def compute_audio_energy_map(audio_path: Path, window_sec: float = 1.0) -> list[float]:
+    """Menghitung peta lonjakan energi suara (RMS) tiap 1 detik dari file audio.wav."""
+    import array
+    import math
+    import wave
+
+    energies: list[float] = []
+    try:
+        if not audio_path.is_file():
+            return []
+        with wave.open(str(audio_path), "rb") as wf:
+            rate = wf.getframerate()
+            chunk_frames = max(1, int(rate * window_sec))
+            while True:
+                raw = wf.readframes(chunk_frames)
+                if not raw:
+                    break
+                samples = array.array("h", raw)
+                if not samples:
+                    energies.append(0.0)
+                    continue
+                rms = math.sqrt(sum(float(s) * float(s) for s in samples) / len(samples))
+                energies.append(rms)
+    except Exception:
+        return []
+
+    if not energies:
+        return []
+    peak = max(energies) or 1.0
+    return [round(val / peak, 3) for val in energies]
+
+
+def get_window_energy_score(energy_map: list[float], start: float, end: float) -> float:
+    if not energy_map:
+        return 0.5
+    s_idx = max(0, int(start))
+    e_idx = min(len(energy_map), max(s_idx + 1, int(end) + 1))
+    sub = energy_map[s_idx:e_idx]
+    if not sub:
+        return 0.5
+    return round((max(sub) * 0.7) + ((sum(sub) / len(sub)) * 0.3), 3)
+
+
+def condense_transcript_for_llm(
+    transcript: list[dict[str, Any]],
+    energy_map: list[float] | None = None,
+) -> list[dict[str, Any]]:
+    """Menggabungkan potongan cues pendek menjadi kalimat utuh disertai indikator energi suara untuk LLM."""
+    if not transcript:
+        return []
+    merged: list[dict[str, Any]] = []
+    curr_start = float(transcript[0]["start"])
+    curr_end = float(transcript[0]["end"])
+    curr_texts: list[str] = [str(transcript[0].get("text", "")).strip()]
+
+    for item in transcript[1:]:
+        s = float(item["start"])
+        e = float(item["end"])
+        txt = str(item.get("text", "")).strip()
+        if not txt:
+            continue
+        prev_txt = curr_texts[-1] if curr_texts else ""
+        is_sentence_end = bool(re.search(r"[.!?]$", prev_txt))
+        if (s - curr_end > 0.65) or (is_sentence_end and (curr_end - curr_start >= 3.5)) or (e - curr_start >= 10.0):
+            seg_obj: dict[str, Any] = {
+                "start": round(curr_start, 2),
+                "end": round(curr_end, 2),
+                "text": " ".join(curr_texts),
+            }
+            if energy_map:
+                seg_obj["energy"] = get_window_energy_score(energy_map, curr_start, curr_end)
+            merged.append(seg_obj)
+            curr_start = s
+            curr_end = e
+            curr_texts = [txt]
+        else:
+            curr_end = e
+            curr_texts.append(txt)
+
+    if curr_texts:
+        seg_obj = {
+            "start": round(curr_start, 2),
+            "end": round(curr_end, 2),
+            "text": " ".join(curr_texts),
+        }
+        if energy_map:
+            seg_obj["energy"] = get_window_energy_score(energy_map, curr_start, curr_end)
+        merged.append(seg_obj)
+    return merged
+
 
 def heuristic_clips(
     transcript: list[dict[str, Any]],
@@ -758,55 +991,74 @@ def heuristic_clips(
     maximum: int,
     max_clips: int,
     profile: str = "auto",
+    flavor: str = "spicy_drama",
+    energy_map: list[float] | None = None,
 ) -> list[dict[str, Any]]:
     if not transcript:
         return []
-    candidates = []
-    keywords = {
-        "cara", "tips", "rahasia", "penting", "terbaik", "ternyata", "mengapa", "kenapa",
-        "how", "why", "secret", "mistake", "never", "best", "jangan", "bisa", "ingat",
-    }
+    flavor_cfg = CLIP_FLAVOR_PROFILES.get(flavor, CLIP_FLAVOR_PROFILES["spicy_drama"])
+    keywords = set(flavor_cfg["keywords"])
     if profile == "live":
-        keywords |= {
-            "anjir", "gila", "waduh", "astaga", "haha", "wkwk", "blunder", "salah",
-            "menang", "kalah", "clutch", "chat", "stream", "serius", "tidak mungkin",
-        }
+        keywords |= {"anjir", "gila", "waduh", "astaga", "haha", "wkwk", "blunder", "clutch", "chat", "stream"}
     elif profile == "standard":
         keywords |= {"langkah", "contoh", "solusi", "hasil", "alasan", "pelajaran", "trik"}
-    total = transcript[-1]["end"]
-    effective_minimum = max(5, minimum)
-    preferred = max(effective_minimum, int(round(maximum * 0.8))) if maximum > 0 else max(effective_minimum, 45)
+
+    energy_weight = float(flavor_cfg["energy_weight"])
+    total = float(transcript[-1]["end"])
+    eff_min = max(8, minimum if minimum > 0 else int(flavor_cfg["ideal_min"]))
+    eff_max = maximum if maximum > 0 else int(flavor_cfg["ideal_max"])
+    preferred = max(eff_min, int(round(eff_max * 0.78)))
+
+    candidates = []
     for anchor_index, anchor in enumerate(transcript):
-        start = max(0.0, anchor["start"] - 3.0)
+        start = max(0.0, float(anchor["start"]))
         end_index = anchor_index
         while end_index + 1 < len(transcript):
-            candidate_end = transcript[end_index + 1]["end"]
+            candidate_end = float(transcript[end_index + 1]["end"])
             candidate_duration = candidate_end - start
-            current_text = transcript[end_index]["text"]
-            natural_break = bool(re.search(r"[.!?]$", current_text)) or transcript[end_index + 1]["start"] - transcript[end_index]["end"] > 0.9
-            if maximum > 0 and candidate_duration > maximum:
+            current_text = str(transcript[end_index].get("text", ""))
+            natural_break = (
+                bool(re.search(r"[.!?]$", current_text))
+                or (float(transcript[end_index + 1]["start"]) - float(transcript[end_index]["end"]) > 0.65)
+            )
+            if eff_max > 0 and candidate_duration > eff_max:
                 break
             end_index += 1
-            # Jangan berhenti di kalimat pertama setelah minimum; sertakan
-            # buildup dan payoff agar adegan tidak terasa terpotong.
             if candidate_duration >= preferred and natural_break:
                 break
-        end = min(total, transcript[end_index]["end"])
-        if end - start < effective_minimum:
-            end = min(total, start + effective_minimum)
-        if end - start < effective_minimum:
+
+        end = min(total, float(transcript[end_index]["end"]))
+        dur = end - start
+        if dur < eff_min:
             continue
-        text_parts = [x["text"] for x in transcript if x["start"] < end and x["end"] > start]
-        text = " ".join(text_parts).strip()
+
+        segs_in_window = [x for x in transcript if float(x["start"]) < end and float(x["end"]) > start]
+        text = " ".join(str(x.get("text", "")) for x in segs_in_window).strip()
         token_list = words(text)
-        if len(token_list) < 10:
+        if len(token_list) < 12:
             continue
-        score = float(len(token_list)) / max(end - start, 1)
-        score += sum(1.5 for token in token_list if token in keywords)
-        score += text.count("!") * 1.5 + text.count("?")
-        candidates.append({"start": start, "end": end, "score": score, "text": text})
+
+        wps = len(token_list) / max(dur, 1.0)
+        raw_score = wps * 11.0
+        raw_score += sum(7.5 for token in token_list if token in keywords)
+        raw_score += text.count("!") * 4.5 + text.count("?") * 3.5
+        raw_score += len(re.findall(r"\b\d+\b", text)) * 3.0
+
+        if energy_map:
+            e_val = get_window_energy_score(energy_map, start, end)
+            raw_score += (e_val * 32.0) * energy_weight
+
+        for i in range(len(segs_in_window) - 1):
+            gap = float(segs_in_window[i + 1]["start"]) - float(segs_in_window[i]["end"])
+            if gap > 2.5:
+                raw_score -= gap * 5.0
+
+        viral_score = min(99.0, max(55.0, round(raw_score, 1)))
+        candidates.append({"start": start, "end": end, "score": viral_score, "text": text})
+
     candidates.sort(key=lambda item: item["score"], reverse=True)
     selected: list[dict[str, Any]] = []
+    target = count if count > 0 else max_clips
     for candidate in candidates:
         overlaps = any(
             candidate["start"] < item["end"] and candidate["end"] > item["start"]
@@ -814,7 +1066,6 @@ def heuristic_clips(
         )
         if not overlaps:
             selected.append(candidate)
-        target = count if count > 0 else max_clips
         if len(selected) >= target:
             break
     return selected
@@ -825,47 +1076,86 @@ def broaden_smart_clips(
     selected: list[dict[str, Any]],
     minimum: int,
     maximum: int,
+    flavor: str = "spicy_drama",
+    snap_bounds: bool = True,
+    trim_filler: bool = True,
 ) -> list[dict[str, Any]]:
-    """Add context around model-selected moments without exceeding the duration range."""
+    """
+    Mengunci titik potong start & end tepat pada batas kata/kalimat alami,
+    membuang basa-basi (filler) di 3 detik pertama, dan memberi micro-padding.
+    """
     if not transcript or not selected:
         return selected
-    total = float(transcript[-1]["end"])
-    effective_minimum = max(5, minimum)
-    preferred = max(effective_minimum, int(round(maximum * 0.8))) if maximum > 0 else max(effective_minimum, 45)
+
+    flavor_cfg = CLIP_FLAVOR_PROFILES.get(flavor, CLIP_FLAVOR_PROFILES["spicy_drama"])
+    total_duration = float(transcript[-1]["end"])
+    eff_min = float(minimum if minimum > 0 else flavor_cfg["ideal_min"])
+    eff_max = float(maximum if maximum > 0 else flavor_cfg["ideal_max"])
+
+    all_words: list[dict[str, Any]] = []
+    for seg in transcript:
+        seg_words = seg.get("words") or []
+        if seg_words:
+            all_words.extend(seg_words)
+        else:
+            all_words.append({"word": seg.get("text", ""), "start": seg["start"], "end": seg["end"]})
+
     ordered = sorted(selected, key=lambda item: float(item.get("start", 0)))
-    expanded: list[dict[str, Any]] = []
+    polished: list[dict[str, Any]] = []
     cursor = 0.0
-    for index, item in enumerate(ordered):
-        original_start = max(0.0, float(item["start"]))
-        original_end = min(total, float(item["end"]))
-        next_start = float(ordered[index + 1]["start"]) if index + 1 < len(ordered) else total
-        left_bound = cursor
-        right_bound = max(original_end, min(total, next_start - 0.25))
-        start = max(left_bound, original_start - 5.0)
-        end = min(right_bound, original_end + 8.0)
-        while end - start < preferred:
-            next_items = [part for part in transcript if float(part["end"]) > end]
-            if not next_items:
-                break
-            candidate_end = float(next_items[0]["end"])
-            if candidate_end > right_bound:
-                break
-            end = candidate_end
-        while end - start < minimum and start > left_bound:
-            previous_items = [part for part in transcript if float(part["start"]) < start]
-            if not previous_items:
-                break
-            start = max(left_bound, float(previous_items[-1]["start"]))
-        if end - start < effective_minimum:
-            start = max(left_bound, original_start)
-            end = min(total, max(original_end, start + effective_minimum))
-        updated = dict(item)
-        updated["start"] = round(start, 3)
-        max_cap = float(maximum) if maximum > 0 else 90.0
-        updated["end"] = round(min(end, start + max_cap), 3)
-        expanded.append(updated)
-        cursor = updated["end"]
-    return expanded
+
+    for idx, item in enumerate(ordered):
+        raw_start = max(cursor, float(item["start"]))
+        raw_end = min(total_duration, float(item["end"]))
+        next_clip_start = float(ordered[idx + 1]["start"]) if idx + 1 < len(ordered) else total_duration
+
+        best_start = raw_start
+        if snap_bounds and all_words:
+            for w_i, w in enumerate(all_words):
+                ws = float(w["start"])
+                if abs(ws - raw_start) <= 1.8 and ws >= cursor:
+                    prev_end = float(all_words[w_i - 1]["end"]) if w_i > 0 else 0.0
+                    prev_word = str(all_words[w_i - 1].get("word", "")) if w_i > 0 else "."
+                    is_clean_start = (ws - prev_end >= 0.32) or bool(re.search(r"[.?!]$", prev_word))
+                    if is_clean_start:
+                        clean_tok = re.sub(r"[^a-zA-Z]", "", str(w.get("word", ""))).lower()
+                        if trim_filler and clean_tok in FILLER_STARTERS and w_i + 1 < len(all_words):
+                            best_start = float(all_words[w_i + 1]["start"])
+                        else:
+                            best_start = ws
+                        break
+
+        target_end = max(raw_end, best_start + eff_min)
+        target_end = min(target_end, best_start + eff_max, next_clip_start - 0.2)
+
+        best_end = target_end
+        if snap_bounds and all_words:
+            for w_i, w in enumerate(all_words):
+                we = float(w["end"])
+                if we < best_start + eff_min:
+                    continue
+                if we > best_start + eff_max or we > next_clip_start - 0.15:
+                    break
+                next_start = float(all_words[w_i + 1]["start"]) if w_i + 1 < len(all_words) else total_duration
+                word_str = str(w.get("word", "")).strip()
+                is_sentence_end = bool(re.search(r"[.?!]$", word_str)) or (next_start - we >= 0.42)
+                if we >= target_end - 2.2 and is_sentence_end:
+                    best_end = we
+                    break
+                best_end = we
+
+        final_start = max(cursor, round(best_start - 0.18, 3))
+        final_end = min(total_duration, next_clip_start - 0.1, round(best_end + 0.40, 3))
+
+        if final_end - final_start >= 5.0:
+            updated = dict(item)
+            updated["start"] = final_start
+            updated["end"] = final_end
+            updated["score"] = float(item.get("score") or 88.0)
+            polished.append(updated)
+            cursor = final_end
+
+    return polished
 
 
 def split_transcript(
@@ -960,6 +1250,8 @@ def generate_clip_metadata(
     transcript: list[dict[str, Any]],
     clips: list[Clip],
     model_name: str,
+    flavor: str = "spicy_drama",
+    spicy_hook: bool = True,
 ) -> None:
     if not clips:
         return
@@ -968,7 +1260,9 @@ def generate_clip_metadata(
         text = clip_transcript_text(transcript, clip.start, clip.end)
         clip.title, clip.caption, clip.hashtags = fallback_metadata(text, clip.title if clip.source == "manual" else "")
 
-    
+    flavor_cfg = CLIP_FLAVOR_PROFILES.get(flavor, CLIP_FLAVOR_PROFILES["spicy_drama"])
+    headline_instruction = flavor_cfg["headline_rule"] if spicy_hook else "Buat title 3-8 kata yang spesifik dan menarik."
+
     items = [
         {
             "index": index,
@@ -981,11 +1275,10 @@ def generate_clip_metadata(
     prompt = (
         "Buat metadata sosial media untuk setiap clip video berikut. TULIS DALAM BAHASA INDONESIA, meskipun transkrip asli berbahasa asing. "
         "Balas HANYA JSON array valid dengan field index, title, caption, hashtags. "
-        "Bertindak sebagai editor short-form yang membuat hook kuat: title 3-8 kata harus spesifik, "
-        "memancing rasa penasaran, atau menonjolkan konflik/manfaat. Caption maksimal 2 kalimat, "
-        "mulai dengan hook, hindari kalimat datar seperti 'di video ini', dan boleh ditutup dengan "
-        "pertanyaan yang mengundang komentar. Hashtags berupa array 3-6 hashtag yang relevan. "
-        "Jangan membuat fakta atau klaim yang tidak ada di transkrip. Gunakan bahasa yang sama dengan transkrip.\n\nCLIPS:\n"
+        f"ATURAN HEADLINE HOOK (title): {headline_instruction} "
+        "Caption maksimal 2 kalimat, mulai dengan kalimat pancingan (hook) yang memicu penonton berkomentar/berdebat, "
+        "hindari kalimat kaku seperti 'di video ini'. Hashtags berupa array 3-6 hashtag relevan. "
+        "Jangan mengarang klaim di luar transkrip.\n\nCLIPS:\n"
         + json.dumps(items, ensure_ascii=False)
     )
 
@@ -997,12 +1290,12 @@ def generate_clip_metadata(
             from google.genai import types
             client = genai.Client(api_key=GEMINI_API_KEY)
             response = client.models.generate_content(
-                model='gemini-3.8-flash',
-                contents=f"Kamu adalah social media editor.\n{prompt}",
+                model="gemini-3.8-flash",
+                contents=f"Kamu adalah social media clipper profesional.\n{prompt}",
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
                     temperature=0.35,
-                )
+                ),
             )
             parsed = json.loads(response.text)
             if isinstance(parsed, dict):
@@ -1051,6 +1344,38 @@ def generate_clip_metadata(
         return
 
 
+def build_clipper_llm_prompt(
+    condensed_transcript: list[dict[str, Any]],
+    count: int,
+    minimum: int,
+    maximum: int,
+    max_clips: int,
+    profile: str = "auto",
+    flavor: str = "spicy_drama",
+    custom_prompt: str = "",
+) -> tuple[str, int, int]:
+    flavor_cfg = CLIP_FLAVOR_PROFILES.get(flavor, CLIP_FLAVOR_PROFILES["spicy_drama"])
+    eff_min = minimum if minimum > 0 else int(flavor_cfg["ideal_min"])
+    eff_max = maximum if maximum > 0 else int(flavor_cfg["ideal_max"])
+    prompt = (
+        "Kamu adalah Clipper Profesional TikTok, Reels, dan YouTube Shorts.\n"
+        f"{flavor_cfg['prompt_rule']}\n"
+        f"Profil Konten: {CLIP_PROFILE_GUIDANCE.get(profile, CLIP_PROFILE_GUIDANCE['auto'])}\n"
+        "ATURAN PEMOTONGAN PRESISI:\n"
+        "1. DETIK MULAI (start): Harus langsung masuk ke kalimat HOOK / pernyataan paling panas di 3 detik pertama. "
+        "Jangan masukkan basa-basi atau jeda lambat sebelum topik dimulai.\n"
+        "2. DETIK SELESAI (end): Harus berhenti tepat setelah punchline, sindiran, reaksi, atau kesimpulan tuntas.\n"
+        f"3. DURASI: Antara {eff_min} sampai {eff_max} detik per klip.\n"
+        "4. Perhatikan field 'energy' (0.0-1.0) bila tersedia: angka tinggi menandakan intonasi suara meninggi/debat/tertawa/teriak.\n"
+        "5. Balas HANYA JSON array valid tanpa markdown dengan field: start (float), end (float), score (int 65-99), title (string judul singkat & pedas).\n"
+        f"Pilih {'sebanyak mungkin, maksimal ' + str(max_clips) if count == 0 else str(count)} segmen non-overlap terbaik.\n"
+        + (f"Instruksi khusus dari user: {custom_prompt}\n" if custom_prompt.strip() else "")
+        + "\nTRANSKRIP:\n"
+        + json.dumps(condensed_transcript, ensure_ascii=False)
+    )
+    return prompt, eff_min, eff_max
+
+
 def ask_local_gguf(
     transcript: list[dict[str, Any]],
     count: int,
@@ -1060,31 +1385,23 @@ def ask_local_gguf(
     max_clips: int,
     profile: str = "auto",
     custom_prompt: str = "",
+    flavor: str = "spicy_drama",
+    energy_map: list[float] | None = None,
 ) -> list[dict[str, Any]] | None:
     model = load_local_gguf(model_name)
     if model is None:
         return None
-
-    prompt = (
-        "Pilih segmen video paling menarik untuk short clip. Sertakan konteks adegan secara utuh: "
-        "ambil buildup sebelum momen utama dan reaksi/payoff setelahnya, jangan hanya satu kalimat punchline. "
-        "Balas HANYA JSON array valid, tanpa markdown, dengan field start, end, title. "
-        f"Pilih {'sebanyak mungkin, maksimal ' + str(max_clips) if count == 0 else str(count)} segmen non-overlap dengan durasi "
-        f"{'alami durasi 30-60 detik untuk shorts/reels' if minimum == 0 and maximum == 0 else f'{minimum}-{maximum} detik'}. "
-        "Gunakan sebagian besar rentang durasi jika adegannya masih berlanjut, tanpa memotong setup atau reaksi penting. "
-        "Judul harus singkat dan sesuai bahasa transkrip. "
-        f"Profil momen: {CLIP_PROFILE_GUIDANCE.get(profile, CLIP_PROFILE_GUIDANCE['auto'])}\n"
-        + (f"Instruksi tambahan dari user: {custom_prompt}\n" if custom_prompt.strip() else "")
-        + "\nTRANSKRIP:\n"
-        + json.dumps(transcript, ensure_ascii=False)
+    condensed = condense_transcript_for_llm(transcript, energy_map)
+    prompt, eff_min, eff_max = build_clipper_llm_prompt(
+        condensed, count, minimum, maximum, max_clips, profile, flavor, custom_prompt
     )
     try:
         response = model.create_chat_completion(
             messages=[
-                {"role": "system", "content": "Kamu adalah editor video yang memilih momen paling engaging."},
+                {"role": "system", "content": "Kamu adalah editor video yang memilih momen paling viral dan spicy."},
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.2,
+            temperature=0.25,
             max_tokens=1024,
         )
         content = response["choices"][0]["message"]["content"]
@@ -1093,13 +1410,17 @@ def ask_local_gguf(
         if isinstance(parsed, dict):
             parsed = parsed.get("clips", [])
         valid = []
-        effective_max = float(maximum) if maximum > 0 else 90.0
         for item in parsed:
             start = float(item["start"])
             end = float(item["end"])
             duration = end - start
-            if end > start and (minimum == 0 or duration >= minimum) and duration <= effective_max:
-                valid.append({"start": start, "end": end, "score": 100.0, "title": str(item.get("title", "Highlight"))})
+            if end > start and duration >= max(5, eff_min - 5) and duration <= eff_max + 15:
+                valid.append({
+                    "start": start,
+                    "end": end,
+                    "score": float(item.get("score", 90.0)),
+                    "title": str(item.get("title", "Highlight")),
+                })
         return valid[: (max_clips if count == 0 else count)] or None
     except Exception:
         return None
@@ -1113,6 +1434,8 @@ def ask_gemini(
     max_clips: int,
     profile: str = "auto",
     custom_prompt: str = "",
+    flavor: str = "spicy_drama",
+    energy_map: list[float] | None = None,
 ) -> list[dict[str, Any]] | None:
     if not GEMINI_API_KEY:
         return None
@@ -1120,40 +1443,33 @@ def ask_gemini(
         from google import genai
         from google.genai import types
         client = genai.Client(api_key=GEMINI_API_KEY)
-        
-        prompt = (
-            "Pilih segmen video paling menarik untuk short clip. Sertakan konteks adegan secara utuh: "
-            "ambil buildup sebelum momen utama dan reaksi/payoff setelahnya, jangan hanya satu kalimat punchline. "
-            "Balas HANYA JSON array valid, tanpa markdown, dengan field start, end, title. "
-            f"Pilih {'sebanyak mungkin, maksimal ' + str(max_clips) if count == 0 else str(count)} segmen non-overlap dengan durasi "
-            f"{'alami durasi 30-60 detik untuk shorts/reels' if minimum == 0 and maximum == 0 else f'{minimum}-{maximum} detik'}. "
-            "Judul harus singkat dan sesuai bahasa transkrip. "
-            f"Profil momen: {CLIP_PROFILE_GUIDANCE.get(profile, CLIP_PROFILE_GUIDANCE['auto'])}\n"
-            + (f"Instruksi tambahan dari user: {custom_prompt}\n" if custom_prompt.strip() else "")
-            + "\nTRANSKRIP:\n"
-            + json.dumps(transcript, ensure_ascii=False)
+        condensed = condense_transcript_for_llm(transcript, energy_map)
+        prompt, eff_min, eff_max = build_clipper_llm_prompt(
+            condensed, count, minimum, maximum, max_clips, profile, flavor, custom_prompt
         )
-        
         response = client.models.generate_content(
-            model='gemini-3.8-flash',
+            model="gemini-3.8-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
-                temperature=0.2,
-            )
+                temperature=0.25,
+            ),
         )
         parsed = json.loads(response.text)
         if isinstance(parsed, dict):
-            parsed = parsed.get("clips", parsed) # some models wrap it in 'clips' key
-        
+            parsed = parsed.get("clips", parsed)
         valid = []
-        effective_max = float(maximum) if maximum > 0 else 90.0
         for item in parsed:
             start = float(item["start"])
             end = float(item["end"])
             duration = end - start
-            if end > start and (minimum == 0 or duration >= minimum) and duration <= effective_max:
-                valid.append({"start": start, "end": end, "score": 100.0, "title": str(item.get("title", "Highlight"))})
+            if end > start and duration >= max(5, eff_min - 5) and duration <= eff_max + 15:
+                valid.append({
+                    "start": start,
+                    "end": end,
+                    "score": float(item.get("score", 92.0)),
+                    "title": str(item.get("title", "Highlight")),
+                })
         return valid[: (max_clips if count == 0 else count)] or None
     except Exception as e:
         logger.warning(f"Gemini Error: {e}")
@@ -1223,20 +1539,149 @@ def format_time_for_error(seconds: float) -> str:
 
 
 
-def write_srt(transcript: list[dict[str, Any]], start: float, end: float, path: Path, max_lines: int = 2) -> None:
+PROFANITY_WORDS = {
+    "anjing", "anjir", "bangsat", "goblog", "goblok", "tolol", "bego",
+    "kontol", "memek", "ngentot", "asu", "bajingan", "fuck", "shit", "bitch",
+}
+
+
+def censor_word_if_enabled(word: str, enabled: bool = False) -> str:
+    if not enabled:
+        return word
+    clean = re.sub(r"[^a-zA-Z]", "", word).lower()
+    if clean in PROFANITY_WORDS and len(word) > 2:
+        return word[0] + ("*" * (len(word) - 2)) + word[-1]
+    return word
+
+
+def write_srt(
+    transcript: list[dict[str, Any]],
+    start: float,
+    end: float,
+    path: Path,
+    max_lines: int = 2,
+    mode: str = "phrase",
+    highlight_color: str = "#FFDD00",
+    censor_profanity: bool = False,
+) -> None:
     lines: list[str] = []
     index = 1
+    clip_dur = max(0.1, end - start)
+
     for item in transcript:
-        item_start = max(0.0, item["start"] - start)
-        item_end = min(end - start, item["end"] - start)
-        if item_end <= 0 or item_start >= end - start:
+        seg_abs_start = float(item.get("start", 0.0))
+        seg_abs_end = float(item.get("end", 0.0))
+        if seg_abs_end <= start or seg_abs_start >= end:
             continue
-        cues = split_segment_into_cues(item_start, item_end, item.get("text", ""), max_lines=max_lines)
-        for c_start, c_end, c_text in cues:
-            if c_end <= c_start:
-                continue
-            lines.extend([str(index), f"{srt_timestamp(c_start)} --> {srt_timestamp(c_end)}", c_text, ""])
-            index += 1
+
+        item_start = max(0.0, seg_abs_start - start)
+        item_end = min(clip_dur, seg_abs_end - start)
+        if item_end <= item_start:
+            continue
+
+        item_text = str(item.get("text", "")).strip()
+        if not item_text:
+            continue
+
+        if censor_profanity:
+            item_text = " ".join(censor_word_if_enabled(tok, True) for tok in item_text.split())
+
+        raw_words = item.get("words")
+        norm_words: list[dict[str, Any]] = []
+        if raw_words:
+            for w in raw_words:
+                w_txt = str(getattr(w, "word", "") if hasattr(w, "word") else w.get("word", "")).strip()
+                if not w_txt:
+                    continue
+                w_txt = censor_word_if_enabled(w_txt, censor_profanity)
+                w_abs_s = float(getattr(w, "start", seg_abs_start) if hasattr(w, "start") else w.get("start", seg_abs_start))
+                w_abs_e = float(getattr(w, "end", seg_abs_end) if hasattr(w, "end") else w.get("end", seg_abs_end))
+                rel_s = w_abs_s - start if w_abs_s >= start - 0.5 else w_abs_s
+                rel_e = w_abs_e - start if w_abs_e >= start - 0.5 else w_abs_e
+                rel_s = max(0.0, min(clip_dur, rel_s))
+                rel_e = max(rel_s + 0.08, min(clip_dur, rel_e))
+                if rel_e > rel_s and rel_s < clip_dur:
+                    norm_words.append({"word": w_txt, "start": round(rel_s, 3), "end": round(rel_e, 3)})
+
+        if not norm_words:
+            w_list = item_text.split()
+            if w_list:
+                tot_dur = max(0.2, item_end - item_start)
+                per_w = tot_dur / len(w_list)
+                norm_words = [
+                    {
+                        "word": w,
+                        "start": round(item_start + i * per_w, 3),
+                        "end": round(item_start + (i + 1) * per_w, 3),
+                    }
+                    for i, w in enumerate(w_list)
+                ]
+
+        if mode == "single_word":
+            for i, nw in enumerate(norm_words):
+                ws = nw["start"]
+                we = nw["end"]
+                if i + 1 < len(norm_words):
+                    nxt_s = norm_words[i + 1]["start"]
+                    if 0 <= (nxt_s - we) < 0.12:
+                        we = nxt_s
+                    elif we > nxt_s:
+                        we = max(ws + 0.06, nxt_s)
+                if we > ws:
+                    lines.extend([str(index), f"{srt_timestamp(ws)} --> {srt_timestamp(we)}", nw["word"].upper(), ""])
+                    index += 1
+
+        elif mode == "active_highlight":
+            chunk_size = 4 if max_lines != 1 else 3
+            for chunk_idx in range(0, len(norm_words), chunk_size):
+                chunk = norm_words[chunk_idx:chunk_idx + chunk_size]
+                chunk_words = [w["word"] for w in chunk if w["word"]]
+                if not chunk_words:
+                    continue
+
+                for active_i, nw in enumerate(chunk):
+                    ws = nw["start"]
+                    if active_i + 1 < len(chunk):
+                        nxt_s = chunk[active_i + 1]["start"]
+                        we = nxt_s if (nxt_s - nw["end"]) < 0.45 else nw["end"]
+                    else:
+                        we = nw["end"]
+                        if chunk_idx + chunk_size < len(norm_words):
+                            next_chunk_s = norm_words[chunk_idx + chunk_size]["start"]
+                            if we > next_chunk_s:
+                                we = max(ws + 0.06, next_chunk_s)
+
+                    if we <= ws:
+                        continue
+
+                    formatted_tokens = []
+                    for i, cw in enumerate(chunk_words):
+                        if i == active_i:
+                            formatted_tokens.append(f"<font color=\"{highlight_color}\">{cw}</font>")
+                        else:
+                            formatted_tokens.append(cw)
+
+                    if max_lines >= 2 and len(formatted_tokens) >= 4:
+                        mid = len(formatted_tokens) // 2
+                        cue_text = " ".join(formatted_tokens[:mid]) + "\n" + " ".join(formatted_tokens[mid:])
+                    else:
+                        cue_text = " ".join(formatted_tokens)
+
+                    lines.extend([
+                        str(index),
+                        f"{srt_timestamp(ws)} --> {srt_timestamp(we)}",
+                        cue_text,
+                        "",
+                    ])
+                    index += 1
+        else:
+            cues = split_segment_into_cues(item_start, item_end, item_text, max_lines=max_lines)
+            for c_start, c_end, c_text in cues:
+                if c_end <= c_start:
+                    continue
+                lines.extend([str(index), f"{srt_timestamp(c_start)} --> {srt_timestamp(c_end)}", c_text, ""])
+                index += 1
+
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
@@ -1303,8 +1748,12 @@ def subtitle_style_with_position(
     return re.sub(r"Alignment=\d+", f"Alignment={alignment}", re.sub(r"MarginV=\d+", f"MarginV={margin}", base))
 
 
-def detect_face_crop(video_path: Path) -> tuple[int, int, int, int] | None:
-    """Return x, y, width, height for a facecam crop, or None when no face is found."""
+def detect_face_crop(
+    video_path: Path,
+    start_sec: float = 0.0,
+    end_sec: float = 0.0,
+) -> tuple[int, int, int, int] | None:
+    """Deteksi koordinat kotak facecam streamer di area pinggir/pojok pada rentang waktu klip."""
     try:
         import cv2
     except ImportError as exc:
@@ -1313,32 +1762,47 @@ def detect_face_crop(video_path: Path) -> tuple[int, int, int, int] | None:
     capture = cv2.VideoCapture(str(video_path))
     width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = float(capture.get(cv2.CAP_PROP_FPS) or 30.0)
     frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
     if width <= 0 or height <= 0:
         capture.release()
         return None
+
     detector = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-    best_face = None
-    sample_points = [0, max(0, frame_count // 3), max(0, frame_count // 2), max(0, frame_count * 2 // 3)]
+    start_f = max(0, int(start_sec * fps)) if start_sec > 0 else 0
+    end_f = min(max(0, frame_count - 1), int(end_sec * fps)) if end_sec > start_sec else max(0, frame_count - 1)
+    span = max(1, end_f - start_f)
+    sample_points = [start_f + int(span * r) for r in (0.1, 0.3, 0.5, 0.7, 0.9)]
+
+    candidates: list[tuple[float, int, int, int, int]] = []
     for frame_index in sample_points:
         capture.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
         ok, frame = capture.read()
         if not ok:
             continue
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = detector.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(32, 32))
-        for face in faces:
-            if best_face is None or face[2] * face[3] > best_face[2] * best_face[3]:
-                best_face = face
+        faces = detector.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(32, 32))
+        for (fx, fy, fw, fh) in faces:
+            if fh > height * 0.48:
+                continue
+            cx = fx + fw / 2.0
+            edge_dist_x = min(cx / width, (width - cx) / width)
+            corner_bonus = 2.0 if edge_dist_x < 0.32 else 0.75
+            score = float(fw * fh) * corner_bonus
+            candidates.append((score, int(fx), int(fy), int(fw), int(fh)))
     capture.release()
-    if best_face is None:
-        return None
 
-    face_x, face_y, face_w, face_h = [int(value) for value in best_face]
-    crop_w = min(width, max(face_w * 4, int(width * 0.28)))
-    crop_h = min(height, max(face_h * 4, int(crop_w * 9 / 16)))
+    if not candidates:
+        def_w = int(width * 0.30)
+        def_h = int(def_w * 9 / 16)
+        return (int(width * 0.015), int(height * 0.02), def_w, def_h)
+
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    _, face_x, face_y, face_w, face_h = candidates[0]
+    crop_w = min(width, max(int(face_w * 3.4), int(width * 0.26)))
+    crop_h = min(height, max(int(face_h * 2.8), int(crop_w * 9 / 16)))
     center_x = face_x + face_w // 2
-    center_y = face_y + face_h // 2
+    center_y = face_y + int(face_h * 0.55)
     crop_x = max(0, min(width - crop_w, center_x - crop_w // 2))
     crop_y = max(0, min(height - crop_h, center_y - crop_h // 2))
     return crop_x, crop_y, crop_w, crop_h
@@ -1361,6 +1825,19 @@ def video_layout_filter(
     face_crop: tuple[int, int, int, int] | None,
 ) -> str:
     width, height = output_dimensions(aspect_ratio)
+
+    if layout == "podcast_split":
+        half_h = (height // 2)
+        if half_h % 2 != 0:
+            half_h += 1
+        rem_h = height - half_h
+        return (
+            f"split=2[left_spk][right_spk];"
+            f"[left_spk]crop=iw/2:ih:0:0,scale={width}:{half_h}:force_original_aspect_ratio=increase,crop={width}:{half_h}[top_out];"
+            f"[right_spk]crop=iw/2:ih:iw/2:0,scale={width}:{rem_h}:force_original_aspect_ratio=increase,crop={width}:{rem_h}[bot_out];"
+            f"[top_out][bot_out]vstack=inputs=2"
+        )
+
     if layout != "facecam_top" or not face_crop:
         if framing == "fit":
             return (
@@ -1372,11 +1849,26 @@ def video_layout_filter(
         return f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}"
 
     crop_x, crop_y, crop_w, crop_h = face_crop
-    top_height = int(height * 0.34)
+    top_height = int(height * 0.35)
+    if top_height % 2 != 0:
+        top_height += 1
     bottom_height = height - top_height
+
+    if framing == "fit":
+        return (
+            f"split=3[face][mbg][mfg];"
+            f"[face]crop={crop_w}:{crop_h}:{crop_x}:{crop_y},"
+            f"scale={width}:{top_height}:force_original_aspect_ratio=increase,crop={width}:{top_height}[faceout];"
+            f"[mbg]scale={width}:{bottom_height}:force_original_aspect_ratio=increase,crop={width}:{bottom_height},boxblur=18:8[mblur];"
+            f"[mfg]scale={width}:{bottom_height}:force_original_aspect_ratio=decrease[mfit];"
+            f"[mblur][mfit]overlay=(W-w)/2:(H-h)/2[mainout];"
+            f"[faceout][mainout]vstack=inputs=2"
+        )
+
     return (
         f"split=2[face][main];"
-        f"[face]crop={crop_w}:{crop_h}:{crop_x}:{crop_y},scale={width}:{top_height}:force_original_aspect_ratio=increase,crop={width}:{top_height}[faceout];"
+        f"[face]crop={crop_w}:{crop_h}:{crop_x}:{crop_y},"
+        f"scale={width}:{top_height}:force_original_aspect_ratio=increase,crop={width}:{top_height}[faceout];"
         f"[main]scale={width}:{bottom_height}:force_original_aspect_ratio=increase,crop={width}:{bottom_height}[mainout];"
         f"[faceout][mainout]vstack=inputs=2"
     )
@@ -1524,6 +2016,72 @@ def run_ffmpeg_with_progress(
         raise RuntimeError(f"FFmpeg render error ({proc.returncode}): {stderr_err[-400:]}")
 
 
+def media_dimensions(video_path: Path) -> tuple[int, int]:
+    try:
+        import cv2
+        capture = cv2.VideoCapture(str(video_path))
+        w = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        capture.release()
+        if w > 0 and h > 0:
+            return w, h
+    except Exception:
+        pass
+    return 1920, 1080
+
+
+def wrap_banner_text(text: str, max_chars: int = 26) -> list[str]:
+    words_list = text.strip().split()
+    if not words_list:
+        return []
+    lines: list[str] = []
+    curr: list[str] = []
+    curr_len = 0
+    for w in words_list:
+        if curr and (curr_len + len(w) + 1 > max_chars):
+            lines.append(" ".join(curr))
+            curr = [w]
+            curr_len = len(w)
+        else:
+            curr.append(w)
+            curr_len += len(w) + (1 if len(curr) > 1 else 0)
+    if curr:
+        lines.append(" ".join(curr))
+    return lines[:2]
+
+
+def escape_drawtext(value: str) -> str:
+    return (
+        value.replace("\\", "\\\\")
+        .replace("'", "'\\''")
+        .replace(":", "\\:")
+        .replace("%", "\\%")
+        .replace(",", "\\,")
+    )
+
+
+def resolve_pixel_face_crop(
+    video: Path,
+    options: CreateJobRequest,
+    clip_start: float = 0.0,
+    clip_end: float = 0.0,
+) -> tuple[int, int, int, int] | None:
+    if options.layout != "facecam_top":
+        return None
+    raw_crop = getattr(options, "facecam_crop", None)
+    if raw_crop and len(raw_crop) == 4:
+        fx, fy, fw, fh = [float(v) for v in raw_crop]
+        vw, vh = media_dimensions(video)
+        if all(0.0 <= v <= 1.0 for v in (fx, fy, fw, fh)):
+            px = max(0, min(vw - 32, int(fx * vw)))
+            py = max(0, min(vh - 32, int(fy * vh)))
+            pw = max(32, min(vw - px, int(fw * vw)))
+            ph = max(32, min(vh - py, int(fh * vh)))
+            return (px, py, pw, ph)
+        return (int(fx), int(fy), max(32, int(fw)), max(32, int(fh)))
+    return detect_face_crop(video, clip_start, clip_end)
+
+
 def render_clip(
     video: Path,
     transcript: list[dict[str, Any]],
@@ -1540,11 +2098,31 @@ def render_clip(
     clip_dir = clip_result_dir(job_dir, clip.id, clip.title)
     clip_dir.mkdir(exist_ok=True)
     subtitle_path = clip_dir / "subtitle.srt"
-    output_path = clip_dir / "clip.mp4"
     max_lines = getattr(options, "subtitle_max_lines", 2)
     font_size = getattr(options, "subtitle_font_size", 14)
-    write_srt(transcript, clip.start, clip.end, subtitle_path, max_lines=max_lines)
-    layout_filter = video_layout_filter(options.aspect_ratio, options.framing, options.layout, face_crop)
+    sub_mode = getattr(options, "subtitle_mode", "active_highlight")
+    active_col = getattr(options, "subtitle_active_color", "#FFDD00")
+    censor_flag = bool(getattr(options, "censor_profanity", False))
+
+    write_srt(
+        transcript,
+        clip.start,
+        clip.end,
+        subtitle_path,
+        max_lines=max_lines,
+        mode=sub_mode,
+        highlight_color=active_col,
+        censor_profanity=censor_flag,
+    )
+
+    effective_face_crop = resolve_pixel_face_crop(video, options, clip.start, clip.end) if options.layout == "facecam_top" else None
+    layout_filter = video_layout_filter(options.aspect_ratio, options.framing, options.layout, effective_face_crop)
+
+    if getattr(options, "mirror_video", False):
+        layout_filter = f"{layout_filter},hflip"
+    if getattr(options, "color_boost", False):
+        layout_filter = f"{layout_filter},eq=contrast=1.06:saturation=1.12:brightness=0.01"
+
     if options.subtitle_style == "none":
         video_filter = layout_filter
     else:
@@ -1558,25 +2136,131 @@ def render_clip(
             font_size=font_size,
         )
         video_filter = f"{layout_filter},subtitles=subtitle.srt:force_style='{subtitle_style}'"
+
+    if getattr(options, "hook_banner_enabled", False):
+        hb_text = (getattr(options, "hook_banner_text", "") or clip.title or "").strip()
+        hb_dur = int(getattr(options, "hook_banner_duration", 4))
+        enable_expr = f":enable='between(t,0,{hb_dur})'" if hb_dur > 0 else ""
+        wrapped_lines = wrap_banner_text(hb_text.upper(), max_chars=26)
+        for line_idx, line_str in enumerate(wrapped_lines):
+            safe_hb = escape_drawtext(line_str)
+            y_pos = f"h*0.10+{line_idx * 34}"
+            video_filter += (
+                f",drawtext=text='{safe_hb}':fontcolor=#FFDD00:fontsize=22:font='Arial Black':"
+                f"box=1:boxcolor=black@0.82:boxborderw=8:x=(w-text_w)/2:y={y_pos}{enable_expr}"
+            )
+
+    wm_text = getattr(options, "watermark_text", "").strip()
+    wm_pos = getattr(options, "watermark_position", "top_right")
+    wm_opacity = float(getattr(options, "watermark_opacity", 0.65))
+    if wm_text:
+        safe_wm = escape_drawtext(wm_text)
+        pos_xy = {
+            "top_left": "x=28:y=28",
+            "top_right": "x=w-text_w-28:y=28",
+            "bottom_right": "x=w-text_w-28:y=h-text_h-36",
+            "bottom_left": "x=28:y=h-text_h-36",
+            "center": "x=(w-text_w)/2:y=(h-text_h)/2",
+        }.get(wm_pos, "x=w-text_w-28:y=28")
+        video_filter += (
+            f",drawtext=text='{safe_wm}':fontcolor=white@{wm_opacity:.2f}:fontsize=18:font='Arial':"
+            f"box=1:boxcolor=black@0.35:boxborderw=5:{pos_xy}"
+        )
+
+    wm_img = getattr(options, "watermark_image_path", "").strip()
+    if wm_img and Path(wm_img).is_file():
+        wm_copy = clip_dir / "wm_logo.png"
+        try:
+            shutil.copy2(wm_img, wm_copy)
+            img_xy = {
+                "top_left": "28:28",
+                "top_right": "W-w-28:28",
+                "bottom_left": "28:H-h-36",
+                "bottom_right": "W-w-28:H-h-36",
+                "center": "(W-w)/2:(H-h)/2",
+            }.get(wm_pos, "W-w-28:28")
+            video_filter = (
+                f"{video_filter}[basevid];"
+                f"movie=wm_logo.png,scale=150:-1,format=rgba,"
+                f"colorchannelmixer=aa={wm_opacity:.2f}[wmlogo];"
+                f"[basevid][wmlogo]overlay={img_xy}"
+            )
+        except Exception as e:
+            logger.warning(f"Gagal memasang watermark gambar: {e}")
+
+    if getattr(options, "speed_shift", False):
+        video_filter = f"{video_filter},setpts=PTS/1.03"
+
     enc_args, enc_name = get_encoder_args(getattr(options, "video_encoder", "auto"))
     resolved_video = str(Path(video).resolve())
-    cmd = (
-        ffmpeg_command()
-        + [
-            "-y",
-            "-ss", f"{clip.start:.3f}",
-            "-to", f"{clip.end:.3f}",
-            "-i", resolved_video,
-            "-vf", video_filter,
-        ]
-        + enc_args
-        + [
-            "-c:a", "aac",
-            "-movflags", "+faststart",
-            "clip.mp4",
-        ]
-    )
     clip_duration = max(1.0, clip.end - clip.start)
+
+    bgm_file = getattr(options, "bgm_path", "").strip()
+    has_bgm = bool(bgm_file and Path(bgm_file).is_file())
+    voice_vol = float(getattr(options, "voice_volume", 1.0))
+    bgm_vol = float(getattr(options, "bgm_volume", 0.18))
+    use_autoduck = bool(getattr(options, "bgm_autoduck", True))
+    use_loudnorm = bool(getattr(options, "audio_loudnorm", False))
+
+    voice_chain = f"volume={voice_vol:.2f}"
+    if use_loudnorm:
+        voice_chain = f"loudnorm=I=-16:TP=-1.5:LRA=11,{voice_chain}"
+    if getattr(options, "speed_shift", False):
+        voice_chain = f"{voice_chain},atempo=1.03"
+
+    if has_bgm:
+        resolved_bgm = str(Path(bgm_file).resolve())
+        fade_out_start = max(0.0, clip_duration - 1.5)
+        bgm_chain = (
+            f"volume={bgm_vol:.2f},"
+            f"afade=t=in:st=0:d=1.0,"
+            f"afade=t=out:st={fade_out_start:.2f}:d=1.5"
+        )
+        if use_autoduck:
+            audio_filter_complex = (
+                f"[0:a]{voice_chain},asplit=2[v_main][v_sc];"
+                f"[1:a]{bgm_chain}[bgm_raw];"
+                f"[bgm_raw][v_sc]sidechaincompress=threshold=0.03:ratio=6:attack=50:release=400[bgm_ducked];"
+                f"[v_main][bgm_ducked]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+            )
+        else:
+            audio_filter_complex = (
+                f"[0:a]{voice_chain}[v_main];"
+                f"[1:a]{bgm_chain}[bgm_raw];"
+                f"[v_main][bgm_raw]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+            )
+        full_filter_complex = f"[0:v]{video_filter}[vout];{audio_filter_complex}"
+        base_cmd = (
+            ffmpeg_command()
+            + [
+                "-y",
+                "-ss", f"{clip.start:.3f}",
+                "-to", f"{clip.end:.3f}",
+                "-i", resolved_video,
+                "-stream_loop", "-1",
+                "-i", resolved_bgm,
+                "-filter_complex", full_filter_complex,
+                "-map", "[vout]",
+                "-map", "[aout]",
+            ]
+        )
+        cmd = base_cmd + enc_args + ["-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", "clip.mp4"]
+        fallback_cmd = base_cmd + ["-c:v", "libx264", "-preset", "fast", "-crf", "21", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", "clip.mp4"]
+    else:
+        base_cmd = (
+            ffmpeg_command()
+            + [
+                "-y",
+                "-ss", f"{clip.start:.3f}",
+                "-to", f"{clip.end:.3f}",
+                "-i", resolved_video,
+                "-vf", video_filter,
+                "-af", voice_chain,
+            ]
+        )
+        cmd = base_cmd + enc_args + ["-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "clip.mp4"]
+        fallback_cmd = base_cmd + ["-c:v", "libx264", "-preset", "fast", "-crf", "21", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "clip.mp4"]
+
     try:
         run_ffmpeg_with_progress(
             cmd,
@@ -1592,22 +2276,6 @@ def render_clip(
     except Exception as exc:
         if enc_args[1] != "libx264":
             logger.warning(f"Hardware encoder {enc_name} gagal ({exc}), otomatis beralih ke CPU libx264...")
-            fallback_cmd = (
-                ffmpeg_command()
-                + [
-                    "-y",
-                    "-ss", f"{clip.start:.3f}",
-                    "-to", f"{clip.end:.3f}",
-                    "-i", resolved_video,
-                    "-vf", video_filter,
-                    "-c:v", "libx264",
-                    "-preset", "fast",
-                    "-crf", "21",
-                    "-c:a", "aac",
-                    "-movflags", "+faststart",
-                    "clip.mp4",
-                ]
-            )
             run_ffmpeg_with_progress(
                 fallback_cmd,
                 cwd=clip_dir,
@@ -1642,12 +2310,34 @@ def media_duration(video_path: Path, fallback: float) -> float:
 def render_profile(options: CreateJobRequest) -> dict[str, str]:
     return {
         "subtitle_style": options.subtitle_style,
+        "subtitle_mode": getattr(options, "subtitle_mode", "active_highlight"),
         "subtitle_position": options.subtitle_position,
-        "subtitle_x": str(options.subtitle_x),
-        "subtitle_y": str(options.subtitle_y),
+        "subtitle_color": options.subtitle_color,
+        "subtitle_active_color": getattr(options, "subtitle_active_color", "#FFDD00"),
+        "subtitle_font_size": str(options.subtitle_font_size),
+        "subtitle_max_lines": str(options.subtitle_max_lines),
+        "subtitle_x": f"{options.subtitle_x:.3f}",
+        "subtitle_y": f"{options.subtitle_y:.3f}",
         "aspect_ratio": options.aspect_ratio,
         "framing": options.framing,
         "layout": options.layout,
+        "facecam_crop": json.dumps(getattr(options, "facecam_crop", None)),
+        "bgm_path": getattr(options, "bgm_path", ""),
+        "bgm_volume": f"{getattr(options, 'bgm_volume', 0.18):.2f}",
+        "voice_volume": f"{getattr(options, 'voice_volume', 1.0):.2f}",
+        "bgm_autoduck": str(getattr(options, "bgm_autoduck", True)),
+        "audio_loudnorm": str(getattr(options, "audio_loudnorm", False)),
+        "censor_profanity": str(getattr(options, "censor_profanity", False)),
+        "watermark_text": getattr(options, "watermark_text", ""),
+        "watermark_image_path": getattr(options, "watermark_image_path", ""),
+        "watermark_position": getattr(options, "watermark_position", "top_right"),
+        "watermark_opacity": f"{getattr(options, 'watermark_opacity', 0.65):.2f}",
+        "hook_banner_enabled": str(getattr(options, "hook_banner_enabled", False)),
+        "hook_banner_text": getattr(options, "hook_banner_text", ""),
+        "hook_banner_duration": str(getattr(options, "hook_banner_duration", 4)),
+        "mirror_video": str(getattr(options, "mirror_video", False)),
+        "speed_shift": str(getattr(options, "speed_shift", False)),
+        "color_boost": str(getattr(options, "color_boost", False)),
     }
 
 
@@ -1668,13 +2358,17 @@ def render_selected_clips(
         subtitle = clip_dir / "subtitle.srt"
         return output.is_file() and output.stat().st_size > 0 and subtitle.is_file()
 
-    # URL metadata can survive a failed/interrupted render, so verify the actual
-    # files before deciding that a clip is already available.
     targets = [clip for clip in clips if not skip_existing or not rendered_file(clip)]
     if not targets:
         update_job(job_id, progress=progress_end, message="Semua clip sudah dirender; menyiapkan hasil akhir...")
         return
-    face_crop = detect_face_crop(video) if options.layout == "facecam_top" else None
+
+    face_crop = None
+    if options.layout == "facecam_top":
+        if getattr(options, "facecam_crop", None) and len(options.facecam_crop) == 4:
+            face_crop = tuple(options.facecam_crop)
+        else:
+            face_crop = detect_face_crop(video)
     total_clips = len(targets)
     for index, clip in enumerate(targets, start=1):
         sub_pct = int(((index - 1) / total_clips) * 100)
@@ -1769,6 +2463,9 @@ def process_job(job_id: str, options: CreateJobRequest, source_path: str | None 
             progress=62,
             message="Mencari momen terbaik...",
         )
+        energy_map = compute_audio_energy_map(audio) if getattr(options, "use_audio_energy", True) else None
+        flavor = getattr(options, "clip_flavor", "spicy_drama")
+
         if options.clip_mode == "smart" and options.clip_profile == "manual":
             selected = []
         elif options.clip_mode == "smart":
@@ -1784,6 +2481,8 @@ def process_job(job_id: str, options: CreateJobRequest, source_path: str | None 
                     options.max_clips,
                     options.clip_profile,
                     options.custom_prompt,
+                    flavor=flavor,
+                    energy_map=energy_map,
                 )
             elif options.use_local_llm:
                 selected = ask_local_gguf(
@@ -1795,6 +2494,8 @@ def process_job(job_id: str, options: CreateJobRequest, source_path: str | None 
                     options.max_clips,
                     options.clip_profile,
                     options.custom_prompt,
+                    flavor=flavor,
+                    energy_map=energy_map,
                 )
                 if not selected:
                     selected = ask_ollama(
@@ -1814,6 +2515,8 @@ def process_job(job_id: str, options: CreateJobRequest, source_path: str | None 
                     smart_max,
                     options.max_clips,
                     options.clip_profile,
+                    flavor=flavor,
+                    energy_map=energy_map,
                 )
         else:
             selected = split_transcript(
@@ -1828,21 +2531,35 @@ def process_job(job_id: str, options: CreateJobRequest, source_path: str | None 
         if options.clip_mode == "smart" and selected:
             smart_min = options.smart_fixed_duration if options.smart_duration_mode == "fixed" else options.min_duration
             smart_max = options.smart_fixed_duration if options.smart_duration_mode == "fixed" else options.max_duration
-            selected = broaden_smart_clips(transcript, selected, smart_min, smart_max)
+            selected = broaden_smart_clips(
+                transcript,
+                selected,
+                smart_min,
+                smart_max,
+                flavor=flavor,
+                snap_bounds=getattr(options, "snap_sentence_bounds", True),
+                trim_filler=getattr(options, "trim_opening_filler", True),
+            )
         clips = []
         for index, item in enumerate(selected, start=1):
             clip = Clip(
                 id=f"clip-{index:02}",
                 start=float(item["start"]),
                 end=float(item["end"]),
-                score=float(item.get("score", 0)),
+                score=float(item.get("score", 88.0)),
                 title=str(item.get("title") or f"Highlight {index}"),
                 source="ai",
             )
             clips.append(clip)
-        update_job(job_id, progress=62, sub_progress=40, message="Mencari momen terbaik dengan AI...", sub_message=f"Model {options.local_model.upper()} menganalisis transkrip...")
+        update_job(job_id, progress=62, sub_progress=40, message="Mencari momen terbaik dengan AI...", sub_message=f"Model {options.local_model.upper()} menganalisis transkrip ({flavor})...")
         update_job(job_id, clips=clips, progress=68, sub_progress=75, message="Membuat metadata (Judul, Caption, Hashtag)...", sub_message="AI mengoptimalkan hook dan copywriting klip...")
-        generate_clip_metadata(transcript, clips, options.local_model)
+        generate_clip_metadata(
+            transcript,
+            clips,
+            options.local_model,
+            flavor=flavor,
+            spicy_hook=getattr(options, "spicy_headline_hook", True),
+        )
         update_job(job_id, progress=69, message="Merender clip AI sebelum review...")
         render_selected_clips(
             job_id,
