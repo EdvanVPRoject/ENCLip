@@ -733,6 +733,8 @@ class ReviewClipCardWidget(QFrame):
         title_text = f"{index + 1:02d} · {clip_data.get('title', 'Klip Video')}"
         title_lbl = QLabel(title_text)
         title_lbl.setStyleSheet("font-weight: 700; font-size: 13px; color: #FFFFFF; background: transparent;")
+        title_row.addWidget(title_lbl, 1)
+
         score_val = int(float(clip_data.get("score", 0)))
         if score_val > 0:
             score_badge = QLabel(f"🔥 {score_val}%")
@@ -2328,7 +2330,7 @@ class HermesDesktop(QMainWindow):
                 color: #FFFFFF;
             }
         """)
-        self.btn_reset_facecam.clicked.connect(lambda: self.facecam_box.reset_to_default() if hasattr(self, "facecam_box") else None)
+        self.btn_reset_facecam.clicked.connect(self.reset_facecam_to_auto)
         fc_btn_row.addWidget(self.btn_reset_facecam)
         fc_btn_row.addStretch()
         facecam_group_layout.addLayout(fc_btn_row)
@@ -3417,6 +3419,56 @@ class HermesDesktop(QMainWindow):
         self.local_file_button.setVisible(False)
         self.local_file_button.clicked.connect(self.choose_local_video)
 
+        # Download Progress Card ("sudah berapa dari berapa")
+        self.dl_progress_card = QFrame()
+        self.dl_progress_card.setObjectName("dlProgressCard")
+        self.dl_progress_card.setStyleSheet("""
+            QFrame#dlProgressCard {
+                background: #0d121c;
+                border: 1px solid #1e293b;
+                border-radius: 10px;
+                padding: 12px;
+                margin-top: 10px;
+            }
+        """)
+        dl_card_layout = QVBoxLayout(self.dl_progress_card)
+        dl_card_layout.setContentsMargins(14, 12, 14, 12)
+        dl_card_layout.setSpacing(6)
+
+        dl_header = QHBoxLayout()
+        self.dl_status_label = QLabel("Mengunduh video sumber...")
+        self.dl_status_label.setStyleSheet("font-weight: 600; font-size: 13px; color: #f1f5f9; background: transparent; border: 0;")
+        self.dl_percent_label = QLabel("0%")
+        self.dl_percent_label.setStyleSheet("font-weight: 700; font-size: 13px; color: #38bdf8; background: transparent; border: 0;")
+        dl_header.addWidget(self.dl_status_label, 1)
+        dl_header.addWidget(self.dl_percent_label)
+        dl_card_layout.addLayout(dl_header)
+
+        self.dl_progress_bar = QProgressBar()
+        self.dl_progress_bar.setRange(0, 100)
+        self.dl_progress_bar.setValue(0)
+        self.dl_progress_bar.setTextVisible(False)
+        self.dl_progress_bar.setFixedHeight(8)
+        self.dl_progress_bar.setStyleSheet("""
+            QProgressBar {
+                background: #1e293b;
+                border-radius: 4px;
+                border: 0;
+            }
+            QProgressBar::chunk {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284c7, stop:1 #38bdf8);
+                border-radius: 4px;
+            }
+        """)
+        dl_card_layout.addWidget(self.dl_progress_bar)
+
+        self.dl_detail_label = QLabel("Menyiapkan download...")
+        self.dl_detail_label.setStyleSheet("font-size: 11px; font-weight: 500; color: #94a3b8; background: transparent; border: 0;")
+        dl_card_layout.addWidget(self.dl_detail_label)
+
+        self.dl_progress_card.setVisible(False)
+        left_col.addWidget(self.dl_progress_card)
+
         self.source_status = QLabel("Belum ada video sumber")
         self.source_status.setObjectName("status")
         left_col.addWidget(self.source_status)
@@ -3743,7 +3795,12 @@ class HermesDesktop(QMainWindow):
         if not hasattr(self, "subtitle_enabled"):
             return
         enabled = self.subtitle_enabled.isChecked()
-        for attr in ("subtitle_combo", "subtitle_position_combo", "subtitle_color_combo", "subtitle_color_button", "subtitle_color_hex", "subtitle_lines_combo", "subtitle_size_combo"):
+        for attr in (
+            "subtitle_combo", "subtitle_mode_combo", "subtitle_position_combo",
+            "subtitle_color_combo", "subtitle_active_color_combo",
+            "subtitle_color_button", "subtitle_color_hex",
+            "subtitle_lines_combo", "subtitle_size_combo",
+        ):
             if hasattr(self, attr):
                 getattr(self, attr).setEnabled(enabled)
         if hasattr(self, "preview_subtitle_sample") and hasattr(self, "language_combo"):
@@ -3862,10 +3919,15 @@ class HermesDesktop(QMainWindow):
             sub_mode = self.subtitle_mode_combo.currentData() if hasattr(self, "subtitle_mode_combo") else "phrase"
             lines_val = max_lines if max_lines is not None else (self.subtitle_lines_combo.currentData() if hasattr(self, "subtitle_lines_combo") else 2)
 
+            active_col = (
+                self.subtitle_active_color_combo.currentData()
+                if hasattr(self, "subtitle_active_color_combo")
+                else "#FFDD00"
+            )
             if sub_mode == "single_word":
-                sample_text = "PANCINGAN!"
+                sample_text = f"<font color='{active_col}'>PANCINGAN!</font>"
             elif sub_mode == "active_highlight":
-                sample_text = f"Momen ini <font color='#FFDD00'><b>SANGAT</b></font> krusial"
+                sample_text = f"Momen ini <font color='{active_col}'>SANGAT</font> krusial"
             elif lines_val == 1:
                 sample_text = f"Contoh subtitle sebaris · {language}"
             elif lines_val == 2:
@@ -4264,6 +4326,16 @@ class HermesDesktop(QMainWindow):
                     if is_vis
                     else "background: #182234; border: 1px solid #2C3C56; color: #38BDF8; font-weight: 600; border-radius: 6px; padding: 4px 10px;"
                 )
+
+    def reset_facecam_to_auto(self) -> None:
+        if hasattr(self, "facecam_box"):
+            self.facecam_box.reset_to_default()
+        self.facecam_box_custom_dragged = False
+        if hasattr(self, "facecam_preset_combo"):
+            self.facecam_preset_combo.blockSignals(True)
+            self.facecam_preset_combo.setCurrentIndex(0)
+            self.facecam_preset_combo.blockSignals(False)
+        self.update_create_preview()
 
     def on_facecam_preset_changed(self) -> None:
         if not hasattr(self, "facecam_preset_combo") or not hasattr(self, "facecam_box"):
@@ -4940,6 +5012,12 @@ class HermesDesktop(QMainWindow):
             core.JOBS[self.current_job_id] = core.Job(id=self.current_job_id, url=url)
         self.download_button.setEnabled(False)
         self.local_file_button.setEnabled(False)
+        if hasattr(self, "dl_progress_card"):
+            self.dl_progress_card.setVisible(True)
+            self.dl_progress_bar.setValue(0)
+            self.dl_percent_label.setText("0%")
+            self.dl_status_label.setText("Mengunduh video sumber...")
+            self.dl_detail_label.setText("Menghubungkan ke server sumber...")
         self.progress_panel.setVisible(True)
         self.progress.setValue(0)
         self.total_percent_label.setText("0%")
@@ -4974,6 +5052,8 @@ class HermesDesktop(QMainWindow):
         self.show_clip_stage(str(source), f"File siap digunakan · {Path(path).name}")
 
     def show_clip_stage(self, source_path: str, message: str) -> None:
+        if hasattr(self, "dl_progress_card"):
+            self.dl_progress_card.setVisible(False)
         self.download_button.setEnabled(True)
         self.local_file_button.setEnabled(True)
         self.source_status.setText(message)
@@ -5071,10 +5151,25 @@ class HermesDesktop(QMainWindow):
         self.sub_progress.setValue(sub_pct)
         self.sub_percent_label.setText(f"{sub_pct}%")
         self.sub_status_label.setText(sub_msg or msg)
+
+        # Update download progress card if active on Video tab
+        if hasattr(self, "dl_progress_card") and self.dl_progress_card.isVisible():
+            effective_pct = sub_pct if sub_pct > 0 else overall_pct
+            self.dl_progress_bar.setValue(effective_pct)
+            self.dl_percent_label.setText(f"{effective_pct}%")
+            if msg:
+                self.dl_status_label.setText(msg)
+            if sub_msg:
+                self.dl_detail_label.setText(sub_msg)
+            elif effective_pct > 0:
+                self.dl_detail_label.setText(f"Progress: {effective_pct}%")
+
         if msg != getattr(self, "_last_logged_msg", None):
             self._last_logged_msg = msg
             self.log_terminal(f"[{overall_pct}%] {msg}")
         if snapshot["status"] == "downloaded":
+            if hasattr(self, "dl_progress_card"):
+                self.dl_progress_card.setVisible(False)
             self.poll_timer.stop()
             self.show_clip_stage(snapshot.get("source_path", ""), snapshot["message"])
         elif snapshot["status"] == "awaiting_render":
@@ -5084,12 +5179,16 @@ class HermesDesktop(QMainWindow):
             self.poll_timer.stop()
             self.show_results(snapshot)
         elif snapshot["status"] == "canceled":
+            if hasattr(self, "dl_progress_card"):
+                self.dl_progress_card.setVisible(False)
             self.poll_timer.stop()
             self.set_create_inputs_locked(False)
             self.status_label.setText("Proses dibatalkan.")
             self.sub_status_label.setText("Pengaturan klip telah dibuka kembali.")
             self.log_terminal("Proses render telah dibatalkan.")
         elif snapshot["status"] == "failed":
+            if hasattr(self, "dl_progress_card"):
+                self.dl_progress_card.setVisible(False)
             self.poll_timer.stop()
             self.download_button.setEnabled(True)
             self.local_file_button.setEnabled(True)

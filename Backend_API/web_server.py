@@ -337,7 +337,17 @@ def download_video(url: str, job_dir: Path, quality: str, job_id: str) -> Path:
     output_template = str(job_dir / "source.%(ext)s")
     max_height = "2160" if quality == "best" else quality
     format_selector = f"bv*[height<={max_height}]+ba/b[height<={max_height}]/b"
-    ffmpeg_path = ffmpeg_command()[0]
+    ffmpeg_raw = ffmpeg_command()[0]
+    ffmpeg_dir = str(Path(ffmpeg_raw).parent)
+    if ffmpeg_dir not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
+    target_ffmpeg = Path(ffmpeg_dir) / "ffmpeg.exe"
+    if not target_ffmpeg.exists() and Path(ffmpeg_raw).exists():
+        try:
+            shutil.copyfile(ffmpeg_raw, target_ffmpeg)
+        except Exception:
+            pass
+    ffmpeg_path = str(target_ffmpeg if target_ffmpeg.exists() else ffmpeg_raw)
     try:
         import yt_dlp
 
@@ -389,6 +399,12 @@ def download_video(url: str, job_dir: Path, quality: str, job_id: str) -> Path:
             "quiet": True,
             "no_warnings": True,
             "noprogress": True,
+            "http_chunk_size": 10485760,
+            "retries": 10,
+            "fragment_retries": 10,
+            "file_access_retries": 5,
+            "buffersize": 1024 * 1024,
+            "socket_timeout": 30,
         }
         fixed_total = 0.0
         fixed_total_is_estimate = False
@@ -414,14 +430,30 @@ def download_video(url: str, job_dir: Path, quality: str, job_id: str) -> Path:
                 fixed_total = sum(size for size, _ in sizes)
                 fixed_total_is_estimate = any(is_estimate for _, is_estimate in sizes)
                 label = ("~" if fixed_total_is_estimate else "") + format_bytes(fixed_total)
-                update_job(job_id, progress=5, message=f"Menyiapkan download · total {label}...")
+                update_job(
+                    job_id,
+                    progress=5,
+                    sub_progress=0,
+                    message=f"Menyiapkan download · total {label}...",
+                    sub_message=f"Total ukuran diperkirakan: {label}",
+                )
         except Exception:
             # Some providers do not expose file size before the download starts.
             # The progress hook will still show a stable first estimate when possible.
             pass
 
-        with yt_dlp.YoutubeDL(ydl_options) as downloader:
-            downloader.download([url])
+        try:
+            with yt_dlp.YoutubeDL(ydl_options) as downloader:
+                downloader.download([url])
+        except Exception as dl_err:
+            if "403" in str(dl_err) or "Forbidden" in str(dl_err):
+                logger.warning(f"Download 403 Forbidden terdeteksi ({dl_err}), mencoba format alternatif...")
+                alt_options = dict(ydl_options)
+                alt_options["format"] = f"b[height<={max_height}]/best"
+                with yt_dlp.YoutubeDL(alt_options) as alt_downloader:
+                    alt_downloader.download([url])
+            else:
+                raise
     except ImportError:
         run_command(
             yt_dlp_command()
@@ -2096,6 +2128,10 @@ def render_clip(
     progress_end: int = 95,
 ) -> None:
     clip_dir = clip_result_dir(job_dir, clip.id, clip.title)
+    # Bersihkan folder lama dengan ID klip yang sama jika pengguna baru saja mengganti judul klip di tab Review
+    for old_dir in job_dir.glob(f"{clip.id} - *"):
+        if old_dir.is_dir() and old_dir != clip_dir:
+            shutil.rmtree(old_dir, ignore_errors=True)
     clip_dir.mkdir(exist_ok=True)
     subtitle_path = clip_dir / "subtitle.srt"
     max_lines = getattr(options, "subtitle_max_lines", 2)
@@ -2364,11 +2400,6 @@ def render_selected_clips(
         return
 
     face_crop = None
-    if options.layout == "facecam_top":
-        if getattr(options, "facecam_crop", None) and len(options.facecam_crop) == 4:
-            face_crop = tuple(options.facecam_crop)
-        else:
-            face_crop = detect_face_crop(video)
     total_clips = len(targets)
     for index, clip in enumerate(targets, start=1):
         sub_pct = int(((index - 1) / total_clips) * 100)
