@@ -194,7 +194,7 @@ def process_viral_video_with_enclip(
     video_meta: dict[str, Any],
     flavor: str = "spicy_drama",
     layout: str = "podcast_split",
-    framing: str = "smart_crop",
+    framing: str = "crop",
     max_clips: int = 1,
     clip_min: int = 30,
     clip_max: int = 60,
@@ -239,7 +239,7 @@ def process_viral_video_with_enclip(
         max_clips=max_clips,
         min_duration=clip_min,
         max_duration=clip_max,
-        smart_duration_mode="range",
+        smart_duration_mode="auto",
         subtitle_style="bold",
         subtitle_mode="active_highlight",
         subtitle_color="#FFFFFF",
@@ -709,15 +709,15 @@ def main() -> None:
         "--layout",
         type=str,
         default="podcast_split",
-        choices=["podcast_split", "full", "split"],
+        choices=["podcast_split", "standard", "facecam_top"],
         help="Tata letak video 9:16 (default: podcast_split).",
     )
     parser.add_argument(
         "--framing",
         type=str,
-        default="smart_crop",
-        choices=["smart_crop", "center_crop", "fit_blur"],
-        help="Mode framing video (default: smart_crop).",
+        default="crop",
+        choices=["crop", "fit"],
+        help="Mode framing video (default: crop).",
     )
     parser.add_argument(
         "--max-clips",
