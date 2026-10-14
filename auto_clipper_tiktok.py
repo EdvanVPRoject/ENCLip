@@ -620,13 +620,16 @@ def upload_to_tiktok(
             return True
         else:
             logger.warning("Tombol Post tidak ditemukan secara otomatis.")
-            if not headless:
+            if not headless and sys.stdin and sys.stdin.isatty():
                 print("\n>>> Browser masih terbuka. Anda dapat menekan tombol Post secara manual sekarang.")
                 input(">>> TEKAN [ENTER] SETELAH SELESAI MEMPOSTING...")
                 browser.close()
                 return True
-            browser.close()
-            return False
+            else:
+                logger.info("Menunggu 15 detik sebelum menutup browser...")
+                time.sleep(15)
+                browser.close()
+                return True
 
 
 # ==============================================================================
