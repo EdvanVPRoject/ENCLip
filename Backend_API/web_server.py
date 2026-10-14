@@ -1957,9 +1957,11 @@ def write_ass_pop_subtitle(
     base_color_hex: str = "#FFFFFF",
     active_color_hex: str = "#FFDD00",
     censor_profanity: bool = False,
+    quality: str = "1080",
 ) -> None:
-    width, height = output_dimensions(aspect_ratio)
-    scaled_font_size = max(44, min(72, int(font_size * 3.1)))
+    width, height = output_dimensions(aspect_ratio, quality)
+    font_mult = 4.2 if height >= 1900 or width >= 1900 else 3.1
+    scaled_font_size = max(44, min(96, int(font_size * font_mult)))
     primary_ass = hex_to_ass_bgr(base_color_hex, "&H00FFFFFF")
     active_ass = hex_to_ass_bgr(active_color_hex, "&H0000DDFF")
     question_ass = "&H00FFEE00"
@@ -2080,14 +2082,25 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     ass_path.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
 
 
-def output_dimensions(aspect_ratio: str) -> tuple[int, int]:
+def output_dimensions(aspect_ratio: str, quality: str = "1080") -> tuple[int, int]:
+    q_str = str(quality).lower()
+    if q_str in ("720", "720p"):
+        if aspect_ratio == "16:9":
+            return 1280, 720
+        if aspect_ratio == "4:3":
+            return 960, 720
+        if aspect_ratio == "1:1":
+            return 720, 720
+        return 720, 1280
+
     if aspect_ratio == "16:9":
-        return 1280, 720
+        return 1920, 1080
     if aspect_ratio == "4:3":
         return 1440, 1080
     if aspect_ratio == "1:1":
         return 1080, 1080
-    return 720, 1280
+    # 9:16 Full HD 1080p
+    return 1080, 1920
 
 
 def video_layout_filter(
@@ -2095,8 +2108,9 @@ def video_layout_filter(
     framing: str,
     layout: str,
     face_crop: tuple[int, int, int, int] | None,
+    quality: str = "1080",
 ) -> str:
-    width, height = output_dimensions(aspect_ratio)
+    width, height = output_dimensions(aspect_ratio, quality)
 
     if layout == "podcast_split":
         half_h = (height // 2)
@@ -2405,9 +2419,11 @@ def render_clip(
         base_color_hex=options.subtitle_color if options.subtitle_color != "auto" else "#FFFFFF",
         active_color_hex=active_col,
         censor_profanity=censor_flag,
+        quality=getattr(options, "quality", "1080"),
     )
 
-    width, height = output_dimensions(options.aspect_ratio)
+    q_opt = getattr(options, "quality", "1080")
+    width, height = output_dimensions(options.aspect_ratio, q_opt)
     if options.layout == "podcast_split":
         half_h = (height // 2) + ((height // 2) % 2)
         rem_h = height - half_h
@@ -2431,7 +2447,7 @@ def render_clip(
             )
     else:
         effective_face_crop = resolve_pixel_face_crop(video, options, clip.start, clip.end) if options.layout == "facecam_top" else None
-        layout_filter = video_layout_filter(options.aspect_ratio, options.framing, options.layout, effective_face_crop)
+        layout_filter = video_layout_filter(options.aspect_ratio, options.framing, options.layout, effective_face_crop, quality=q_opt)
 
     if getattr(options, "mirror_video", False):
         layout_filter = f"{layout_filter},hflip"
