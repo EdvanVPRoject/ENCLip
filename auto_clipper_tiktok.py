@@ -21,6 +21,7 @@ import logging
 import os
 import re
 import sys
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -270,8 +271,36 @@ def process_viral_video_with_enclip(
         JOBS[job_id] = initial_job
         JOB_OPTIONS[job_id] = options
 
-    # Jalankan processing ENCLip
-    process_job(job_id=job_id, options=options)
+    # Jalankan processing ENCLip dengan pemantau progres real-time ke terminal
+    stop_monitor = threading.Event()
+
+    def monitor_progress() -> None:
+        last_log = ""
+        while not stop_monitor.is_set():
+            with JOBS_LOCK:
+                j = JOBS.get(job_id)
+                if j:
+                    p = j.progress
+                    msg = j.message or ""
+                    sub = getattr(j, "sub_message", "")
+                else:
+                    p, msg, sub = 0, "", ""
+            if msg:
+                line = f"⏳ [{p:02d}%] {msg}"
+                if sub:
+                    line += f" · {sub}"
+                if line != last_log:
+                    logger.info(line)
+                    last_log = line
+            time.sleep(2)
+
+    monitor = threading.Thread(target=monitor_progress, daemon=True)
+    monitor.start()
+
+    try:
+        process_job(job_id=job_id, options=options)
+    finally:
+        stop_monitor.set()
 
     with JOBS_LOCK:
         job = JOBS.get(job_id)
