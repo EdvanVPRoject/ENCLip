@@ -54,16 +54,22 @@ CORE_DATA_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_SESSION_FILE = CORE_DATA_DIR / "tiktok_session.json"
 DEFAULT_HISTORY_FILE = CORE_DATA_DIR / "auto_history.json"
 
-# Auto-detect Hardware GPU (CUDA) untuk Faster-Whisper agar 30x lebih cepat
+# Auto-detect Hardware GPU (CUDA) hanya jika cuBLAS library tersedia
 if "WHISPER_DEVICE" not in os.environ:
+    os.environ["WHISPER_DEVICE"] = "cpu"
+    os.environ["WHISPER_COMPUTE_TYPE"] = "int8"
     try:
         import ctranslate2
         if ctranslate2.get_cuda_device_count() > 0:
+            import numpy as np
+            from faster_whisper import WhisperModel
+            test_m = WhisperModel("small", device="cuda", compute_type="float16")
+            list(test_m.transcribe(np.zeros(16000, dtype=np.float32))[0])
             os.environ["WHISPER_DEVICE"] = "cuda"
             os.environ["WHISPER_COMPUTE_TYPE"] = "float16"
-            logger.info("⚡ NVIDIA GPU (CUDA) terdeteksi! Akselerasi Whisper GPU diaktifkan (30x lebih cepat).")
+            logger.info("⚡ NVIDIA GPU (CUDA) cuBLAS terverifikasi! Akselerasi GPU aktif.")
     except Exception:
-        pass
+        logger.info("ℹ️ cuBLAS CUDA DLL tidak ditemukan. Menggunakan CPU multi-core (int8) untuk Whisper transkripsi.")
 
 
 # ==============================================================================

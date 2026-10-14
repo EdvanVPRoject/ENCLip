@@ -758,27 +758,39 @@ def transcribe(audio_path: Path, language: str | None, model_size: str = "small"
 
     device = os.getenv("WHISPER_DEVICE", "cpu")
     compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
-    model = WhisperModel(model_size, device=device, compute_type=compute_type)
-    # Some faster-whisper/PyAV combinations pass metadata_errors to av.open,
-    # while older PyAV builds do not accept that keyword. The generated WAV is
-    # local and already validated by FFmpeg, so dropping the optional keyword
-    # is safe and keeps both versions compatible.
-    try:
-        import av
+    cpu_threads = min(8, os.cpu_count() or 4)
 
-        original_av_open = av.open
+    def load_whisper(dev: str, comp: str) -> Any:
+        return WhisperModel(model_size, device=dev, compute_type=comp, cpu_threads=cpu_threads)
 
-        def compatible_av_open(*args: Any, **kwargs: Any) -> Any:
-            kwargs.pop("metadata_errors", None)
-            return original_av_open(*args, **kwargs)
-
-        av.open = compatible_av_open  # type: ignore[assignment]
+    def do_transcribe(m: Any) -> Any:
         try:
-            segments, _ = model.transcribe(str(audio_path), language=language, vad_filter=True, word_timestamps=True)
-        finally:
-            av.open = original_av_open  # type: ignore[assignment]
-    except ImportError:
-        segments, _ = model.transcribe(str(audio_path), language=language, vad_filter=True, word_timestamps=True)
+            import av
+
+            original_av_open = av.open
+
+            def compatible_av_open(*args: Any, **kwargs: Any) -> Any:
+                kwargs.pop("metadata_errors", None)
+                return original_av_open(*args, **kwargs)
+
+            av.open = compatible_av_open  # type: ignore[assignment]
+            try:
+                return m.transcribe(str(audio_path), language=language, vad_filter=True, word_timestamps=True)
+            finally:
+                av.open = original_av_open  # type: ignore[assignment]
+        except ImportError:
+            return m.transcribe(str(audio_path), language=language, vad_filter=True, word_timestamps=True)
+
+    try:
+        model = load_whisper(device, compute_type)
+        segments, _ = do_transcribe(model)
+    except Exception as exc:
+        if device != "cpu":
+            logger.warning(f"Whisper device '{device}' gagal ({exc}), otomatis beralih ke CPU...")
+            model = load_whisper("cpu", "int8")
+            segments, _ = do_transcribe(model)
+        else:
+            raise
     result = []
     total_dur = getattr(segments, "duration", 0) or 0
     # Process segments with word-accurate cues
