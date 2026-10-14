@@ -54,6 +54,17 @@ CORE_DATA_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_SESSION_FILE = CORE_DATA_DIR / "tiktok_session.json"
 DEFAULT_HISTORY_FILE = CORE_DATA_DIR / "auto_history.json"
 
+# Auto-detect Hardware GPU (CUDA) untuk Faster-Whisper agar 30x lebih cepat
+if "WHISPER_DEVICE" not in os.environ:
+    try:
+        import ctranslate2
+        if ctranslate2.get_cuda_device_count() > 0:
+            os.environ["WHISPER_DEVICE"] = "cuda"
+            os.environ["WHISPER_COMPUTE_TYPE"] = "float16"
+            logger.info("⚡ NVIDIA GPU (CUDA) terdeteksi! Akselerasi Whisper GPU diaktifkan (30x lebih cepat).")
+    except Exception:
+        pass
+
 
 # ==============================================================================
 # 1. HISTORY TRACKER
@@ -208,6 +219,7 @@ def process_viral_video_with_enclip(
     """
     from Backend_API.web_server import (
         CreateJobRequest,
+        DATA_DIR,
         Job,
         JOBS,
         JOBS_LOCK,
@@ -215,6 +227,7 @@ def process_viral_video_with_enclip(
         clip_result_dir,
         job_result_dir,
         process_job,
+        safe_folder_name,
     )
 
     job_id = f"auto_{int(time.time())}"
@@ -266,10 +279,25 @@ def process_viral_video_with_enclip(
     )
 
     # Daftarkan job ke registry sebelum proses dimulai
-    initial_job = Job(id=job_id, url=video_url)
+    initial_job = Job(id=job_id, url=video_url, source_title=video_meta.get("title", ""))
     with JOBS_LOCK:
         JOBS[job_id] = initial_job
         JOB_OPTIONS[job_id] = options
+
+    # Cek apakah video sumber sudah pernah diunduh secara lokal agar tidak perlu download ulang
+    source_path = None
+    title_folder = safe_folder_name(video_meta.get("title", ""))
+    if title_folder:
+        candidates = [DATA_DIR / title_folder] + list(DATA_DIR.glob(f"{title_folder}*"))
+        for candidate_dir in candidates:
+            if candidate_dir.is_dir():
+                candidate_mp4 = candidate_dir / "source.mp4"
+                if candidate_mp4.is_file() and candidate_mp4.stat().st_size > 10_000_000:
+                    source_path = str(candidate_mp4)
+                    logger.info(
+                        f"⚡ Video sumber lokal ditemukan ({candidate_mp4.name}, {candidate_mp4.stat().st_size / (1024*1024):.1f} MB)! Melewati proses unduh YouTube."
+                    )
+                    break
 
     # Jalankan processing ENCLip dengan pemantau progres real-time ke terminal
     stop_monitor = threading.Event()
@@ -298,7 +326,7 @@ def process_viral_video_with_enclip(
     monitor.start()
 
     try:
-        process_job(job_id=job_id, options=options)
+        process_job(job_id=job_id, options=options, source_path=source_path)
     finally:
         stop_monitor.set()
 
