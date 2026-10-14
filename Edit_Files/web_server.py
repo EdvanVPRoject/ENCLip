@@ -1122,7 +1122,7 @@ def broaden_smart_clips(
     maximum: int,
     flavor: str = "spicy_drama",
     snap_bounds: bool = True,
-    trim_filler: bool = True,
+    trim_filler: bool = False,
 ) -> list[dict[str, Any]]:
     """
     Mengunci titik potong start & end tepat pada batas kata/kalimat alami,
@@ -1852,6 +1852,234 @@ def detect_face_crop(
     return crop_x, crop_y, crop_w, crop_h
 
 
+QUESTION_TRIGGERS = {
+    "kenapa", "mengapa", "gimana", "bagaimana", "apa", "apakah", "siapa", "kapan",
+    "berapa", "dimana", "ceritain", "ceritakan", "jelasin", "jelaskan", "menurut",
+    "bener", "benar", "setuju", "awal", "mulanya", "kisah", "kronologi", "alasan",
+    "maksudnya", "pertanyaan", "tanya", "penasaran", "kok", "boleh", "bisa", "sebenarnya",
+    "pernah", "rasanya", "pendapat", "pandangan", "solusi", "rahasia", "fakta",
+}
+
+
+def detect_podcast_speaker_crops(
+    video_path: Path,
+    start_sec: float,
+    end_sec: float,
+    target_w: int,
+    half_h: int,
+) -> tuple[tuple[int, int, int, int], tuple[int, int, int, int]] | None:
+    try:
+        import cv2
+    except ImportError:
+        return None
+
+    cap = cv2.VideoCapture(str(video_path))
+    vw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    vh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = float(cap.get(cv2.CAP_PROP_FPS) or 30.0)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    if vw <= 0 or vh <= 0:
+        cap.release()
+        return None
+
+    frontal = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    profile = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_profileface.xml")
+
+    start_f = max(0, int(start_sec * fps))
+    end_f = min(max(1, total_frames - 1), int(end_sec * fps)) if end_sec > start_sec else max(1, total_frames - 1)
+    span = max(1, end_f - start_f)
+
+    left_x, left_y, right_x, right_y = [], [], [], []
+    for r in (0.10, 0.22, 0.35, 0.48, 0.60, 0.74, 0.88):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_f + int(span * r))
+        ok, frame = cap.read()
+        if not ok or frame is None:
+            continue
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = list(frontal.detectMultiScale(gray, 1.1, 5, minSize=(40, 40)))
+        if len(faces) < 2:
+            faces.extend(list(profile.detectMultiScale(gray, 1.1, 4, minSize=(40, 40))))
+        for (fx, fy, fw, fh) in faces:
+            cx = fx + fw / 2.0
+            cy = fy + fh * 0.82
+            if cx < vw * 0.47:
+                left_x.append(cx)
+                left_y.append(cy)
+            elif cx > vw * 0.53:
+                right_x.append(cx)
+                right_y.append(cy)
+    cap.release()
+
+    panel_ar = float(target_w) / float(max(1, half_h))
+    crop_h = min(vh, int(vh * 0.82))
+    crop_w = min(vw // 2, int(crop_h * panel_ar))
+    crop_w -= crop_w % 2
+    crop_h -= crop_h % 2
+
+    lcx = sum(left_x) / len(left_x) if left_x else (vw * 0.24)
+    lcy = sum(left_y) / len(left_y) if left_y else (vh * 0.44)
+    rcx = sum(right_x) / len(right_x) if right_x else (vw * 0.76)
+    rcy = sum(right_y) / len(right_y) if right_y else (vh * 0.44)
+
+    lx = max(0, min((vw // 2) - crop_w, int(lcx - crop_w / 2)))
+    ly = max(0, min(vh - crop_h, int(lcy - crop_h * 0.42)))
+    rx = max(vw // 2, min(vw - crop_w, int(rcx - crop_w / 2)))
+    ry = max(0, min(vh - crop_h, int(rcy - crop_h * 0.42)))
+    return (lx, ly, crop_w, crop_h), (rx, ry, crop_w, crop_h)
+
+
+def ass_timestamp(seconds: float) -> str:
+    cs_total = max(0, int(round(seconds * 100)))
+    hours, rem = divmod(cs_total, 360000)
+    minutes, rem = divmod(rem, 6000)
+    secs, cs = divmod(rem, 100)
+    return f"{hours}:{minutes:02d}:{secs:02d}.{cs:02d}"
+
+
+def hex_to_ass_bgr(hex_color: str, default: str = "&H0000DDFF") -> str:
+    clean = (hex_color or "").strip().lstrip("#")
+    if len(clean) == 6 and all(c in "0123456789ABCDEFabcdef" for c in clean):
+        return f"&H00{clean[4:6].upper()}{clean[2:4].upper()}{clean[0:2].upper()}"
+    return default
+
+
+def write_ass_pop_subtitle(
+    transcript: list[dict[str, Any]],
+    start: float,
+    end: float,
+    ass_path: Path,
+    aspect_ratio: str = "9:16",
+    layout: str = "podcast_split",
+    position: str = "auto",
+    font_size: int = 18,
+    max_lines: int = 2,
+    mode: str = "active_highlight",
+    base_color_hex: str = "#FFFFFF",
+    active_color_hex: str = "#FFDD00",
+    censor_profanity: bool = False,
+) -> None:
+    width, height = output_dimensions(aspect_ratio)
+    scaled_font_size = max(44, min(72, int(font_size * 3.1)))
+    primary_ass = hex_to_ass_bgr(base_color_hex, "&H00FFFFFF")
+    active_ass = hex_to_ass_bgr(active_color_hex, "&H0000DDFF")
+    question_ass = "&H00FFEE00"
+    power_ass = "&H0077FF00"
+
+    if position == "center" or (layout == "podcast_split" and position in ("auto", "bottom")):
+        alignment = 5
+        margin_v = 0
+    elif position == "top":
+        alignment = 8
+        margin_v = int(height * 0.14)
+    else:
+        alignment = 2
+        margin_v = int(height * 0.19)
+
+    header = f"""[Script Info]
+ScriptType: v4.00+
+PlayResX: {width}
+PlayResY: {height}
+WrapStyle: 0
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: PodcastPro,Arial Black,{scaled_font_size},{primary_ass},{active_ass},&H00000000,&H80000000,-1,0,0,0,100,100,1.2,0,1,4.5,2.5,{alignment},40,40,{margin_v},1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+    events: list[str] = []
+    clip_dur = max(0.1, end - start)
+    spicy_words = CLIP_FLAVOR_PROFILES["spicy_drama"]["keywords"]
+
+    for item in transcript:
+        seg_abs_start = float(item.get("start", 0.0))
+        seg_abs_end = float(item.get("end", 0.0))
+        if seg_abs_end <= start or seg_abs_start >= end:
+            continue
+        item_start = max(0.0, seg_abs_start - start)
+        item_end = min(clip_dur, seg_abs_end - start)
+        if item_end <= item_start:
+            continue
+        item_text = str(item.get("text", "")).strip()
+        if not item_text:
+            continue
+
+        raw_words = item.get("words")
+        norm_words: list[dict[str, Any]] = []
+        if raw_words:
+            for w in raw_words:
+                w_txt = str(getattr(w, "word", "") if hasattr(w, "word") else w.get("word", "")).strip()
+                if not w_txt:
+                    continue
+                w_txt = censor_word_if_enabled(w_txt, censor_profanity)
+                w_abs_s = float(getattr(w, "start", seg_abs_start) if hasattr(w, "start") else w.get("start", seg_abs_start))
+                w_abs_e = float(getattr(w, "end", seg_abs_end) if hasattr(w, "end") else w.get("end", seg_abs_end))
+                rel_s = w_abs_s - start if w_abs_s >= start - 0.5 else w_abs_s
+                rel_e = w_abs_e - start if w_abs_e >= start - 0.5 else w_abs_e
+                rel_s = max(0.0, min(clip_dur, rel_s))
+                rel_e = max(rel_s + 0.08, min(clip_dur, rel_e))
+                if rel_e > rel_s and rel_s < clip_dur:
+                    norm_words.append({"word": w_txt, "start": round(rel_s, 3), "end": round(rel_e, 3)})
+
+        if not norm_words:
+            w_list = [censor_word_if_enabled(tok, censor_profanity) for tok in item_text.split()]
+            if w_list:
+                tot_dur = max(0.2, item_end - item_start)
+                per_w = tot_dur / len(w_list)
+                norm_words = [
+                    {"word": w, "start": round(item_start + i * per_w, 3), "end": round(item_start + (i + 1) * per_w, 3)}
+                    for i, w in enumerate(w_list)
+                ]
+
+        chunk_size = 3 if max_lines == 1 else 4
+        for chunk_idx in range(0, len(norm_words), chunk_size):
+            chunk = norm_words[chunk_idx : chunk_idx + chunk_size]
+            if not chunk:
+                continue
+            for active_i, nw in enumerate(chunk):
+                ws_t = nw["start"]
+                if active_i + 1 < len(chunk):
+                    nxt_s = chunk[active_i + 1]["start"]
+                    we_t = nxt_s if (nxt_s - nw["end"]) < 0.45 else nw["end"]
+                else:
+                    we_t = nw["end"]
+                    if chunk_idx + chunk_size < len(norm_words):
+                        next_chunk_s = norm_words[chunk_idx + chunk_size]["start"]
+                        if we_t > next_chunk_s:
+                            we_t = max(ws_t + 0.06, next_chunk_s)
+                if we_t <= ws_t:
+                    continue
+
+                formatted_tokens: list[str] = []
+                for i, cw_obj in enumerate(chunk):
+                    raw_tok = cw_obj["word"].upper()
+                    clean_tok = re.sub(r"[^a-zA-Z0-9]", "", raw_tok).lower()
+                    if i == active_i:
+                        if "?" in raw_tok or clean_tok in QUESTION_TRIGGERS:
+                            col = question_ass
+                        elif clean_tok in spicy_words or clean_tok.isdigit():
+                            col = power_ass
+                        else:
+                            col = active_ass
+                        formatted_tokens.append(
+                            f"{{\\c{col}\\fscx118\\fscy118\\t(0,105,\\fscx105\\fscy105)}}{raw_tok}{{\\c{primary_ass}\\fscx100\\fscy100}}"
+                        )
+                    else:
+                        formatted_tokens.append(raw_tok)
+
+                if max_lines >= 2 and len(formatted_tokens) >= 4:
+                    mid = len(formatted_tokens) // 2
+                    cue_text = " ".join(formatted_tokens[:mid]) + "\\N" + " ".join(formatted_tokens[mid:])
+                else:
+                    cue_text = " ".join(formatted_tokens)
+
+                events.append(f"Dialogue: 0,{ass_timestamp(ws_t)},{ass_timestamp(we_t)},PodcastPro,,0,0,0,,{cue_text}")
+
+    ass_path.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
+
+
 def output_dimensions(aspect_ratio: str) -> tuple[int, int]:
     if aspect_ratio == "16:9":
         return 1280, 720
@@ -2146,8 +2374,9 @@ def render_clip(
             shutil.rmtree(old_dir, ignore_errors=True)
     clip_dir.mkdir(exist_ok=True)
     subtitle_path = clip_dir / "subtitle.srt"
+    ass_subtitle_path = clip_dir / "subtitle.ass"
     max_lines = getattr(options, "subtitle_max_lines", 2)
-    font_size = getattr(options, "subtitle_font_size", 14)
+    font_size = getattr(options, "subtitle_font_size", 18)
     sub_mode = getattr(options, "subtitle_mode", "active_highlight")
     active_col = getattr(options, "subtitle_active_color", "#FFDD00")
     censor_flag = bool(getattr(options, "censor_profanity", False))
@@ -2162,9 +2391,47 @@ def render_clip(
         highlight_color=active_col,
         censor_profanity=censor_flag,
     )
+    write_ass_pop_subtitle(
+        transcript,
+        clip.start,
+        clip.end,
+        ass_subtitle_path,
+        aspect_ratio=options.aspect_ratio,
+        layout=options.layout,
+        position=options.subtitle_position,
+        font_size=font_size,
+        max_lines=max_lines,
+        mode=sub_mode,
+        base_color_hex=options.subtitle_color if options.subtitle_color != "auto" else "#FFFFFF",
+        active_color_hex=active_col,
+        censor_profanity=censor_flag,
+    )
 
-    effective_face_crop = resolve_pixel_face_crop(video, options, clip.start, clip.end) if options.layout == "facecam_top" else None
-    layout_filter = video_layout_filter(options.aspect_ratio, options.framing, options.layout, effective_face_crop)
+    width, height = output_dimensions(options.aspect_ratio)
+    if options.layout == "podcast_split":
+        half_h = (height // 2) + ((height // 2) % 2)
+        rem_h = height - half_h
+        p_crops = detect_podcast_speaker_crops(video, clip.start, clip.end, width, half_h)
+        if p_crops:
+            (lx, ly, lw, lh), (rx, ry, rw, rh) = p_crops
+            layout_filter = (
+                f"split=2[left_spk][right_spk];"
+                f"[left_spk]crop={lw}:{lh}:{lx}:{ly},scale={width}:{half_h}:force_original_aspect_ratio=increase,crop={width}:{half_h}[top_out];"
+                f"[right_spk]crop={rw}:{rh}:{rx}:{ry},scale={width}:{rem_h}:force_original_aspect_ratio=increase,crop={width}:{rem_h}[bot_out];"
+                f"[top_out][bot_out]vstack=inputs=2,"
+                f"drawbox=x=0:y={half_h-2}:w={width}:h=4:color=black@0.85:t=fill"
+            )
+        else:
+            layout_filter = (
+                f"split=2[left_spk][right_spk];"
+                f"[left_spk]crop=iw*0.44:ih*0.84:iw*0.02:ih*0.06,scale={width}:{half_h}:force_original_aspect_ratio=increase,crop={width}:{half_h}[top_out];"
+                f"[right_spk]crop=iw*0.44:ih*0.84:iw*0.54:ih*0.06,scale={width}:{rem_h}:force_original_aspect_ratio=increase,crop={width}:{rem_h}[bot_out];"
+                f"[top_out][bot_out]vstack=inputs=2,"
+                f"drawbox=x=0:y={half_h-2}:w={width}:h=4:color=black@0.85:t=fill"
+            )
+    else:
+        effective_face_crop = resolve_pixel_face_crop(video, options, clip.start, clip.end) if options.layout == "facecam_top" else None
+        layout_filter = video_layout_filter(options.aspect_ratio, options.framing, options.layout, effective_face_crop)
 
     if getattr(options, "mirror_video", False):
         layout_filter = f"{layout_filter},hflip"
@@ -2173,6 +2440,8 @@ def render_clip(
 
     if options.subtitle_style == "none":
         video_filter = layout_filter
+    elif options.layout == "podcast_split" or options.subtitle_position == "center":
+        video_filter = f"{layout_filter},ass=subtitle.ass"
     else:
         subtitle_style = subtitle_style_with_position(
             options.subtitle_style,
