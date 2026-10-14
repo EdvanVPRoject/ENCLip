@@ -59,6 +59,10 @@ Core_Data/HasilClip/*
 credentials/
 secrets/
 *.log
+*tiktok_session*.json
+auto_history.json
+Core_Data/auto_history.json
+Core_Data/*tiktok_session*.json
 
 # IDE & OS files
 .idea/
