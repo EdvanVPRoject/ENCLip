@@ -27,20 +27,22 @@ echo  [2] Jalankan Otomasi Penuh (Cari Video Viral -^> ENCLip -^> Upload TikTok)
 echo  [3] Cari ^& Klip Saja (Simpan di Lokal, Tanpa Upload TikTok)
 echo  [4] Klip dari URL YouTube Tertentu ^& Upload ke TikTok
 echo  [5] Jalankan dengan Pengaturan Kustom (Query, Views, Gaya Klip, Layout)
+echo  [6] Upload Klip Video Lokal ke TikTok Langsung
 echo  [0] Keluar
 echo.
 echo ===============================================================================
-set /p "PILIHAN=Masukkan pilihan Anda [0-5]: "
+set /p "PILIHAN=Masukkan pilihan Anda [0-6]: "
 
 if "%PILIHAN%"=="1" goto LOGIN_TIKTOK
 if "%PILIHAN%"=="2" goto RUN_FULL
 if "%PILIHAN%"=="3" goto RUN_NO_UPLOAD
 if "%PILIHAN%"=="4" goto RUN_CUSTOM_URL
 if "%PILIHAN%"=="5" goto RUN_CUSTOM_CONFIG
+if "%PILIHAN%"=="6" goto RUN_UPLOAD_LOCAL
 if "%PILIHAN%"=="0" goto KELUAR
 
 echo.
-echo Pilihan tidak valid! Silakan masukkan angka 0 sampai 5.
+echo Pilihan tidak valid! Silakan masukkan angka 0 sampai 6.
 timeout /t 2 >nul
 goto MENU
 
@@ -149,6 +151,31 @@ echo - Views  : %VIEWS_INPUT%
 echo - Flavor : %FLAVOR_PARAM%
 echo.
 "%PYTHON_EXE%" auto_clipper_tiktok.py --query "%QUERY_INPUT%" --min-views %VIEWS_INPUT% --flavor %FLAVOR_PARAM% %EXTRA_FLAGS%
+echo.
+pause >nul
+goto MENU
+
+:RUN_UPLOAD_LOCAL
+cls
+echo ===============================================================================
+echo [6] UPLOAD FILE KLIP LOKAL KE TIKTOK
+echo ===============================================================================
+echo Masukkan path lengkap file video klip (.mp4) yang ingin diunggah ke TikTok.
+echo (Contoh: Core_Data\HasilClip\MONGOL...\clip-01\clip.mp4)
+echo ===============================================================================
+set /p "LOCAL_FILE=Path file video: "
+if "%LOCAL_FILE%"=="" (
+    echo Path file tidak boleh kosong!
+    timeout /t 2 >nul
+    goto MENU
+)
+set /p "LOCAL_CAPTION=Caption video (kosongkan untuk default): "
+set "CAPTION_ARG="
+if not "%LOCAL_CAPTION%"=="" set "CAPTION_ARG=--caption "%LOCAL_CAPTION%""
+
+echo.
+echo Mengunggah ke TikTok...
+"%PYTHON_EXE%" auto_clipper_tiktok.py --upload-file "%LOCAL_FILE%" %CAPTION_ARG%
 echo.
 pause >nul
 goto MENU

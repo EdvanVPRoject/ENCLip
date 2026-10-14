@@ -653,15 +653,18 @@ def upload_to_tiktok(
         else:
             logger.warning("Kotak input caption tidak terdeteksi otomatis, melanjutkan...")
 
+        # Scroll ke bawah agar tombol submit post terlihat dan aktif
+        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        time.sleep(2)
+
         # Menunggu tombol Post / Publikasikan aktif
         logger.info("Mencari tombol 'Post' / 'Publikasikan'...")
-        time.sleep(4)
 
         post_button_selectors = [
-            'button:has-text("Post")',
-            'button:has-text("Posting")',
-            'button:has-text("Publikasikan")',
             'button[data-e2e="post_video_button"]',
+            'button.Button__root--type-primary:has-text("Post")',
+            'button.Button__root--type-primary:has-text("Posting")',
+            'button.Button__root--type-primary:has-text("Publikasikan")',
             'button.btn-post',
         ]
 
@@ -673,6 +676,13 @@ def upload_to_tiktok(
                 break
 
         if post_btn:
+            # Tunggu tombol aktif (tidak disabled saat video masih diproses)
+            logger.info("Menunggu kesiapan tombol Post (maks 60 detik)...")
+            for _ in range(30):
+                if post_btn.is_enabled():
+                    break
+                time.sleep(2)
+
             logger.info("Menekan tombol Post...")
             try:
                 # Periksa kembali pop up yang mungkin menghalangi tombol
@@ -684,7 +694,8 @@ def upload_to_tiktok(
                     except Exception:
                         pass
 
-                post_btn.wait_for(state="visible", timeout=30000)
+                post_btn.scroll_into_view_if_needed()
+                time.sleep(1)
                 post_btn.click(force=True)
                 logger.info("Tombol Post berhasil ditekan!")
             except Exception as e:
@@ -692,9 +703,52 @@ def upload_to_tiktok(
                 browser.close()
                 return False
 
-            logger.info("Menunggu proses finalisasi publish (15 detik)...")
-            time.sleep(15)
-            logger.info("🎉 VIDEO BERHASIL DIPUBLIKASIKAN KE TIKTOK!")
+            # Tangani modal konfirmasi jika ada (misal: "Continue to post? The copyright check is incomplete...")
+            time.sleep(2)
+            confirm_dialog_selectors = [
+                'button:has-text("Post now")',
+                'button:has-text("Posting sekarang")',
+                'button:has-text("Tetap posting")',
+                'button:has-text("Continue to post")',
+            ]
+            for c_sel in confirm_dialog_selectors:
+                try:
+                    cb = page.locator(c_sel)
+                    if cb.count() > 0 and cb.first.is_visible():
+                        logger.info(f"Mengonfirmasi dialog posting: '{cb.first.inner_text().strip()}'...")
+                        cb.first.click(force=True)
+                        break
+                except Exception:
+                    pass
+
+            logger.info("Menunggu verifikasi konfirmasi publikasi TikTok...")
+            published = False
+            for _ in range(25):
+                try:
+                    curr_url = page.url.lower()
+                    if "content" in curr_url or "posts" in curr_url:
+                        published = True
+                        break
+                    body_txt = page.locator("body").inner_text().lower()
+                    if any(term in body_txt for term in [
+                        "manage your posts",
+                        "your video has been uploaded",
+                        "video anda telah diunggah",
+                        "kelola postingan",
+                        "content under review",
+                        "post another video",
+                    ]):
+                        published = True
+                        break
+                except Exception:
+                    pass
+                time.sleep(2)
+
+            if published:
+                logger.info("🎉 VIDEO BERHASIL DIPUBLIKASIKAN KE TIKTOK!")
+            else:
+                logger.info("Proses publikasi telah dikirimkan ke TikTok Studio.")
+
             browser.close()
             return True
         else:
@@ -708,7 +762,7 @@ def upload_to_tiktok(
                 logger.info("Menunggu 15 detik sebelum menutup browser...")
                 time.sleep(15)
                 browser.close()
-                return True
+                return False
 
 
 # ==============================================================================
@@ -905,6 +959,18 @@ def main() -> None:
         help="Jalankan browser upload TikTok di latar belakang tanpa jendela GUI.",
     )
     parser.add_argument(
+        "--upload-file",
+        type=str,
+        default="",
+        help="Upload langsung file video lokal ke TikTok tanpa proses pencarian / render baru.",
+    )
+    parser.add_argument(
+        "--caption",
+        type=str,
+        default="",
+        help="Caption kustom jika menggunakan opsi --upload-file.",
+    )
+    parser.add_argument(
         "--session-path",
         type=str,
         default=str(DEFAULT_SESSION_FILE),
@@ -915,6 +981,15 @@ def main() -> None:
 
     if args.login_tiktok:
         save_tiktok_session(session_path=Path(args.session_path))
+    elif args.upload_file:
+        up_path = Path(args.upload_file)
+        caption = args.caption or f"{up_path.stem} 🔥 #fyp #viral #podcast #trending #foryou"
+        upload_to_tiktok(
+            video_path=up_path,
+            caption=caption,
+            session_path=args.session_path,
+            headless=args.headless,
+        )
     else:
         # Default behavior: jalankan autonomous pipeline
         run_autonomous_pipeline(args)
