@@ -2650,8 +2650,8 @@ class HermesDesktop(QMainWindow):
         bgm_vol_row = QHBoxLayout()
         self.bgm_vol_slider = QSlider(Qt.Orientation.Horizontal)
         self.bgm_vol_slider.setRange(0, 100)
-        self.bgm_vol_slider.setValue(18)
-        self.bgm_vol_label = QLabel("18%")
+        self.bgm_vol_slider.setValue(8)
+        self.bgm_vol_label = QLabel("8%")
         self.bgm_vol_label.setStyleSheet("color: #94A3B8; font-size: 11px; min-width: 32px;")
         self.bgm_vol_slider.valueChanged.connect(self.on_bgm_vol_changed)
         bgm_vol_row.addWidget(self.bgm_vol_slider, 1)
@@ -2684,7 +2684,7 @@ class HermesDesktop(QMainWindow):
         audio_fx_layout.addWidget(self.bgm_duck_checkbox)
 
         self.loudnorm_checkbox = QCheckBox("Normalisasi Suara (EBU R128 / loudnorm untuk stabilkan vokal)")
-        self.loudnorm_checkbox.setChecked(False)
+        self.loudnorm_checkbox.setChecked(True)
         self.loudnorm_checkbox.setStyleSheet("color: #E2E8F0; font-size: 12px; font-weight: 500;")
         audio_fx_layout.addWidget(self.loudnorm_checkbox)
 
@@ -2839,7 +2839,7 @@ class HermesDesktop(QMainWindow):
         self.profile_combo.currentIndexChanged.connect(self.update_profile_hint)
 
         self.clip_count = self.spin(0, 200, 0)
-        self.max_clips = self.spin(1, 200, 10)
+        self.max_clips = self.spin(1, 200, 30)
         self.min_duration = self.spin(0, 3600, 0)
         self.max_duration = self.spin(0, 3600, 0)
         self.smart_duration_mode = self.combo([("auto", "auto"), ("fixed", "fixed")])
@@ -2874,7 +2874,7 @@ class HermesDesktop(QMainWindow):
         self.use_audio_energy_check = QCheckBox("Radar Energi Suara (Tangkap Debat, Tawa & Teriakan dari WAV)")
         self.use_audio_energy_check.setChecked(True)
         self.trim_filler_check = QCheckBox("Hook-First Trim (Buang Basa-Basi di 3 Detik Pertama)")
-        self.trim_filler_check.setChecked(True)
+        self.trim_filler_check.setChecked(False)
         self.snap_sentence_check = QCheckBox("Kunci Batas Kalimat Utuh (Anti-Potong Tengah Kata)")
         self.snap_sentence_check.setChecked(True)
         self.spicy_headline_check = QCheckBox("Racik Judul & Caption Gaya Spicy / Pancingan Komentar")

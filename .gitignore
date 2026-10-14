@@ -63,6 +63,15 @@ secrets/
 auto_history.json
 Core_Data/auto_history.json
 Core_Data/*tiktok_session*.json
+Core_Data/upload_queue.json
+Core_Data/bgm/
+
+# Private Personal Automation Tools (Do NOT share / push to GitHub)
+auto_clipper_tiktok.py
+*auto_clipper*
+run_auto_tiktok.bat
+*auto_tiktok*
+Edit_Files/auto_clipper_tiktok.py
 
 # IDE & OS files
 .idea/

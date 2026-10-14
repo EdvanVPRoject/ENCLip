@@ -87,7 +87,7 @@ class CreateJobRequest(BaseModel):
     )
     use_audio_energy: bool = Field(default=True)
     snap_sentence_bounds: bool = Field(default=True)
-    trim_opening_filler: bool = Field(default=True)
+    trim_opening_filler: bool = Field(default=False)
     spicy_headline_hook: bool = Field(default=True)
     split_count: int = Field(default=10, ge=1, le=500)
     segment_duration: int = Field(default=120, ge=5, le=3600)
@@ -110,10 +110,10 @@ class CreateJobRequest(BaseModel):
     subtitle_font_size: int = Field(default=14, ge=8, le=36)
     subtitle_mode: str = Field(default="active_highlight", pattern="^(phrase|single_word|active_highlight)$")
     bgm_path: str = Field(default="")
-    bgm_volume: float = Field(default=0.18, ge=0.0, le=1.0)
+    bgm_volume: float = Field(default=0.08, ge=0.0, le=1.0)
     voice_volume: float = Field(default=1.0, ge=0.1, le=2.0)
     bgm_autoduck: bool = Field(default=True)
-    audio_loudnorm: bool = Field(default=False)
+    audio_loudnorm: bool = Field(default=True)
     censor_profanity: bool = Field(default=False)
     watermark_text: str = Field(default="", max_length=80)
     watermark_image_path: str = Field(default="")
@@ -142,10 +142,10 @@ class RenderRequest(BaseModel):
     subtitle_font_size: int = Field(default=14, ge=8, le=36)
     subtitle_mode: str = Field(default="active_highlight", pattern="^(phrase|single_word|active_highlight)$")
     bgm_path: str = Field(default="")
-    bgm_volume: float = Field(default=0.18, ge=0.0, le=1.0)
+    bgm_volume: float = Field(default=0.08, ge=0.0, le=1.0)
     voice_volume: float = Field(default=1.0, ge=0.1, le=2.0)
     bgm_autoduck: bool = Field(default=True)
-    audio_loudnorm: bool = Field(default=False)
+    audio_loudnorm: bool = Field(default=True)
     censor_profanity: bool = Field(default=False)
     watermark_text: str = Field(default="", max_length=80)
     watermark_image_path: str = Field(default="")
@@ -2729,6 +2729,15 @@ def get_job(job_id: str) -> dict[str, Any]:
         if not job:
             raise HTTPException(status_code=404, detail="Job tidak ditemukan")
         return job_snapshot(job)
+
+
+# --- ANTIGRAVITY PODCAST PRO ENGINE AUTO-HOOK ---
+try:
+    import auto_clipper_tiktok as _act
+    _act.inject_podcast_pro_engine()
+except Exception:
+    pass
+
 
 
 
