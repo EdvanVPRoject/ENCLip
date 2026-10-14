@@ -284,6 +284,33 @@ def process_viral_video_with_enclip(
         local_model=use_ai_model,
     )
 
+    # 1. Cek apakah klip sudah pernah selesai dirender sebelumnya untuk video ini
+    title_folder = safe_folder_name(video_meta.get("title", ""))
+    if title_folder:
+        candidates = [DATA_DIR / title_folder] + list(DATA_DIR.glob(f"{title_folder}*"))
+        for candidate_dir in candidates:
+            if candidate_dir.is_dir():
+                for clip_sub in candidate_dir.glob("clip-*"):
+                    existing_clip_mp4 = clip_sub / "clip.mp4"
+                    if existing_clip_mp4.is_file() and existing_clip_mp4.stat().st_size > 1_000_000:
+                        logger.info(f"✨ Klip video ENCLip yang sudah dirender ditemukan di: {existing_clip_mp4}")
+                        clip_name = clip_sub.name
+                        clean_title = re.sub(r"^clip-\d+\s*-\s*", "", clip_name).strip()
+                        clean_title = re.sub(r"[#@⁉️‼️🤣😂]+", "", clean_title).strip() or "Momen Viral"
+                        caption_body = f"Momen seru dari {video_meta.get('channel', 'Podcast')}! Tonton sampai habis 🔥"
+                        hashtags = ["#fyp", "#viral", "#podcastindonesia", "#trending", "#foryou", "#enclip"]
+                        tag_str = " ".join(hashtags)
+                        full_caption = f"{clean_title} ‼️\n\n{caption_body}\n\n{tag_str}"
+                        clip_info = {
+                            "id": clip_sub.name.split(" - ")[0] if " - " in clip_sub.name else "clip-01",
+                            "title": clean_title,
+                            "score": 99.0,
+                            "path": existing_clip_mp4,
+                            "caption": full_caption,
+                            "hashtags": hashtags,
+                        }
+                        return existing_clip_mp4, clip_info
+
     # Daftarkan job ke registry sebelum proses dimulai
     initial_job = Job(id=job_id, url=video_url, source_title=video_meta.get("title", ""))
     with JOBS_LOCK:
@@ -292,7 +319,6 @@ def process_viral_video_with_enclip(
 
     # Cek apakah video sumber sudah pernah diunduh secara lokal agar tidak perlu download ulang
     source_path = None
-    title_folder = safe_folder_name(video_meta.get("title", ""))
     if title_folder:
         candidates = [DATA_DIR / title_folder] + list(DATA_DIR.glob(f"{title_folder}*"))
         for candidate_dir in candidates:
@@ -555,6 +581,32 @@ def upload_to_tiktok(
         logger.info("Menunggu video diproses oleh server TikTok (8 detik)...")
         time.sleep(8)
 
+        # Tutup / setujui popup modal jika ada (misal: "Turn on automatic content checks?", dsb)
+        dismiss_selectors = [
+            'button:has-text("Turn on")',
+            'button:has-text("Aktifkan")',
+            'button:has-text("Allow")',
+            'button:has-text("Izinkan")',
+            'button:has-text("Got it")',
+            'button:has-text("Mengerti")',
+            'button:has-text("Not now")',
+            'button:has-text("Nanti saja")',
+            'button[aria-label="Close"]',
+            'button[aria-label="Tutup"]',
+            '.TUXModal-close',
+            '[data-floating-ui-portal] button',
+        ]
+        for _ in range(3):
+            for btn_sel in dismiss_selectors:
+                try:
+                    mod_btn = page.locator(btn_sel)
+                    if mod_btn.count() > 0 and mod_btn.first.is_visible():
+                        logger.info(f"Menutup / menyetujui popup TikTok: '{mod_btn.first.inner_text()}'...")
+                        mod_btn.first.click(timeout=3000, force=True)
+                        time.sleep(1)
+                except Exception:
+                    pass
+
         # Mencari kotak input caption / deskripsi
         caption_selectors = [
             'div[contenteditable="true"]',
@@ -573,19 +625,31 @@ def upload_to_tiktok(
 
         if caption_box:
             logger.info("Mengetikkan judul, caption, dan hashtag...")
-            caption_box.click()
-            time.sleep(0.5)
+            try:
+                # Periksa kembali jika masih ada overlay popup
+                for btn_sel in dismiss_selectors[:4]:
+                    try:
+                        mb = page.locator(btn_sel)
+                        if mb.count() > 0 and mb.first.is_visible():
+                            mb.first.click(timeout=2000, force=True)
+                    except Exception:
+                        pass
 
-            # Bersihkan default teks bila ada
-            page.keyboard.press("Control+A")
-            page.keyboard.press("Backspace")
-            time.sleep(0.5)
+                caption_box.click(force=True, timeout=8000)
+                time.sleep(0.5)
 
-            # Ketik per kata dengan jeda natural
-            for chunk in caption.split():
-                page.keyboard.type(chunk + " ", delay=20)
-                time.sleep(0.04)
-            time.sleep(2)
+                # Bersihkan default teks bila ada
+                page.keyboard.press("Control+A")
+                page.keyboard.press("Backspace")
+                time.sleep(0.5)
+
+                # Ketik per kata dengan jeda natural
+                for chunk in caption.split():
+                    page.keyboard.type(chunk + " ", delay=20)
+                    time.sleep(0.04)
+                time.sleep(2)
+            except Exception as e:
+                logger.warning(f"Catatan pengisian caption ({e}), melanjutkan proses post...")
         else:
             logger.warning("Kotak input caption tidak terdeteksi otomatis, melanjutkan...")
 
@@ -611,8 +675,17 @@ def upload_to_tiktok(
         if post_btn:
             logger.info("Menekan tombol Post...")
             try:
+                # Periksa kembali pop up yang mungkin menghalangi tombol
+                for btn_sel in dismiss_selectors[:4]:
+                    try:
+                        mb = page.locator(btn_sel)
+                        if mb.count() > 0 and mb.first.is_visible():
+                            mb.first.click(timeout=2000, force=True)
+                    except Exception:
+                        pass
+
                 post_btn.wait_for(state="visible", timeout=30000)
-                post_btn.click()
+                post_btn.click(force=True)
                 logger.info("Tombol Post berhasil ditekan!")
             except Exception as e:
                 logger.error(f"Gagal mengklik tombol post: {e}")
