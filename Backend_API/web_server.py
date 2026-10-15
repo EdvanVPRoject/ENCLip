@@ -213,6 +213,21 @@ def update_job(job_id: str, **changes: Any) -> None:
         for key, value in changes.items():
             setattr(job, key, value)
 
+        try:
+            from clipper_hud import update_hud_status
+
+            stage = "download" if job.progress < 25 else ("transcribe" if job.progress < 60 else ("ai" if job.progress < 65 else "clip"))
+            prog = job.sub_progress if job.sub_progress > 0 else job.progress
+            det = job.sub_message or job.message
+            update_hud_status(
+                stage=stage,
+                title=job.source_title,
+                progress=prog,
+                detail=det,
+            )
+        except Exception:
+            pass
+
 
 def job_snapshot(job: Job) -> dict[str, Any]:
     value = asdict(job)
