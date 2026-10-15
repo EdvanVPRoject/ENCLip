@@ -69,6 +69,8 @@ Core_Data/bgm/
 # Private Personal Automation Tools (Do NOT share / push to GitHub)
 auto_clipper_tiktok.py
 *auto_clipper*
+autoclipper.py
+*autoclipper*
 run_auto_tiktok.bat
 *auto_tiktok*
 Edit_Files/auto_clipper_tiktok.py
