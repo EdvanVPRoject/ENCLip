@@ -758,7 +758,7 @@ def transcribe(audio_path: Path, language: str | None, model_size: str = "small"
 
     device = os.getenv("WHISPER_DEVICE", "cpu")
     compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
-    cpu_threads = min(8, os.cpu_count() or 4)
+    cpu_threads = int(os.getenv("WHISPER_CPU_THREADS", str(max(2, min(4, (os.cpu_count() or 4) - 1)))))
 
     def load_whisper(dev: str, comp: str) -> Any:
         return WhisperModel(model_size, device=dev, compute_type=comp, cpu_threads=cpu_threads)
@@ -783,16 +783,16 @@ def transcribe(audio_path: Path, language: str | None, model_size: str = "small"
 
     try:
         model = load_whisper(device, compute_type)
-        segments, _ = do_transcribe(model)
+        segments, info = do_transcribe(model)
     except Exception as exc:
         if device != "cpu":
             logger.warning(f"Whisper device '{device}' gagal ({exc}), otomatis beralih ke CPU...")
             model = load_whisper("cpu", "int8")
-            segments, _ = do_transcribe(model)
+            segments, info = do_transcribe(model)
         else:
             raise
     result = []
-    total_dur = getattr(segments, "duration", 0) or 0
+    total_dur = getattr(info, "duration", 0) or 0
     # Process segments with word-accurate cues
     for segment in segments:
         seg_text = re.sub(r"\s+", " ", segment.text).strip()
@@ -820,7 +820,7 @@ def transcribe(audio_path: Path, language: str | None, model_size: str = "small"
                 progress=overall_pct,
                 sub_progress=sub_pct,
                 message=f"Transkripsi audio dengan Whisper ({overall_pct}%)...",
-                sub_message=f"Memproses ucapan: detik ke-{cur_sec:.0f} (tahap transkripsi {sub_pct}%)",
+                sub_message=f"Memproses audio: {int(cur_sec // 60)}m {int(cur_sec % 60):02d}s / {int(est_dur // 60)}m {int(est_dur % 60):02d}s ({sub_pct}%)",
             )
 
     result.sort(key=lambda x: x["start"])
@@ -1812,7 +1812,16 @@ def detect_face_crop(
         capture.release()
         return None
 
-    detector = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    try:
+        detector = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    except Exception:
+        detector = None
+    if detector is None:
+        capture.release()
+        def_w = int(width * 0.30)
+        def_h = int(def_w * 9 / 16)
+        return (int(width * 0.015), int(height * 0.02), def_w, def_h)
+
     start_f = max(0, int(start_sec * fps)) if start_sec > 0 else 0
     end_f = min(max(0, frame_count - 1), int(end_sec * fps)) if end_sec > start_sec else max(0, frame_count - 1)
     span = max(1, end_f - start_f)
@@ -1882,8 +1891,16 @@ def detect_podcast_speaker_crops(
         cap.release()
         return None
 
-    frontal = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-    profile = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_profileface.xml")
+    try:
+        frontal = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        profile = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_profileface.xml")
+    except Exception:
+        frontal = None
+        profile = None
+
+    if not frontal:
+        cap.release()
+        return None
 
     start_f = max(0, int(start_sec * fps))
     end_f = min(max(1, total_frames - 1), int(end_sec * fps)) if end_sec > start_sec else max(1, total_frames - 1)
