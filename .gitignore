@@ -83,3 +83,24 @@ Core_Data/hud.pid
 Thumbs.db
 
 docs_and_notes/
+
+# Private Automation Scripts & Tools (Do NOT track on GitHub)
+auto_clipper_tiktok.py
+*auto_clipper*
+autoclipper.py
+*autoclipper*
+clipper_hud.py
+*clipper_hud*
+*clipper_status*
+omnichannel_publisher.py
+rlsf_engine.py
+run_clipper_4am*
+run_uploader_2hours*
+*silent.vbs
+*.vbs
+BUKA_LIVE_HUD.bat
+run_hud.bat
+LOGIN_TIKTOK.bat
+PRODUCE_1_CLIP.bat
+UPLOAD_1_CLIP.bat
+Core_Data/high_performing_hooks.json
