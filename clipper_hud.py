@@ -223,18 +223,25 @@ def is_hud_running() -> bool:
 
 
 def launch_hud_process() -> None:
-    """Menjalankan proses HUD di interactive desktop pengguna jika belum aktif."""
+    """Menjalankan proses HUD di interactive desktop pengguna jika belum aktif (tanpa console window)."""
     if is_hud_running():
         return
     try:
-        cmd = [sys.executable, str(CURRENT_DIR / "clipper_hud.py")]
+        py_exe = sys.executable
+        if py_exe.lower().endswith("python.exe"):
+            pyw = Path(py_exe).with_name("pythonw.exe")
+            if pyw.is_file():
+                py_exe = str(pyw)
+        cmd = [py_exe, str(CURRENT_DIR / "clipper_hud.py")]
         if sys.platform.startswith("win"):
             si = subprocess.STARTUPINFO()
+            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            si.wShowWindow = 0  # SW_HIDE
             si.lpDesktop = r"WinSta0\Default"
             subprocess.Popen(
                 cmd,
                 startupinfo=si,
-                creationflags=subprocess.CREATE_NEW_CONSOLE,
+                creationflags=0x08000000,  # CREATE_NO_WINDOW
                 cwd=str(CURRENT_DIR),
             )
         else:
