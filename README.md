@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/EdvanVPRoject/ENCLip/releases/latest">
+  <a href="https://github.com/EdvanVPRoject/ENCLip/raw/main/ENCLip.exe">
     <img src="https://img.shields.io/badge/Download-ENCLip%20v1.0.0%20(Windows%20.exe)-00C853?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Executable" />
   </a>
 </p>
@@ -88,7 +88,7 @@ Berbeda dari layanan web berbasis langganan bulanan yang mahal, ENCLip berjalan 
 Untuk pengguna umum / kreator yang ingin langsung menggunakan aplikasi tanpa instalasi teknis:
 
 1. Unduh paket rilis resmi di GitHub Releases:
-   **[Download ENCLip v1.0.0 (Windows)](https://github.com/EdvanVPRoject/ENCLip/releases/latest)**
+   **[Download ENCLip v1.0.0 (Windows)](https://github.com/EdvanVPRoject/ENCLip/raw/main/ENCLip.exe)**
 2. Ekstrak file zip `ENCLip-Windows-v1.0.0.zip` ke folder komputer Anda.
 3. Klik dua kali **`ENCLip.exe`**.
 4. Aplikasi langsung terbuka dan siap digunakan! Tidak perlu install Python, tidak ada script CMD rumit.

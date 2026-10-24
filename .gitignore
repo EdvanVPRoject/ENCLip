@@ -10,6 +10,7 @@ __pycache__/
 build/
 dist/
 Desktop_UI/build/
+build_desktop/
 Desktop_UI/dist/
 *.spec
 !Desktop_UI/VanClipper.spec
@@ -66,17 +67,12 @@ Core_Data/*tiktok_session*.json
 Core_Data/upload_queue.json
 Core_Data/bgm/
 
-# Private Personal Automation Tools (Do NOT share / push to GitHub)
-auto_clipper_tiktok.py
-*auto_clipper*
-autoclipper.py
-*autoclipper*
-clipper_hud.py
-*clipper_hud*
-*clipper_status*
-run_auto_tiktok.bat
-*auto_tiktok*
-Edit_Files/auto_clipper_tiktok.py
+# Upload logs & Queue state (Local operational state)
+uploaded_clips.txt
+Core_Data/uploaded_clips.txt
+hud_status.json
+Core_Data/hud_status.json
+Core_Data/hud.pid
 
 # IDE & OS files
 .idea/
@@ -85,3 +81,5 @@ Edit_Files/auto_clipper_tiktok.py
 *.swo
 .DS_Store
 Thumbs.db
+
+docs_and_notes/
