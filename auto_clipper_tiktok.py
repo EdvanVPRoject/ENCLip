@@ -161,15 +161,17 @@ def append_to_uploaded_txt(clip_info: dict[str, Any]) -> None:
 
     for txt_path in [UPLOADED_CLIPS_TXT, PROJECT_UPLOADED_TXT]:
         try:
+            txt_path.parent.mkdir(parents=True, exist_ok=True)
             with open(txt_path, "a", encoding="utf-8") as f:
                 f.write(entry)
         except Exception as exc:
             logger.warning(f"Gagal mencatat ke {txt_path}: {exc}")
 
 
-def cleanup_uploaded_video_file(clip_path: Path) -> None:
+def cleanup_uploaded_video_file(clip_path: Path | str) -> None:
     """Menghapus file video klip lokal dan foldernya setelah upload sukses."""
     try:
+        clip_path = Path(clip_path)
         if clip_path.is_file():
             clip_path.unlink(missing_ok=True)
             logger.info(f"🗑️ File video lokal telah dihapus setelah upload sukses: {clip_path.name}")
@@ -2194,9 +2196,17 @@ def produce_one_video_unlimited_clips(args: argparse.Namespace, history: History
             )
 
         if not candidates:
-
             logger.error("❌ Tidak ada kandidat video baru yang ditemukan.")
-
+            try:
+                from clipper_hud import update_hud_status
+                update_hud_status(
+                    stage="idle",
+                    title="Tidak Ada Video Baru",
+                    progress=0,
+                    detail="Semua video terbaru telah diproses atau belum ada podcast baru.",
+                )
+            except Exception:
+                pass
             return 0
 
         target_video = candidates[0]
@@ -2302,7 +2312,18 @@ def upload_one_from_queue(args: argparse.Namespace, history: HistoryTracker, cyc
     queued_clip = history.pop_next_queued_clip()
 
     if not queued_clip:
-
+        logger.info("ℹ️ Antrean video siap upload kosong di Core_Data/upload_queue.json.")
+        try:
+            from clipper_hud import update_hud_status
+            update_hud_status(
+                stage="idle",
+                title="Antrean Kosong",
+                progress=100,
+                detail="Antrean video siap upload kosong. Menunggu produksi klip jam 4 subuh.",
+                channel="TikTok",
+            )
+        except Exception:
+            pass
         return False
 
 
