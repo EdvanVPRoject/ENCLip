@@ -1,12 +1,12 @@
-# ENCLip - Video AI Clipper
+# ENCLip - Autonomous Podcast Clipper & Publisher
 
 <p align="center">
   <img src="Desktop_UI/icon.png" alt="ENCLip Logo" width="128" height="128" />
 </p>
 
 <p align="center">
-  <b>Aplikasi Desktop Native AI untuk Pemotongan & Pembuatan Konten Video Viral Otomatis</b><br>
-  <i>100% Offline dengan Model Lokal (Whisper & Qwen GGUF) atau Cloud Super Cepat via Google Gemini 3.8 Flash</i>
+  <b>Sistem Otomasi Pemotongan Video Podcast & Publikasi Multi-Platform Berbasis AI</b><br>
+  <i>Dilengkapi Desktop HUD Monitor, Engine Transkripsi Whisper int8, Analisis Viral Gemini, dan Playwright TikTok Publisher</i>
 </p>
 
 <p align="center">
@@ -17,142 +17,149 @@
 
 ---
 
-## Sekilas Tentang ENCLip
+## Ringkasan Proyek
 
-**ENCLip** adalah aplikasi desktop native (Windows) yang dirancang untuk mempermudah kreator konten, streamer, podcaster, dan video editor dalam mengubah video berdurasi panjang menjadi klip-klip highlight vertikal (Shorts, TikTok, Reels) atau klip tematik secara otomatis.
+**ENCLip** adalah sistem otomatisasi pemotongan video (clipping) dan publikasi konten untuk kreator, agensi, dan podcaster. Sistem ini bekerja secara otonom di Windows untuk mengubah video podcast berdurasi panjang menjadi klip video pendek (Shorts/TikTok/Reels) berkualitas Full HD 1080p, lengkap dengan subtitle dinamis, penilaian viralitas, antrean stok, serta pengunggahan terjadwal ke TikTok Studio.
 
-Berbeda dari layanan web berbasis langganan bulanan yang mahal, ENCLip berjalan **langsung di komputer Anda**:
-- **Bebas Biaya & Tanpa Watermark**: Semua pemrosesan berlangsung lokal di perangkat Anda.
-- **Privasi Terjaga**: Video tidak diunggah ke server pihak ketiga saat menggunakan model lokal.
-- **Dukungan Hybrid AI**: Gunakan model AI lokal (Whisper & Qwen GGUF) untuk kerja 100% offline, atau Google Gemini Cloud untuk analisis secepat kilat.
+Seluruh proses dapat berjalan mandiri di latar belakang tanpa jendela CMD hitam (*100% silent execution*), dan progres kerja dipantau secara real-time melalui widget floating desktop interaktif (HUD).
 
 ---
 
-## Fitur Unggulan
+## Fitur Utama
 
-### 1. 100% Native Desktop & Clean Interface
-- Tampilan modern, responsif, dan elegan berbasis **PyQt6**.
-- **Tanpa CMD Pop-up**: Semua proses latar belakang (FFmpeg, Whisper, PyTorch) dieksekusi tanpa jendela hitam yang mengganggu.
-- **Terminal Terpadu**: Dilengkapi panel laci `[ Terminal ]` di dalam aplikasi untuk memantau proses ekstraksi, transcoding, dan AI secara real-time.
+### 1. Autonomous Pipeline (Jadwal Otomatis Windows Task Scheduler)
+* **Produksi Klip Harian (04:00 WIB)**:
+  * Memindai video podcast terbaru dari YouTube secara otomatis.
+  * Memproses tepat **1 video podcast per hari** untuk menjaga stabilitas resource dan kuota API.
+  * Menghasilkan klip viral 1080p Full HD dan menyimpannya ke antrean stok (`Core_Data/upload_queue.json`).
+* **Publikasi Berkala (Setiap 2 Jam Sekali)**:
+  * Mengambil 1 klip dari antrean stok dan mengunggahnya langsung ke TikTok Studio menggunakan Playwright.
+  * Mencatat detail publikasi (judul, skor viral, durasi, URL sumber, caption) ke dokumen teks ([`uploaded_clips.txt`](uploaded_clips.txt)).
+  * Menghapus file video lokal `.mp4` beserta foldernya setelah upload berhasil guna menghemat kapasitas disk.
 
-### 2. Transkripsi Suara & Deteksi AI
-- **Speech-to-Text Presisi**: Menggunakan model *Faster-Whisper* (Small, Medium, Large-v3) atau *Google Gemini Audio*.
-- **Penyaring Momen AI**: Mengenali hook video, reaksi streamer, blunder, punchline lucu, materi berbobot, atau kesimpulan penting.
-- **Berbagai Profil Konten**:
-  - *Otomatis*: AI mendeteksi tipe konten secara mandiri.
-  - *Live / Streamer*: Menargetkan aksi heboh, teriakan, clutch, momen lucu, dan blunder.
-  - *Konten Edukasi / Terstruktur*: Menargetkan hook informatif, opini tajam, dan kesimpulan.
-  - *Manual Review*: Transkripsi dibuat penuh, Anda bebas menentukan titik klip di tab Review.
+### 2. Desktop Live HUD Widget (`clipper_hud.py`)
+* Widget floating modern di pojok kanan bawah layar desktop untuk memantau aktivitas proses pipeline.
+* **Dua Tampilan Interaktif**:
+  * **Mini Pill (440x40 px)**: Bar ringkas satu baris yang menampilkan indikator tahap aktif (Unduh, Whisper, AI Viral, Subtitle, Render, Upload), judul klip, dan tombol expand.
+  * **Expanded Bento Card (520x520 px)**: Panel metriks lengkap yang membuka ke atas dengan animasi halus, menyajikan metrik render, log real-time, inspeksi rincian per tahap, dan daftar klip yang dihasilkan.
+* Tombol kontrol minimize/close terletak di bagian bawah dekat jam widget.
 
-### 3. Katalog Download Model AI Lokal Bawaan
-- Dilengkapi tab **Model AI Lokal** untuk mengunduh model langsung dari aplikasi dengan rekomendasi spesifikasi:
-  - **Qwen 2.5 0.5B Instruct GGUF (~397 MB)**: Sangat ringan, cocok untuk laptop dual-core & RAM 4 GB.
-  - **Qwen 2.5 1.5B Instruct GGUF (~1.1 GB)**: Keseimbangan ideal kecepatan & akurasi untuk RAM 8 GB.
-  - **Qwen 2.5 7B Instruct GGUF (~4.7 GB)**: Penalaran mendalam setara AI Cloud untuk PC/GPU 16 GB+.
-  - **Faster-Whisper Small (~460 MB)**: Transkripsi audio cepat untuk percakapan harian.
-  - **Faster-Whisper Medium (~1.5 GB)**: Presisi tinggi untuk audio dengan musik latar belakang.
+### 3. Engine Analisis & Rendering
+* **Speech-to-Text**: Menggunakan *Faster-Whisper* CPU multi-core (int8) untuk transkripsi audio presisi tinggi dengan timestamp tingkat kata.
+* **Kurasi Momen Viral**: Menganalisis transkrip dengan *Google Gemini 2.5 Flash* untuk mendeteksi siklus tanya-jawab utuh, hook kalimat pembuka, dan relevansi topik tanpa terpotong di tengah kalimat.
+* **Rendering Subtitle Otomatis**: Menghasilkan subtitle gaya *Smart Notice* (warna kuning aktif dengan denyut animasi) menggunakan filter libass FFmpeg.
+* **Dukungan Format**: Rasio aspek 16:9 (Standard) dan 9:16 (Vertikal TikTok/Shorts) pada resolusi 1080p.
 
-### 4. Format Output & Auto-Framing Fleksibel
-- **Rasio Aspek Output**: 
-  - `9:16` · Shorts / Reels / TikTok (Vertikal)
-  - `16:9` · Landscape YouTube
-  - `1:1` · Square Instagram
-  - `4:3` · Format Klasik
-- **Framing Cerdas**: Pilihan *Full Video + Background Blur* (aman untuk footage beragam) atau *Crop Memenuhi Frame*.
-- **Akselerasi GPU**: Otomatis mendeteksi dan memanfaatkan encoder GPU (Nvidia NVENC, Intel QSV, AMD AMF) untuk render ultra-cepat.
-
-### 5. Styling Subtitle Dinamis (Hardsub)
-- 7+ Gaya Subtitle: *Bold, Highlight, Neon, Karaoke, Box, Classic, Minimal*.
-- Posisi Teks Fleksibel: Otomatis, Atas, Tengah, Bawah, atau **Bebas (seret langsung di preview video)**.
-- Dukungan warna teks kustom (kode HEX seperti `#FFDD00`).
-
-### 6. Kontrol Render & Penguncian Aman
-- Semua input dikunci selama render berjalan untuk mencegah konflik pengaturan.
-- Dilengkapi tombol **Batal & Edit Kembali** untuk menghentikan proses yang sedang berlangsung secara instan dan membuka kembali pengaturan video.
+### 4. Zero-Popup Silent Execution
+* Semua batch task dijalankan melalui launcher VBScript (`run_clipper_4am_silent.vbs` dan `run_uploader_2hours_silent.vbs`) dengan flag `vbHide`.
+* Tidak ada jendela hitam command prompt (`cmd.exe`) atau terminal yang mengganggu saat otomasi bekerja.
 
 ---
 
-## Persyaratan Sistem
+## Panduan Penggunaan
 
-- **Sistem Operasi**: Windows 10 / Windows 11 (64-bit)
-- **Python**: Versi 3.10 atau lebih baru (jika menjalankan dari source code)
-- **RAM**: Minimal 4 GB (Disarankan 8 GB ke atas)
-- **Penyimpanan**: Minimal 2 GB ruang kosong (tambahan ruang sesuai ukuran model AI yang diunduh)
-- **GPU (Opsional)**: Nvidia GeForce (GTX/RTX) dengan CUDA untuk akselerasi rendering hardware
-
----
-
-## Panduan Instalasi & Menjalankan
-
-### Cara 1: Unduh Aplikasi Siap Pakai (.exe) — Direkomendasikan
-Untuk pengguna umum / kreator yang ingin langsung menggunakan aplikasi tanpa instalasi teknis:
-
-1. Unduh paket rilis resmi di GitHub Releases:
-   **[Download ENCLip v1.0.0 (Windows)](https://github.com/EdvanVPRoject/ENCLip/raw/main/ENCLip.exe)**
-2. Ekstrak file zip `ENCLip-Windows-v1.0.0.zip` ke folder komputer Anda.
-3. Klik dua kali **`ENCLip.exe`**.
-4. Aplikasi langsung terbuka dan siap digunakan! Tidak perlu install Python, tidak ada script CMD rumit.
+### Cara 1: Menggunakan Aplikasi Desktop Siap Pakai (.exe)
+Bagi pengguna yang ingin menjalankan antarmuka grafis manual tanpa setup teknis:
+1. Unduh **[ENCLip.exe](https://github.com/EdvanVPRoject/ENCLip/raw/main/ENCLip.exe)**.
+2. Jalankan `ENCLip.exe` di Windows.
+3. Masukkan URL video YouTube atau file video lokal, pilih gaya subtitle, dan mulai proses pembuatan klip.
 
 ---
 
-### Cara 2: Menjalankan dari Source Code (Khusus Pengembang / Developer)
-Bagi pengembang yang ingin memodifikasi atau menjalankan langsung dari source code Python:
+### Cara 2: Menjalankan Sistem Otomasi (Autoclipper & Autouploader)
 
-1. **Clone repository ini**:
-   ```bash
-   git clone https://github.com/EdvanVPRoject/ENCLip.git
-   cd ENCLip
-   ```
+#### 1. Prasyarat Lingkungan
+* Windows 10 / 11 (64-bit).
+* Python 3.10 atau lebih baru.
+* FFmpeg terpasang pada sistem PATH.
 
-2. **Buat virtual environment & install dependensi**:
-   ```bash
-   python -m venv .venv
-   .venv\Scripts\pip install -r requirements.txt
-   ```
+#### 2. Instalasi Dependensi
+```bash
+git clone https://github.com/EdvanVPRoject/ENCLip.git
+cd ENCLip
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+playwright install chromium
+```
 
-3. **Jalankan aplikasi**:
-   ```bash
-   .venv\Scripts\python Desktop_UI\desktop_gui.py
-   ```
+#### 3. Konfigurasi API Key
+Salin file template konfigurasi dan masukkan API Key Gemini Anda:
+```bash
+copy .env.example .env
+```
+Isi variabel `GEMINI_API_KEY` di dalam file `.env`:
+```env
+GEMINI_API_KEY=AIzaSyYourGeminiApiKeyHere
+```
+
+#### 4. Login TikTok Studio (Hanya Perlu 1 Kali)
+Jalankan skrip berikut untuk menyimpan sesi cookies TikTok ke `Core_Data/tiktok_session.json`:
+```bash
+LOGIN_TIKTOK.bat
+```
+*(Jendela browser Chromium akan terbuka; silakan login menggunakan akun TikTok Anda atau scan QR Code via aplikasi TikTok di HP. Sesi login akan tersimpan otomatis).*
+
+#### 5. Menjalankan Otomasi
+* **Menjalankan Pemotongan Klip Subuh Manual**:
+  ```bash
+  PRODUCE_1_CLIP.bat
+  ```
+* **Menjalankan Publikasi 1 Klip Manual**:
+  ```bash
+  UPLOAD_1_CLIP.bat
+  ```
+* **Membuka Widget HUD Desktop**:
+  ```bash
+  BUKA_LIVE_HUD.bat
+  ```
 
 ---
 
-## Cara Mendapatkan Google Gemini API Key (100% Gratis)
-
-Jika Anda ingin menggunakan pemrosesan AI Cloud super cepat tanpa membebani CPU/GPU lokal:
-
-1. Buka situs resmi **[Google AI Studio](https://aistudio.google.com/)** di browser Anda.
-2. Login menggunakan akun Google Anda.
-3. Klik tombol **Get API key** di pojok kiri atas.
-4. Klik **Create API key** > Pilih atau buat project Google Cloud gratis baru.
-5. Salin (Copy) string kunci API yang muncul (berawalan `AIzaSy...`).
-6. Di ENCLip, buka tab **Buat clip**, pilih Penyedia AI **Google Gemini Pro (Cloud)**, lalu tempel (Paste) di kolom **API Key**.
-7. Klik tombol **Tes**. Setelah berhasil diverifikasi, kunci API akan otomatis tersimpan untuk penggunaan berikutnya.
-
-*Catatan: Kuota gratis Google AI Studio sangat besar (ribuan request per hari) dan 100% gratis tanpa memerlukan kartu kredit.*
-
----
-
-## Struktur Direktori Proyek
+## Struktur Direktori Repository
 
 ```
 ENCLip/
-├── Backend_API/            # Mesin pemrosesan video, transkripsi & AI evaluator
-│   └── web_server.py       # Core orchestrator, audio extraction, FFmpeg caller
-├── Desktop_UI/             # Antarmuka Desktop Native (PyQt6)
-│   ├── desktop_gui.py      # Main GUI application, video preview canvas, terminal
-│   ├── icon.ico / icon.png # Asset ikon aplikasi
-│   └── VanClipper.spec     # Konfigurasi PyInstaller build
-├── Core_Data/              # Folder penyimpanan lokal (diabaikan oleh git)
-│   ├── models/             # Lokasi model GGUF & Whisper lokal
-│   ├── VideoMentah/        # Lokasi video sumber yang diimpor/diunduh
-│   └── HasilClip/          # Lokasi hasil potongan klip video per folder
-├── requirements.txt        # Daftar dependensi Python
-└── README.md               # Dokumentasi lengkap proyek
+├── auto_clipper_tiktok.py       # Mesin inti pipeline editing otomatis & TikTok publisher
+├── clipper_hud.py               # Widget monitor floating desktop (PyQt6)
+├── omnichannel_publisher.py      # Modul otomasi Playwright untuk TikTok & YouTube Shorts
+├── autoclipper.py               # CLI entrypoint alternatif untuk publish/produce
+├── auto_clipper_omnichannel.py  # Pipeline omnichannel multi-platform (TikTok, YT, IG, X)
+├── rlsf_engine.py               # Closed-loop AI analytics engine
+│
+├── run_clipper_4am.bat          # Eksekutor batch 04:00 subuh (1 video editing)
+├── run_clipper_4am_silent.vbs   # Silent launcher tanpa pop-up CMD untuk Task Scheduler
+├── run_uploader_2hours.bat      # Eksekutor batch upload berkala 2 jam sekali
+├── run_uploader_2hours_silent.vbs # Silent launcher tanpa pop-up CMD untuk Task Scheduler
+├── BUKA_LIVE_HUD.bat            # Pintasan cepat meluncurkan widget HUD desktop
+├── LOGIN_TIKTOK.bat             # Panduan login 1x untuk menyimpan sesi TikTok Studio
+├── PRODUCE_1_CLIP.bat           # Trigger manual produksi 1 video podcast
+├── UPLOAD_1_CLIP.bat            # Trigger manual upload 1 klip ke TikTok
+│
+├── Backend_API/
+│   └── web_server.py            # FFmpeg wrapper, trend analyzer, dan job orchestrator
+├── Desktop_UI/
+│   ├── desktop_gui.py           # GUI aplikasi desktop lengkap (PyQt6)
+│   ├── icon.ico / icon.png      # Aset grafis ikon aplikasi
+│   ├── VanClipper.spec          # Konfigurasi packaging PyInstaller
+│   └── build_desktop.bat        # Skrip kompilasi native Windows .exe
+│
+├── ENCLip.exe                   # Executable aplikasi Windows native siap pakai
+├── requirements.txt             # Daftar dependensi modul Python
+├── .env.example                 # Template konfigurasi variabel lingkungan
+├── LICENSE                      # Lisensi proyek (MIT License)
+└── README.md                    # Dokumentasi resmi proyek
 ```
+
+---
+
+## Keamanan Data & Privasi
+* Repository ini menggunakan `.gitignore` yang ketat:
+  * Seluruh file video fisik (`.mp4`, `HasilClip/*`, `VideoMentah/*`) **tidak disimpan ke repository Git**.
+  * File kredensial pribadi (`.env`, `Core_Data/tiktok_session.json`) **tidak pernah diunggah ke internet**.
+  * Riwayat eksekusi lokal dan dokumen catatan upload (`uploaded_clips.txt`, `*.log`, `upload_queue.json`) dikelola secara privat di komputer lokal.
 
 ---
 
 ## Lisensi
-
-Proyek ini dirilis di bawah lisensi [MIT License](LICENSE). Bebas digunakan, dimodifikasi, dan dikembangkan untuk kebutuhan pribadi maupun komersial.
+Proyek ini didistribusikan di bawah lisensi [MIT License](LICENSE). Bebas digunakan dan dikembangkan untuk kebutuhan personal maupun komersial.

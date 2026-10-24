@@ -4,7 +4,7 @@ from PyInstaller.utils.hooks import collect_all
 
 backend_dir = os.path.abspath(os.path.join(SPECPATH, '..', 'Backend_API'))
 
-datas = [('../Web_UI/frontend', 'web'), ('icon.ico', '.'), ('icon.png', '.')]
+datas = [('icon.ico', '.'), ('icon.png', '.')]
 binaries = []
 hiddenimports = ['web_server']
 hiddenimports += collect_submodules('cv2')
