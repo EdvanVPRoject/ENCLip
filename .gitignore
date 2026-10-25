@@ -104,3 +104,8 @@ LOGIN_TIKTOK.bat
 PRODUCE_1_CLIP.bat
 UPLOAD_1_CLIP.bat
 Core_Data/high_performing_hooks.json
+
+run_continuous*
+*CONTINUOUS*
+*.flag
+Core_Data/*.flag
