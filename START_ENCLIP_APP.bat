@@ -1,8 +1,12 @@
 @echo off
 title ENCLip Desktop App
-cd /d "D:\ProjekAntigravity\ENCLip"
+cd /d "%~dp0"
 echo =======================================================
 echo               MEMBUKA ENCLIP DESKTOP APP
 echo =======================================================
 echo.
-C:\Python314\python.exe -m Desktop_UI.desktop_gui
+if exist "ENCLip.exe" (
+    start "" "ENCLip.exe"
+) else (
+    C:\Python314\python.exe -m Desktop_UI.desktop_gui
+)

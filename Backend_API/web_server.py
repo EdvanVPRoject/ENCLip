@@ -157,7 +157,7 @@ class CreateJobRequest(BaseModel):
     use_local_llm: bool = True
     local_model: str = Field(default="qwen", pattern="^(qwen|hermes|gemini)$")
     quality: str = Field(default="1080", pattern="^(360|480|720|1080|2160|best)$")
-    custom_prompt: str = Field(default="", max_length=500)
+    custom_prompt: str = Field(default="", max_length=2000)
     whisper_model: str = Field(default="small")
     video_encoder: str = Field(default="auto")
     aspect_ratio: str = Field(default="16:9", pattern="^(16:9|9:16|4:3|1:1)$")
@@ -193,7 +193,7 @@ class CreateJobRequest(BaseModel):
     dynamic_micro_zoom: bool = Field(default=True)
     auto_broll: bool = Field(default=False)
     broll_folder: str = Field(default="")
-    skip_if_has_subtitles: bool = Field(default=True, description="Otomatis lewati penambahan subtitle jika video sudah memiliki subtitle (embedded/hardsub).")
+    skip_if_has_subtitles: bool = Field(default=False, description="Otomatis lewati penambahan subtitle jika video sudah memiliki subtitle (embedded/hardsub).")
 
 
 class RenderRequest(BaseModel):
@@ -230,7 +230,7 @@ class RenderRequest(BaseModel):
     dynamic_micro_zoom: bool = Field(default=True)
     auto_broll: bool = Field(default=False)
     broll_folder: str = Field(default="")
-    skip_if_has_subtitles: bool = Field(default=True, description="Otomatis lewati penambahan subtitle jika video sudah memiliki subtitle (embedded/hardsub).")
+    skip_if_has_subtitles: bool = Field(default=False, description="Otomatis lewati penambahan subtitle jika video sudah memiliki subtitle (embedded/hardsub).")
 
 
 class ManualClipRequest(BaseModel):
@@ -381,11 +381,12 @@ def yt_dlp_command() -> list[str]:
 
 
 def ffmpeg_command() -> list[str]:
-    if command_exists("ffmpeg"):
-        return ["ffmpeg"]
+    which_ffmpeg = shutil.which("ffmpeg")
+    if which_ffmpeg:
+        return [str(Path(which_ffmpeg).resolve())]
     try:
         from imageio_ffmpeg import get_ffmpeg_exe
-        return [get_ffmpeg_exe()]
+        return [str(Path(get_ffmpeg_exe()).resolve())]
     except ImportError as exc:
         raise RuntimeError("ffmpeg belum terpasang. Jalankan: python -m pip install imageio-ffmpeg") from exc
 
@@ -440,16 +441,17 @@ def download_video(url: str, job_dir: Path, quality: str, job_id: str) -> Path:
     max_height = "2160" if quality == "best" else quality
     format_selector = f"bv*[height<={max_height}]+ba/b[height<={max_height}]/b"
     ffmpeg_raw = ffmpeg_command()[0]
-    ffmpeg_dir = str(Path(ffmpeg_raw).parent)
+    resolved_ffmpeg = Path(shutil.which(ffmpeg_raw) or ffmpeg_raw).resolve()
+    ffmpeg_dir = str(resolved_ffmpeg.parent)
     if ffmpeg_dir not in os.environ.get("PATH", ""):
         os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
     target_ffmpeg = Path(ffmpeg_dir) / "ffmpeg.exe"
-    if not target_ffmpeg.exists() and Path(ffmpeg_raw).exists():
+    if not target_ffmpeg.exists() and resolved_ffmpeg.exists():
         try:
-            shutil.copyfile(ffmpeg_raw, target_ffmpeg)
+            shutil.copyfile(str(resolved_ffmpeg), str(target_ffmpeg))
         except Exception:
             pass
-    ffmpeg_path = str(target_ffmpeg if target_ffmpeg.exists() else ffmpeg_raw)
+    ffmpeg_path = str(target_ffmpeg if target_ffmpeg.exists() else resolved_ffmpeg)
     try:
         import yt_dlp
 
@@ -3429,93 +3431,9 @@ def check_video_has_subtitles(video_path: Path | str, start_sec: float = 0.0, en
     except Exception:
         pass
 
-    # 2. Cek hardcoded burned-in subtitles via OpenCV sampling
-    try:
-        import cv2
-        import numpy as np
-
-        cap = cv2.VideoCapture(v_str)
-        if not cap.isOpened():
-            return False
-
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        duration = total_frames / max(1.0, fps)
-
-        s_sec = max(0.0, start_sec)
-        e_sec = min(duration, end_sec) if end_sec > s_sec else duration
-        eff_dur = e_sec - s_sec
-
-        sample_start = s_sec + (1.5 if eff_dur > 4.0 else 0.5)
-        sample_end = e_sec - (1.0 if eff_dur > 4.0 else 0.2)
-        if sample_end <= sample_start:
-            sample_start = s_sec
-            sample_end = e_sec
-
-        num_samples = 6
-        times = [sample_start + (sample_end - sample_start) * (i + 1) / (num_samples + 1) for i in range(num_samples)]
-
-        detected_count = 0
-        valid_frames = 0
-
-        for t in times:
-            cap.set(cv2.CAP_PROP_POS_MSEC, t * 1000.0)
-            ret, frame = cap.read()
-            if not ret or frame is None:
-                continue
-            valid_frames += 1
-            h, w = frame.shape[:2]
-
-            is_vertical = h > w
-            zones = [
-                (int(h * 0.68), int(h * 0.94), int(w * 0.08), int(w * 0.92)),
-            ]
-            if is_vertical:
-                zones.append((int(h * 0.40), int(h * 0.62), int(w * 0.08), int(w * 0.92)))
-
-            frame_has_text = False
-            for y1, y2, x1, x2 in zones:
-                roi = frame[y1:y2, x1:x2]
-                gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-
-                sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
-                abs_sobelx = np.absolute(sobelx)
-                edges = np.uint8(abs_sobelx)
-
-                _, bright_thresh = cv2.threshold(gray, 205, 255, cv2.THRESH_BINARY)
-                _, edge_thresh = cv2.threshold(edges, 45, 255, cv2.THRESH_BINARY)
-
-                text_candidates = cv2.bitwise_and(bright_thresh, edge_thresh)
-                kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (11, 3))
-                connected = cv2.morphologyEx(text_candidates, cv2.MORPH_CLOSE, kernel)
-
-                contours, _ = cv2.findContours(connected, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                line_count = 0
-                for cnt in contours:
-                    cx, cy, cw, ch = cv2.boundingRect(cnt)
-                    aspect = cw / max(1, ch)
-                    rel_h = ch / float(h)
-                    rel_w = cw / float(w)
-                    if 0.016 <= rel_h <= 0.11 and rel_w >= 0.035 and aspect >= 1.2:
-                        box_roi = text_candidates[cy:cy+ch, cx:cx+cw]
-                        fill_ratio = cv2.countNonZero(box_roi) / float(cw * ch)
-                        if 0.10 <= fill_ratio <= 0.70:
-                            line_count += 1
-
-                if line_count >= 1:
-                    frame_has_text = True
-                    break
-
-            if frame_has_text:
-                detected_count += 1
-
-        cap.release()
-        ratio = detected_count / max(1, valid_frames)
-        has_sub = ratio >= 0.33
-        _VIDEO_SUBTITLE_CACHE[cache_key] = has_sub
-        return has_sub
-    except Exception:
-        return False
+    # 2. Cek hardcoded burned-in subtitles via OpenCV sampling (dinonaktifkan untuk mencegah false positive pada meja/studio/cangkir)
+    _VIDEO_SUBTITLE_CACHE[cache_key] = False
+    return False
 
 
 def write_ass_pop_subtitle(
@@ -4242,7 +4160,7 @@ def render_clip(
 
     emoji_flag = bool(getattr(options, "emoji_subtitles", True))
 
-    skip_if_existing = bool(getattr(options, "skip_if_has_subtitles", True))
+    skip_if_existing = bool(getattr(options, "skip_if_has_subtitles", False))
     has_existing_subs = False
     if skip_if_existing and video.is_file():
         has_existing_subs = check_video_has_subtitles(video, clip.start, clip.end)

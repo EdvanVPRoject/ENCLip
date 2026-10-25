@@ -109,3 +109,14 @@ run_continuous*
 *CONTINUOUS*
 *.flag
 Core_Data/*.flag
+ 
+BUKA_MONITOR*
+web_monitor*
+*monitor*
+Core_Data/mobile_url.txt
+
+# Distribution packages & Bundled Runtimes
+_internal/
+portable/
+naviteversion/
+nativeversion/

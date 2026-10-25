@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/EdvanVPRoject/ENCLip/raw/main/ENCLip.exe">
-    <img src="https://img.shields.io/badge/Download-ENCLip%20v1.0.0%20(Windows%20.exe)-00C853?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Executable" />
+  <a href="https://github.com/EdvanVPRoject/ENCLip/releases">
+    <img src="https://img.shields.io/badge/Release-ENCLip%20v1.0.0%20(Installer%20%26%20Portable)-00C853?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Release" />
   </a>
 </p>
 
@@ -19,12 +19,12 @@
 
 ## Sekilas Tentang ENCLip
 
-**ENCLip** adalah aplikasi desktop native Windows yang dirancang untuk memproses video berdurasi panjang (podcast, livestream, webinar, interview) menjadi potongan klip video pendek (Shorts, TikTok, Reels) secara presisi.
+**ENCLip** adalah aplikasi desktop native Windows yang dirancang untuk memproses video berdurasi panjang (podcast, livestream, webinar, interview, stand-up comedy) menjadi potongan klip video pendek (Shorts, TikTok, Reels) secara presisi dan efisien.
 
 Aplikasi ini berjalan langsung di perangkat Anda tanpa biaya langganan bulanan:
-* **Privasi Penuh & Pemrosesan Lokal**: Transkripsi dan rendering audio-video diproses di perangkat pengguna.
+* **Privasi Penuh & Pemrosesan Lokal**: Transkripsi dan rendering audio-video diproses langsung di perangkat pengguna.
 * **Dukungan Hybrid AI**: Bekerja 100% offline dengan model lokal (Faster-Whisper int8 dan LLM GGUF lokal) atau menggunakan Google Gemini Cloud untuk analisis secepat kilat.
-* **Output Kualitas Tinggi**: Format 1080p Full HD dengan pilihan rasio 9:16 (vertikal), 16:9 (landscape), atau 1:1 (square), lengkap dengan subtitle otomatis berbasis libass.
+* **Output Kualitas Tinggi**: Format 1080p Full HD dengan pilihan rasio 9:16 (vertikal), 16:9 (landscape), atau 1:1 (square), lengkap dengan subtitle dinamis berbasis libass.
 
 ---
 
@@ -36,17 +36,17 @@ Aplikasi ini berjalan langsung di perangkat Anda tanpa biaya langganan bulanan:
 * Terminal terintegrasi di dalam jendela aplikasi untuk memantau proses transkripsi, penilaian momen, dan progress render FFmpeg.
 
 ### 2. Transkripsi Suara Presisi (Speech-to-Text)
-* Memanfaatkan engine **Faster-Whisper** dengan optimasi int8 multi-core CPU untuk mengenali kata dan jeda dialog bahasa Indonesia dengan timestamp tingkat milidetik.
+* Memanfaatkan engine **Faster-Whisper** dengan optimasi int8 multi-core CPU / CUDA GPU untuk mengenali kata dan jeda dialog bahasa Indonesia dengan timestamp tingkat milidetik.
 * Opsi transkripsi alternatif melalui **Google Gemini Audio** untuk pemrosesan berbasis cloud.
 
 ### 3. Deteksi Momen Penting & Kurasi AI
-* Menganalisis transkrip dialog secara kontekstual untuk menemukan siklus tanya-jawab utuh, hook pembuka yang memikat, opini tajam, atau punchline menarik tanpa terpotong di tengah kalimat.
+* Menganalisis transkrip dialog secara kontekstual untuk menemukan siklus tanya-jawab utuh, hook pembuka yang memikat, opini tajam, atau punchline menarik tanpa terpotong di tengah kalimat (*Full Context Auto-Heal*).
 * Penilaian skor viralitas objektif berdasarkan dinamika emosi dan kekuatan hook.
 
 ### 4. Rendering Subtitle Otomatis (Hardsub)
 * Subtitle dinamis dengan berbagai gaya tipografi (Smart Notice, Bold Punch, Highlight, Minimal).
 * Pengaturan posisi teks fleksibel (bawah, tengah, atas, atau seret bebas pada kanvas preview).
-* Sinkronisasi warna kata aktif saat audio diucapkan.
+* Sinkronisasi warna kata aktif saat audio diucapkan (*word-level karaoke highlight*).
 
 ---
 
@@ -74,16 +74,26 @@ Pengguna dapat membangun skrip otomatisasi sendiri (menggunakan Python, Bash, at
 
 ---
 
-## Panduan Menjalankan
+## Pilihan Distribusi & Cara Menjalankan
 
-### Opsi 1: Unduh Aplikasi Siap Pakai (.exe) — Direkomendasikan
-1. Unduh **[ENCLip.exe](https://github.com/EdvanVPRoject/ENCLip/raw/main/ENCLip.exe)**.
-2. Klik dua kali file `ENCLip.exe` di komputer Windows Anda.
-3. Aplikasi langsung terbuka dan siap digunakan tanpa perlu setup Python atau environment teknis.
+### Opsi 1: Versi Native Installer (`naviteversion`) — Direkomendasikan
+1. Buka folder `naviteversion/` (atau unduh dari tab [Releases](https://github.com/EdvanVPRoject/ENCLip/releases)).
+2. Jalankan file **`ENCLip_Setup_v1.0.exe`**.
+3. Ikuti wizard instalasi Windows:
+   - Otomatis membuat Shortcut di Desktop dan Start Menu.
+   - Terpasang rapi di Program Files.
+   - Dilengkapi uninstaller resmi Windows (*Settings > Apps / Control Panel*).
 
 ---
 
-### Opsi 2: Menjalankan dari Source Code (Developer)
+### Opsi 2: Versi Portable (`portable/`) — Tanpa Instalasi
+1. Buka folder `portable/`.
+2. Klik dua kali pada **`ENCLip.exe`** atau jalankan **`Buka_ENCLip_Portable.bat`**.
+3. Aplikasi langsung berjalan secara mandiri tanpa menyentuh registry sistem. Sangat cocok ditaruh di Flashdisk atau dipindahkan antar-PC.
+
+---
+
+### Opsi 3: Menjalankan dari Source Code (Developer)
 1. **Clone repository**:
    ```bash
    git clone https://github.com/EdvanVPRoject/ENCLip.git
@@ -113,29 +123,35 @@ Pengguna dapat membangun skrip otomatisasi sendiri (menggunakan Python, Bash, at
    START_ENCLIP_APP.bat
    ```
 
+5. **Kompilasi Sendiri (Build Executable & Installer)**:
+   * **Executable Native**: Jalankan `Desktop_UI\build_desktop.bat` (menggunakan PyInstaller 6).
+   * **Setup Installer**: Kompilasi script `Desktop_UI\enclip_installer.iss` menggunakan Inno Setup Compiler (ISCC).
+
 ---
 
 ## Struktur Direktori Repository
 
 ```
 ENCLip/
-├── Backend_API/            # Modul inti pemrosesan video, transkripsi & evaluasi AI
-│   └── web_server.py       # Core orchestrator, audio extraction, dan pemanggil FFmpeg
-├── Desktop_UI/             # Antarmuka Desktop Native (PyQt6)
-│   ├── desktop_gui.py      # Aplikasi GUI utama, video preview, dan panel konfigurasi
-│   ├── icon.ico / icon.png # Aset ikon aplikasi
-│   ├── VanClipper.spec     # Konfigurasi packaging PyInstaller
-│   └── build_desktop.bat   # Skrip kompilasi native Windows .exe
-├── Core_Data/              # Direktori penyimpanan lokal (diabaikan oleh git)
-│   ├── models/             # Folder model Whisper / GGUF lokal
-│   ├── VideoMentah/        # Folder sumber video yang diunduh
-│   └── HasilClip/          # Folder hasil potongan klip video
-├── ENCLip.exe               # Executable Windows native siap pakai
-├── START_ENCLIP_APP.bat     # Pintasan peluncur aplikasi desktop
-├── requirements.txt        # Daftar dependensi modul Python
-├── .env.example            # Template variabel lingkungan
-├── LICENSE                 # Lisensi open-source (MIT License)
-└── README.md               # Dokumentasi resmi proyek
+├── Backend_API/                 # Modul inti pemrosesan video, transkripsi & evaluasi AI
+│   ├── web_server.py            # Core orchestrator, audio extraction, dan FFmpeg renderer
+│   └── rlsf_engine.py           # Engine reinforcement learning skor kurasi
+├── Desktop_UI/                  # Antarmuka Desktop Native (PyQt6)
+│   ├── desktop_gui.py           # Aplikasi GUI utama, video preview, dan panel konfigurasi
+│   ├── icon.ico / icon.png      # Aset ikon resolusi tinggi
+│   ├── VanClipper.spec          # Konfigurasi PyInstaller 6 bundling
+│   ├── build_desktop.bat        # Skrip otomatisasi build executable Windows
+│   └── enclip_installer.iss     # Skrip setup installer resmi (Inno Setup)
+├── Core_Data/                   # Direktori data operasional (diabaikan oleh git)
+│   ├── models/                  # Bobot model Whisper / GGUF lokal
+│   ├── VideoMentah/             # Folder sumber video
+│   └── HasilClip/               # Folder output hasil klip video
+├── ENCLip.exe                   # Executable native Windows
+├── START_ENCLIP_APP.bat         # Pintasan peluncur aplikasi desktop
+├── requirements.txt             # Daftar dependensi Python
+├── .env.example                 # Template variabel lingkungan
+├── LICENSE                      # Lisensi open-source (MIT License)
+└── README.md                    # Dokumentasi resmi proyek
 ```
 
 ---

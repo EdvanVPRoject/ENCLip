@@ -1661,7 +1661,7 @@ class YouTubeUploadWorker(QThread):
                 title=self.title,
                 description=self.description,
                 session_path=SESSION_YOUTUBE,
-                headless=False,
+                headless=True,
             )
             if success:
                 self.finished_upload.emit(True, "Klip berhasil dipublikasikan ke YouTube Shorts!")

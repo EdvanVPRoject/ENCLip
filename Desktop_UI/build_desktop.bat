@@ -15,7 +15,12 @@ if errorlevel 1 (
 )
 
 if exist "dist\ENCLip\ENCLip.exe" (
+    echo Menyalin executable dan runtime package ke folder utama...
     copy /Y "dist\ENCLip\ENCLip.exe" "..\ENCLip.exe" >nul
+    if exist "dist\ENCLip\_internal" (
+        if not exist "..\_internal" mkdir "..\_internal"
+        xcopy /E /I /Y "dist\ENCLip\_internal" "..\_internal" >nul
+    )
 )
 
 if exist "build" rmdir /s /q "build"
