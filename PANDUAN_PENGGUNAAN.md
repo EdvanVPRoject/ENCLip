@@ -29,10 +29,11 @@ ENCLip dapat dijalankan dalam beberapa opsi pilihan:
 * Klik dua kali pada **`ENCLip.exe`**.
 * *Kelebihan*: Tidak memerlukan instalasi, bebas dipindahkan ke flashdisk atau folder mana pun.
 
-### B. Versi Native Installer
-* Buka folder: `D:\ProjekAntigravity\ENCLip\naviteversion\`
-* Jalankan installer **`ENCLip_Setup_v1.0.exe`**.
-* Shortcut otomatis tersedia di Desktop dan Menu Start Windows.
+### B. Versi Native Installer (Tinggal Install .exe)
+* Buka folder: `D:\ProjekAntigravity\ENCLip\Native_Installer\`
+* Jalankan installer resmi Windows: **`ENCLip_Setup_v2.0_Terbaru.exe`** (atau klik file `1_ENCLip_Native_App.bat`).
+* Ikuti petunjuk instalasi Windows (Next -> Install).
+* Aplikasi akan otomatis terpasang di Program Files lengkap dengan Shortcut resmi di Desktop dan Menu Start Windows.
 
 ### C. Menjalankan via Terminal / Python Source
 * Buka PowerShell di folder proyek:
