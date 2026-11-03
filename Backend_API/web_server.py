@@ -32,29 +32,81 @@ except ImportError:
     load_dotenv = None  # type: ignore[assignment]
 
 
-if getattr(sys, "frozen", False):
-    ROOT = Path(sys.executable).resolve().parent
-    BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", ROOT)).resolve()
-else:
-    PROJECT_ROOT = Path(__file__).resolve().parent.parent
-    if str(PROJECT_ROOT) not in sys.path:
-        sys.path.insert(0, str(PROJECT_ROOT))
-    ROOT = PROJECT_ROOT / "Core_Data"
-    BUNDLE_DIR = ROOT
+def is_path_writable(target_dir: Path) -> bool:
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        test_file = target_dir / f".write_test_{os.getpid()}_{id(target_dir)}"
+        test_file.touch(exist_ok=True)
+        test_file.unlink(missing_ok=True)
+        return True
+    except (PermissionError, OSError):
+        return False
+
+
+def resolve_app_data_root() -> tuple[Path, Path]:
+    """
+    Menentukan direktori kerja writable & direktori aset bundle secara dinamis.
+    - DATA_ROOT: Direktori penyimpanan data klip, video, model, dan log yang aman untuk ditulis.
+    - BUNDLE_DIR: Direktori bundel aset read-only (PyInstaller _MEIPASS atau folder app).
+    """
+    if getattr(sys, "frozen", False):
+        exe_dir = Path(sys.executable).resolve().parent
+        bundle = Path(getattr(sys, "_MEIPASS", exe_dir)).resolve()
+
+        # 1. Mode Portable: jika folder tempat .exe berada dapat ditulis, gunakan folder tersebut
+        if is_path_writable(exe_dir / "HasilClip"):
+            return exe_dir, bundle
+
+        # 2. Mode Terpasang di Program Files / Read-Only: alihkan ke folder Video pengguna
+        user_videos = Path.home() / "Videos" / "ENCLip"
+        if is_path_writable(user_videos / "HasilClip"):
+            return user_videos, bundle
+
+        # 3. Fallback ke Dokumen Pengguna
+        user_docs = Path.home() / "Documents" / "ENCLip"
+        if is_path_writable(user_docs / "HasilClip"):
+            return user_docs, bundle
+
+        # 4. Fallback ke LocalAppData
+        local_app_data = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "ENCLip"
+        try:
+            local_app_data.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+        return local_app_data, bundle
+    else:
+        # Development mode
+        project_root = Path(__file__).resolve().parent.parent
+        if str(project_root) not in sys.path:
+            sys.path.insert(0, str(project_root))
+        dev_root = (project_root / "Core_Data").resolve()
+        try:
+            dev_root.mkdir(parents=True, exist_ok=True)
+            return dev_root, dev_root
+        except (PermissionError, OSError):
+            user_videos = Path.home() / "Videos" / "ENCLip"
+            user_videos.mkdir(parents=True, exist_ok=True)
+            return user_videos, dev_root
+
+
+ROOT, BUNDLE_DIR = resolve_app_data_root()
 
 DATA_DIR = ROOT / "HasilClip"
 RAW_VIDEO_DIR = ROOT / "VideoMentah"
-WEB_DIR = ROOT / "web"
+WEB_DIR = BUNDLE_DIR / "web"
 if not WEB_DIR.exists():
-    WEB_DIR = BUNDLE_DIR / "web"
+    WEB_DIR = ROOT / "web"
 if not WEB_DIR.exists():
-    WEB_DIR = ROOT / "_internal" / "web"
+    WEB_DIR = BUNDLE_DIR / "_internal" / "web"
 if not WEB_DIR.exists():
     WEB_DIR = Path(__file__).parent.parent / "Web_UI" / "frontend"
 MODEL_DIR = ROOT / "models"
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-RAW_VIDEO_DIR.mkdir(parents=True, exist_ok=True)
-MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
+for _target_dir in (DATA_DIR, RAW_VIDEO_DIR, MODEL_DIR):
+    try:
+        _target_dir.mkdir(parents=True, exist_ok=True)
+    except (PermissionError, OSError) as _err:
+        logger.warning(f"Gagal memastikan direktori {_target_dir}: {_err}")
 
 if load_dotenv is not None:
     load_dotenv(ROOT / ".env")

@@ -19,7 +19,8 @@ SetupIconFile=D:\ProjekAntigravity\ENCLip\Desktop_UI\icon.ico
 Compression=lzma2/fast
 SolidCompression=yes
 WizardStyle=modern
-PrivilegesRequiredOverridesAllowed=dialog
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog commandline
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -27,12 +28,18 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
+[Dirs]
+Name: "{app}\HasilClip"; Permissions: users-modify
+Name: "{app}\VideoMentah"; Permissions: users-modify
+Name: "{app}\models"; Permissions: users-modify
+Name: "{app}\Core_Data"; Permissions: users-modify
+
 [Files]
 Source: "{#SourceDir}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#SourceDir}\icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\icon.png"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourceDir}\.env.example"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceDir}\.env.example"; DestDir: "{app}"; Flags: ignoreversion; Permissions: users-modify
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\icon.ico"

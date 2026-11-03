@@ -78,10 +78,7 @@ def get_app_icon() -> QIcon | None:
     return None
 
 
-if getattr(sys, "frozen", False):
-    ROOT = Path(sys.executable).resolve().parent
-else:
-    ROOT = (Path(__file__).parent.parent / "Core_Data").resolve()
+ROOT = getattr(core, "ROOT", (Path(__file__).parent.parent / "Core_Data").resolve())
 
 PREVIEW_SUBTITLE_COLORS = {
     "white": "#ffffff",
@@ -2315,9 +2312,12 @@ class DependencyInstallWorker(QThread):
         self.output_line.emit("=== MEMULAI SETUP ENVIRONMENT & INSTALASI DEPENDENSI ===")
         self.output_line.emit(f"Python: {python_exe}")
 
-        for p in [Path("Core_Data/models"), Path("Core_Data/VideoMentah"), Path("Core_Data/HasilClip")]:
-            p.mkdir(parents=True, exist_ok=True)
-            self.output_line.emit(f"Direktori kerja siap: {p}")
+        for p in [core.MODEL_DIR, core.RAW_VIDEO_DIR, core.DATA_DIR]:
+            try:
+                p.mkdir(parents=True, exist_ok=True)
+                self.output_line.emit(f"Direktori kerja siap: {p}")
+            except Exception as _p_err:
+                self.output_line.emit(f"Perhatian direktori {p}: {_p_err}")
 
         if not getattr(sys, "frozen", False):
             req_file = Path("requirements.txt")
@@ -2652,7 +2652,7 @@ class HermesDesktop(QMainWindow):
 
         dir_ok = True
         dirs_created = []
-        for d in [Path("Core_Data/VideoMentah"), Path("Core_Data/HasilClip"), Path("Core_Data/models")]:
+        for d in [core.RAW_VIDEO_DIR, core.DATA_DIR, core.MODEL_DIR]:
             try:
                 d.mkdir(parents=True, exist_ok=True)
                 dirs_created.append(d.name)
@@ -2665,7 +2665,7 @@ class HermesDesktop(QMainWindow):
             "is_ok": dir_ok,
             "badge": "FOLDER KERJA SIAP" if dir_ok else "GAGAL MEMBUAT",
             "color": "#10B981" if dir_ok else "#EF4444",
-            "details": f"Folder kerja aktif: {', '.join(dirs_created)} (di Core_Data/)",
+            "details": f"Folder kerja aktif: {core.DATA_DIR.parent}",
             "desc": "Penyimpanan video mentah yang diunduh, model AI lokal offline, dan hasil render klip.",
         })
 
