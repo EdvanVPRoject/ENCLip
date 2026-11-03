@@ -3195,7 +3195,7 @@ class HermesDesktop(QMainWindow):
         page_layout.addWidget(self.create_splitter)
 
         left_column_container = QWidget()
-        left_column_container.setMinimumWidth(360)
+        left_column_container.setMinimumWidth(320)
         left_column_container.setStyleSheet("background: transparent;")
         left_outer_layout = QVBoxLayout(left_column_container)
         left_outer_layout.setContentsMargins(0, 0, 8, 0)
@@ -3262,13 +3262,31 @@ class HermesDesktop(QMainWindow):
         for hidden_c in (self.aspect_combo, self.framing_combo, self.layout_combo, self.smart_preview_sim_combo):
             hidden_c.setVisible(False)
 
+        def wrap_checkable(cb: QCheckBox, text: str, bold: bool = False) -> QWidget:
+            row = QWidget()
+            row.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+            lay = QHBoxLayout(row)
+            lay.setContentsMargins(0, 2, 0, 2)
+            lay.setSpacing(8)
+            cb.setText("")
+            cb.setMinimumWidth(0)
+            lay.addWidget(cb, 0, Qt.AlignmentFlag.AlignTop)
+            lbl = QLabel(text)
+            lbl.setWordWrap(True)
+            lbl.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Minimum)
+            lbl.setStyleSheet("color: #F8FAFC; font-weight: 700; font-size: 13px;" if bold else "color: #CBD5E1; font-size: 12px;")
+            lbl.mousePressEvent = lambda e: cb.toggle()
+            lbl.setCursor(Qt.CursorShape.PointingHandCursor)
+            lay.addWidget(lbl, 1)
+            return row
+
         # SUB-TAB 1: FORMAT & TATA LETAK (PEMISAHAN JELAS FRAMING OTOMATIS vs MANUAL)
         t1_widget = QWidget()
         t1_layout = QVBoxLayout(t1_widget)
-        t1_layout.setContentsMargins(6, 10, 10, 12)
+        t1_layout.setContentsMargins(6, 10, 16, 12)
         t1_layout.setSpacing(14)
 
-        settings = QGroupBox("📐 Mode Framing && Tata Letak Video")
+        settings = QGroupBox("📐 Mode Framing & Tata Letak")
         video_v = QVBoxLayout(settings)
         video_v.setContentsMargins(14, 14, 14, 14)
         video_v.setSpacing(10)
@@ -3398,7 +3416,7 @@ class HermesDesktop(QMainWindow):
 
         x_row = QHBoxLayout()
         x_lbl = QLabel("↔️ Geser Horisontal (X):")
-        x_lbl.setStyleSheet("color: #CBD5E1; font-size: 11px; font-weight: 600; min-width: 140px;")
+        x_lbl.setStyleSheet("color: #CBD5E1; font-size: 11px; font-weight: 600;")
         x_row.addWidget(x_lbl)
         self.manual_crop_x_slider = QSlider(Qt.Orientation.Horizontal)
         self.manual_crop_x_slider.setRange(0, 100)
@@ -3406,14 +3424,14 @@ class HermesDesktop(QMainWindow):
         self.manual_crop_x_slider.valueChanged.connect(self.on_manual_crop_x_changed)
         x_row.addWidget(self.manual_crop_x_slider, 1)
         self.manual_crop_x_val_lbl = QLabel("50% (Tengah)")
-        self.manual_crop_x_val_lbl.setMinimumWidth(80)
+        self.manual_crop_x_val_lbl.setMinimumWidth(45)
         self.manual_crop_x_val_lbl.setStyleSheet("color: #FBBF24; font-weight: 700; font-size: 11px;")
         x_row.addWidget(self.manual_crop_x_val_lbl)
         pan_lay.addLayout(x_row)
 
         y_row = QHBoxLayout()
         y_lbl = QLabel("↕️ Geser Vertikal (Y):")
-        y_lbl.setStyleSheet("color: #CBD5E1; font-size: 11px; font-weight: 600; min-width: 140px;")
+        y_lbl.setStyleSheet("color: #CBD5E1; font-size: 11px; font-weight: 600;")
         y_row.addWidget(y_lbl)
         self.manual_crop_y_slider = QSlider(Qt.Orientation.Horizontal)
         self.manual_crop_y_slider.setRange(0, 100)
@@ -3421,14 +3439,14 @@ class HermesDesktop(QMainWindow):
         self.manual_crop_y_slider.valueChanged.connect(self.on_manual_crop_y_changed)
         y_row.addWidget(self.manual_crop_y_slider, 1)
         self.manual_crop_y_val_lbl = QLabel("50% (Tengah)")
-        self.manual_crop_y_val_lbl.setMinimumWidth(80)
+        self.manual_crop_y_val_lbl.setMinimumWidth(45)
         self.manual_crop_y_val_lbl.setStyleSheet("color: #FBBF24; font-weight: 700; font-size: 11px;")
         y_row.addWidget(self.manual_crop_y_val_lbl)
         pan_lay.addLayout(y_row)
 
         z_row = QHBoxLayout()
         z_lbl = QLabel("🔍 Skala Zoom:")
-        z_lbl.setStyleSheet("color: #CBD5E1; font-size: 11px; font-weight: 600; min-width: 140px;")
+        z_lbl.setStyleSheet("color: #CBD5E1; font-size: 11px; font-weight: 600;")
         z_row.addWidget(z_lbl)
         self.manual_zoom_slider = QSlider(Qt.Orientation.Horizontal)
         self.manual_zoom_slider.setRange(100, 250)
@@ -3436,7 +3454,7 @@ class HermesDesktop(QMainWindow):
         self.manual_zoom_slider.valueChanged.connect(self.on_manual_zoom_changed)
         z_row.addWidget(self.manual_zoom_slider, 1)
         self.manual_zoom_val_lbl = QLabel("1.00x")
-        self.manual_zoom_val_lbl.setMinimumWidth(80)
+        self.manual_zoom_val_lbl.setMinimumWidth(45)
         self.manual_zoom_val_lbl.setStyleSheet("color: #38BDF8; font-weight: 700; font-size: 11px;")
         z_row.addWidget(self.manual_zoom_val_lbl)
         pan_lay.addLayout(z_row)
@@ -3480,7 +3498,7 @@ class HermesDesktop(QMainWindow):
         t1_layout.addWidget(settings)
         self.set_framing_mode("auto")
 
-        self.facecam_guide_box = QGroupBox("🎮 Posisi Kotak Facecam (Mode Streamer)")
+        self.facecam_guide_box = QGroupBox("🎮 Kotak Facecam Streamer")
         facecam_group_layout = QVBoxLayout(self.facecam_guide_box)
         facecam_group_layout.setContentsMargins(14, 14, 14, 14)
         facecam_group_layout.setSpacing(8)
@@ -3512,32 +3530,32 @@ class HermesDesktop(QMainWindow):
         self.facecam_guide_box.setVisible(False)
         t1_layout.addWidget(self.facecam_guide_box)
 
-        anticopy_box = QGroupBox("✨ Penyempurnaan Visual && Efek Dinamis")
+        anticopy_box = QGroupBox("✨ Visual & Efek Dinamis")
         ac_layout = QVBoxLayout(anticopy_box)
         ac_layout.setContentsMargins(14, 14, 14, 14)
         ac_layout.setSpacing(8)
-        self.micro_zoom_check = QCheckBox("Zoom Halus Otomatis (1.08x) saat Momen Penting / Kalimat Penekanan")
+        self.micro_zoom_check = QCheckBox()
         self.micro_zoom_check.setChecked(True)
-        self.color_boost_check = QCheckBox("Pertajam Warna && Kontras Video (Tampilan Lebih Jernih)")
-        self.mirror_video_check = QCheckBox("Balik Video Kiri-Kanan (Mirror Horizontal untuk Hindari Klaim Hak Cipta)")
-        self.speed_shift_check = QCheckBox("Percepat Sedikit Tempo 1.03x (Lolos Deteksi Audio Hak Cipta)")
-        self.auto_broll_check = QCheckBox("Sisipkan Video Ilustrasi (B-Roll) Otomatis jika Tersedia")
+        self.color_boost_check = QCheckBox()
+        self.mirror_video_check = QCheckBox()
+        self.speed_shift_check = QCheckBox()
+        self.auto_broll_check = QCheckBox()
         self.auto_broll_check.setChecked(False)
-        ac_layout.addWidget(self.micro_zoom_check)
-        ac_layout.addWidget(self.color_boost_check)
-        ac_layout.addWidget(self.mirror_video_check)
-        ac_layout.addWidget(self.speed_shift_check)
-        ac_layout.addWidget(self.auto_broll_check)
+        ac_layout.addWidget(wrap_checkable(self.micro_zoom_check, "Zoom Halus Otomatis (1.08x) saat Momen Penting / Kalimat Penekanan"))
+        ac_layout.addWidget(wrap_checkable(self.color_boost_check, "Pertajam Warna & Kontras Video (Tampilan Lebih Jernih)"))
+        ac_layout.addWidget(wrap_checkable(self.mirror_video_check, "Balik Video Kiri-Kanan (Mirror Horizontal Anti-Klaim Hak Cipta)"))
+        ac_layout.addWidget(wrap_checkable(self.speed_shift_check, "Percepat Sedikit Tempo 1.03x (Lolos Deteksi Audio Hak Cipta)"))
+        ac_layout.addWidget(wrap_checkable(self.auto_broll_check, "Sisipkan Video Ilustrasi (B-Roll) Otomatis jika Tersedia"))
         t1_layout.addWidget(anticopy_box)
         t1_layout.addStretch()
 
         # SUB-TAB 2: SUBTITLE, JUDUL HOOK ATAS & WATERMARK
         t2_widget = QWidget()
         t2_layout = QVBoxLayout(t2_widget)
-        t2_layout.setContentsMargins(6, 10, 10, 12)
+        t2_layout.setContentsMargins(6, 10, 16, 12)
         t2_layout.setSpacing(14)
 
-        subtitle_group = QGroupBox("💬 Gaya Subtitle Otomatis (Live Preview)")
+        subtitle_group = QGroupBox("💬 Subtitle Otomatis")
         sub_layout = QVBoxLayout(subtitle_group)
         sub_layout.setContentsMargins(14, 14, 14, 14)
         sub_layout.setSpacing(10)
@@ -3644,20 +3662,11 @@ class HermesDesktop(QMainWindow):
         sub_layout.addWidget(QLabel("Posisi Subtitle di Layar:"))
         sub_layout.addWidget(self.subtitle_position_combo)
 
-        size_lines_row = QHBoxLayout()
-        size_lines_row.setSpacing(10)
-        sl_col1 = QVBoxLayout()
-        sl_col1.setSpacing(4)
-        sl_col1.addWidget(QLabel("Ukuran Huruf:"))
-        sl_col1.addWidget(self.subtitle_size_combo)
-        size_lines_row.addLayout(sl_col1, 1)
+        sub_layout.addWidget(QLabel("Ukuran Huruf Subtitle:"))
+        sub_layout.addWidget(self.subtitle_size_combo)
 
-        sl_col2 = QVBoxLayout()
-        sl_col2.setSpacing(4)
-        sl_col2.addWidget(QLabel("Jumlah Baris Teks:"))
-        sl_col2.addWidget(self.subtitle_lines_combo)
-        size_lines_row.addLayout(sl_col2, 1)
-        sub_layout.addLayout(size_lines_row)
+        sub_layout.addWidget(QLabel("Jumlah Baris Teks Subtitle:"))
+        sub_layout.addWidget(self.subtitle_lines_combo)
 
         custom_color_box = QWidget()
         custom_color_row = QHBoxLayout(custom_color_box)
@@ -3675,7 +3684,8 @@ class HermesDesktop(QMainWindow):
         custom_color_row.addWidget(self.subtitle_color_button)
         custom_color_row.addWidget(self.subtitle_color_hex)
 
-        self.btn_safe_zone = QPushButton("👁️ Tampilkan Panduan Area Aman Layar HP (Shorts / Reels / TikTok)")
+        self.btn_safe_zone = QPushButton("👁️ Panduan Area Aman HP (Safe Zone)")
+        self.btn_safe_zone.setToolTip("Tampilkan atau sembunyikan garis panduan area aman layar HP (Shorts / Reels / TikTok)")
         self.btn_safe_zone.setMinimumHeight(36)
         self.btn_safe_zone.setIcon(make_vector_icon("safezone", "#38BDF8", 16))
         self.btn_safe_zone.setStyleSheet(
@@ -3689,20 +3699,19 @@ class HermesDesktop(QMainWindow):
         sub_layout.addWidget(custom_color_box)
         sub_layout.addWidget(self.btn_safe_zone)
 
-        self.emoji_subtitles_check = QCheckBox("Tambahkan Emoji Kontekstual Otomatis pada Kata Kunci Penting")
+        self.emoji_subtitles_check = QCheckBox()
         self.emoji_subtitles_check.setChecked(True)
-        sub_layout.addWidget(self.emoji_subtitles_check)
+        sub_layout.addWidget(wrap_checkable(self.emoji_subtitles_check, "Tambahkan Emoji Kontekstual Otomatis pada Kata Kunci Penting"))
         t2_layout.addWidget(subtitle_group)
 
-        wm_group = QGroupBox("🔥 Judul Hook Fleksibel (Selamanya / Intro) && Watermark")
+        wm_group = QGroupBox("🔥 Judul Hook & Watermark")
         wm_layout = QVBoxLayout(wm_group)
         wm_layout.setContentsMargins(12, 14, 12, 12)
         wm_layout.setSpacing(10)
 
-        self.hook_banner_toggle = QCheckBox("Aktifkan Judul Hook Pancingan di Video (Live Preview && Sync Auto-Clipper)")
+        self.hook_banner_toggle = QCheckBox()
         self.hook_banner_toggle.setChecked(True)
-        self.hook_banner_toggle.setStyleSheet("font-weight: 700; color: #F8FAFC;")
-        wm_layout.addWidget(self.hook_banner_toggle)
+        wm_layout.addWidget(wrap_checkable(self.hook_banner_toggle, "Aktifkan Judul Hook Pancingan di Video (Live Preview & Sync Auto-Clipper)", bold=True))
 
         hb_hint = QLabel("💡 Tips: Kamu bisa memilih posisi Hook di bawah atau langsung tarik/geser kotak Hook di kanvas video kanan.")
         hb_hint.setWordWrap(True)
@@ -3741,20 +3750,11 @@ class HermesDesktop(QMainWindow):
         wm_layout.addWidget(QLabel("Teks Judul Hook (Kosong = Otomatis AI):"))
         wm_layout.addWidget(self.hook_banner_edit)
 
-        hb_dur_pos_row = QHBoxLayout()
-        hb_dur_pos_row.setSpacing(10)
-        hb_dur_col = QVBoxLayout()
-        hb_dur_col.setSpacing(4)
-        hb_dur_col.addWidget(QLabel("Durasi Tampil Hook:"))
-        hb_dur_col.addWidget(self.hook_banner_dur_combo)
-        hb_dur_pos_row.addLayout(hb_dur_col, 1)
+        wm_layout.addWidget(QLabel("Durasi Tampil Hook:"))
+        wm_layout.addWidget(self.hook_banner_dur_combo)
 
-        hb_pos_col = QVBoxLayout()
-        hb_pos_col.setSpacing(4)
-        hb_pos_col.addWidget(QLabel("Posisi Penempatan Hook:"))
-        hb_pos_col.addWidget(self.hook_banner_pos_combo)
-        hb_dur_pos_row.addLayout(hb_pos_col, 1)
-        wm_layout.addLayout(hb_dur_pos_row)
+        wm_layout.addWidget(QLabel("Posisi Penempatan Hook:"))
+        wm_layout.addWidget(self.hook_banner_pos_combo)
 
         self.watermark_edit = QLineEdit()
         self.watermark_edit.setPlaceholderText("Opsional: @nama_akun / channel")
@@ -3772,6 +3772,9 @@ class HermesDesktop(QMainWindow):
         wm_layout.addWidget(QLabel("Teks Watermark Channel (Opsional):"))
         wm_layout.addWidget(self.watermark_edit)
 
+        wm_layout.addWidget(QLabel("Posisi Watermark:"))
+        wm_layout.addWidget(self.watermark_pos_combo)
+
         op_row = QHBoxLayout()
         self.watermark_opacity_slider = QSlider(Qt.Orientation.Horizontal)
         self.watermark_opacity_slider.setRange(10, 100)
@@ -3781,6 +3784,9 @@ class HermesDesktop(QMainWindow):
         self.watermark_opacity_slider.valueChanged.connect(lambda v: self.watermark_opacity_lbl.setText(f"{v}%"))
         op_row.addWidget(self.watermark_opacity_slider, 1)
         op_row.addWidget(self.watermark_opacity_lbl)
+
+        wm_layout.addWidget(QLabel("Transparansi Watermark:"))
+        wm_layout.addLayout(op_row)
 
         wm_img_row = QHBoxLayout()
         wm_img_row.setSpacing(6)
@@ -3793,22 +3799,6 @@ class HermesDesktop(QMainWindow):
         btn_wm_png.clicked.connect(self.choose_watermark_image)
         wm_img_row.addWidget(self.watermark_image_edit, 1)
         wm_img_row.addWidget(btn_wm_png)
-
-        wm_sub_row = QHBoxLayout()
-        wm_sub_row.setSpacing(10)
-
-        wm_pos_col = QVBoxLayout()
-        wm_pos_col.setSpacing(4)
-        wm_pos_col.addWidget(QLabel("Posisi Watermark:"))
-        wm_pos_col.addWidget(self.watermark_pos_combo)
-        wm_sub_row.addLayout(wm_pos_col, 1)
-
-        wm_op_col = QVBoxLayout()
-        wm_op_col.setSpacing(4)
-        wm_op_col.addWidget(QLabel("Transparansi Watermark:"))
-        wm_op_col.addLayout(op_row)
-        wm_sub_row.addLayout(wm_op_col, 1)
-        wm_layout.addLayout(wm_sub_row)
 
         wm_layout.addWidget(QLabel("Logo Gambar Watermark (Opsional):"))
         wm_layout.addLayout(wm_img_row)
@@ -3831,10 +3821,10 @@ class HermesDesktop(QMainWindow):
         # SUB-TAB 3: AUDIO & MUSIK LATAR
         t3_widget = QWidget()
         t3_layout = QVBoxLayout(t3_widget)
-        t3_layout.setContentsMargins(6, 10, 10, 12)
+        t3_layout.setContentsMargins(6, 10, 16, 12)
         t3_layout.setSpacing(14)
 
-        bgm_group = QGroupBox("🎵 Suara Pembicara && Musik Latar (BGM)")
+        bgm_group = QGroupBox("🎵 Audio & Musik Latar")
         bgm_box_layout = QVBoxLayout(bgm_group)
         bgm_box_layout.setContentsMargins(14, 14, 14, 14)
         bgm_box_layout.setSpacing(10)
@@ -3860,12 +3850,6 @@ class HermesDesktop(QMainWindow):
         bgm_file_row.addWidget(self.btn_clear_bgm)
         bgm_box_layout.addLayout(bgm_file_row)
 
-        vol_grid = QGridLayout()
-        vol_grid.setVerticalSpacing(6)
-        vol_grid.setHorizontalSpacing(10)
-        vol_grid.setColumnStretch(0, 1)
-        vol_grid.setColumnStretch(1, 1)
-
         bgm_vol_row = QHBoxLayout()
         self.bgm_vol_slider = QSlider(Qt.Orientation.Horizontal)
         self.bgm_vol_slider.setRange(0, 100)
@@ -3876,8 +3860,8 @@ class HermesDesktop(QMainWindow):
         bgm_vol_row.addWidget(self.bgm_vol_slider, 1)
         bgm_vol_row.addWidget(self.bgm_vol_label)
 
-        vol_grid.addWidget(QLabel("Volume Musik Latar (Ideal 5%–10%):"), 0, 0)
-        vol_grid.addLayout(bgm_vol_row, 1, 0)
+        bgm_box_layout.addWidget(QLabel("Volume Musik Latar (Ideal 5%–10%):"))
+        bgm_box_layout.addLayout(bgm_vol_row)
 
         voice_vol_row = QHBoxLayout()
         self.voice_vol_slider = QSlider(Qt.Orientation.Horizontal)
@@ -3889,23 +3873,22 @@ class HermesDesktop(QMainWindow):
         voice_vol_row.addWidget(self.voice_vol_slider, 1)
         voice_vol_row.addWidget(self.voice_vol_label)
 
-        vol_grid.addWidget(QLabel("Volume Suara Pembicara Utama:"), 0, 1)
-        vol_grid.addLayout(voice_vol_row, 1, 1)
-        bgm_box_layout.addLayout(vol_grid)
+        bgm_box_layout.addWidget(QLabel("Volume Suara Pembicara Utama:"))
+        bgm_box_layout.addLayout(voice_vol_row)
 
         audio_fx_layout = QVBoxLayout()
         audio_fx_layout.setSpacing(8)
-        self.bgm_duck_checkbox = QCheckBox("Otomatis Kecilkan Musik Saat Pembicara Bicara (Auto-Ducking)")
+        self.bgm_duck_checkbox = QCheckBox()
         self.bgm_duck_checkbox.setChecked(True)
-        audio_fx_layout.addWidget(self.bgm_duck_checkbox)
+        audio_fx_layout.addWidget(wrap_checkable(self.bgm_duck_checkbox, "Otomatis Kecilkan Musik Saat Pembicara Bicara (Auto-Ducking)"))
 
-        self.loudnorm_checkbox = QCheckBox("Stabilkan && Jernihkan Suara Pembicara (Standar Broadcast -14 LUFS)")
+        self.loudnorm_checkbox = QCheckBox()
         self.loudnorm_checkbox.setChecked(True)
-        audio_fx_layout.addWidget(self.loudnorm_checkbox)
+        audio_fx_layout.addWidget(wrap_checkable(self.loudnorm_checkbox, "Stabilkan & Jernihkan Suara Pembicara (Standar Broadcast -14 LUFS)"))
 
-        self.censor_profanity_checkbox = QCheckBox("Sensor Kata Kasar Otomatis di Teks Subtitle")
+        self.censor_profanity_checkbox = QCheckBox()
         self.censor_profanity_checkbox.setChecked(False)
-        audio_fx_layout.addWidget(self.censor_profanity_checkbox)
+        audio_fx_layout.addWidget(wrap_checkable(self.censor_profanity_checkbox, "Sensor Kata Kasar Otomatis di Teks Subtitle"))
 
         bgm_box_layout.addLayout(audio_fx_layout)
         t3_layout.addWidget(bgm_group)
@@ -3914,19 +3897,13 @@ class HermesDesktop(QMainWindow):
         # SUB-TAB 4: AI & DURASI KLIP
         t4_widget = QWidget()
         t4_layout = QVBoxLayout(t4_widget)
-        t4_layout.setContentsMargins(6, 10, 10, 12)
+        t4_layout.setContentsMargins(6, 10, 16, 12)
         t4_layout.setSpacing(14)
 
-        ai_group = QGroupBox("🧠 Mesin Kecerdasan AI && Transkripsi Suara")
+        ai_group = QGroupBox("🧠 Mesin AI & Transkripsi")
         ai_layout = QVBoxLayout(ai_group)
         ai_layout.setContentsMargins(14, 14, 14, 14)
         ai_layout.setSpacing(8)
-
-        ai_grid = QGridLayout()
-        ai_grid.setVerticalSpacing(6)
-        ai_grid.setHorizontalSpacing(10)
-        ai_grid.setColumnStretch(0, 1)
-        ai_grid.setColumnStretch(1, 1)
 
         self.ai_provider_combo = self.combo([
             ("Google Gemini Cloud (Akurasi Tinggi & Cepat)", "gemini"),
@@ -3951,15 +3928,14 @@ class HermesDesktop(QMainWindow):
         for c in (self.ai_provider_combo, self.whisper_combo, self.language_combo, self.custom_prompt_edit):
             c.setMinimumHeight(38)
 
-        ai_grid.addWidget(QLabel("Mesin Analisis Momen AI"), 0, 0)
-        ai_grid.addWidget(self.ai_provider_combo, 1, 0)
-        ai_grid.addWidget(QLabel("Mesin Transkripsi Suara ke Teks"), 0, 1)
-        ai_grid.addWidget(self.whisper_combo, 1, 1)
-        ai_grid.addWidget(QLabel("Bahasa Video"), 2, 0)
-        ai_grid.addWidget(self.language_combo, 3, 0)
-        ai_grid.addWidget(QLabel("Fokus Topik Khusus (Opsional)"), 2, 1)
-        ai_grid.addWidget(self.custom_prompt_edit, 3, 1)
-        ai_layout.addLayout(ai_grid)
+        ai_layout.addWidget(QLabel("Mesin Analisis Momen AI:"))
+        ai_layout.addWidget(self.ai_provider_combo)
+        ai_layout.addWidget(QLabel("Mesin Transkripsi Suara ke Teks:"))
+        ai_layout.addWidget(self.whisper_combo)
+        ai_layout.addWidget(QLabel("Bahasa Video:"))
+        ai_layout.addWidget(self.language_combo)
+        ai_layout.addWidget(QLabel("Fokus Topik Khusus (Opsional):"))
+        ai_layout.addWidget(self.custom_prompt_edit)
 
         self.gemini_panel = QFrame()
         self.gemini_panel.setStyleSheet("background: #090E1A; border: 1px solid #1E293B; border-radius: 8px; padding: 6px;")
@@ -4006,19 +3982,21 @@ class HermesDesktop(QMainWindow):
         ai_layout.addWidget(self.local_panel)
         t4_layout.addWidget(ai_group)
 
-        mode_group = QGroupBox("⏱️ Cara Pemotongan && Durasi Klip")
+        mode_group = QGroupBox("⏱️ Pemotongan & Durasi Klip")
         mode_layout = QVBoxLayout(mode_group)
         mode_layout.setContentsMargins(14, 14, 14, 14)
         mode_layout.setSpacing(8)
 
         clip_mode_btn_row = QHBoxLayout()
         clip_mode_btn_row.setSpacing(8)
-        self.btn_clip_mode_auto = QPushButton("🤖 Clipping Otomatis (AI / Split)")
+        self.btn_clip_mode_auto = QPushButton("🤖 Clipping Otomatis (AI)")
+        self.btn_clip_mode_auto.setToolTip("Pemotongan klip cerdas otomatis dengan AI atau pembagian rata")
         self.btn_clip_mode_auto.setMinimumHeight(38)
         self.btn_clip_mode_auto.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_clip_mode_auto.clicked.connect(lambda: self.set_clipping_mode_quick("auto"))
 
-        self.btn_clip_mode_manual = QPushButton("✂️ Clipping Manual (Tanpa Potong Otomatis)")
+        self.btn_clip_mode_manual = QPushButton("✂️ Clipping Manual")
+        self.btn_clip_mode_manual.setToolTip("Atur detik sendiri tanpa pemotongan otomatis")
         self.btn_clip_mode_manual.setMinimumHeight(38)
         self.btn_clip_mode_manual.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_clip_mode_manual.clicked.connect(lambda: self.set_clipping_mode_quick("manual"))
@@ -4047,12 +4025,6 @@ class HermesDesktop(QMainWindow):
         ps_layout.setContentsMargins(0, 4, 0, 4)
         ps_layout.setSpacing(8)
 
-        ps_grid = QGridLayout()
-        ps_grid.setVerticalSpacing(6)
-        ps_grid.setHorizontalSpacing(10)
-        ps_grid.setColumnStretch(0, 1)
-        ps_grid.setColumnStretch(1, 1)
-
         self.profile_combo = self.combo([
             ("Otomatis Sesuaikan Jenis Video (Podcast / Obrolan)", "auto"),
             ("Live Stream / Reaksi Spontan", "live"),
@@ -4075,14 +4047,29 @@ class HermesDesktop(QMainWindow):
         self.use_llm.setChecked(True)
         self.use_llm.setVisible(False)
 
-        ps_grid.addWidget(QLabel("Jenis Konten Video"), 0, 0)
-        ps_grid.addWidget(self.profile_combo, 1, 0)
-        ps_grid.addWidget(QLabel("Jumlah Maksimal Klip"), 0, 1)
-        ps_grid.addWidget(self.max_clips, 1, 1)
-        ps_grid.addWidget(QLabel("Durasi Minimal (detik, 0 = Otomatis)"), 2, 0)
-        ps_grid.addWidget(self.min_duration, 3, 0)
-        ps_grid.addWidget(QLabel("Durasi Maksimal (detik, 0 = Otomatis)"), 2, 1)
-        ps_grid.addWidget(self.max_duration, 3, 1)
+        ps_layout.addWidget(QLabel("Jenis Konten Video:"))
+        ps_layout.addWidget(self.profile_combo)
+
+        dur_row = QHBoxLayout()
+        dur_row.setSpacing(8)
+        c_col = QVBoxLayout()
+        c_col.setSpacing(3)
+        c_col.addWidget(QLabel("Maks Klip:"))
+        c_col.addWidget(self.max_clips)
+        dur_row.addLayout(c_col, 1)
+
+        min_col = QVBoxLayout()
+        min_col.setSpacing(3)
+        min_col.addWidget(QLabel("Min Detik:"))
+        min_col.addWidget(self.min_duration)
+        dur_row.addLayout(min_col, 1)
+
+        max_col = QVBoxLayout()
+        max_col.setSpacing(3)
+        max_col.addWidget(QLabel("Maks Detik:"))
+        max_col.addWidget(self.max_duration)
+        dur_row.addLayout(max_col, 1)
+        ps_layout.addLayout(dur_row)
 
         self.clip_flavor_combo = self.combo([
             ("🔥 Momen Paling Viral, Debat & Pernyataan Mengejutkan", "spicy_drama"),
@@ -4093,23 +4080,22 @@ class HermesDesktop(QMainWindow):
         ], selected=0)
         self.clip_flavor_combo.setMinimumHeight(38)
 
-        ps_grid.addWidget(QLabel("Fokus Momen yang Dicari AI"), 4, 0, 1, 2)
-        ps_grid.addWidget(self.clip_flavor_combo, 5, 0, 1, 2)
-        ps_layout.addLayout(ps_grid)
+        ps_layout.addWidget(QLabel("Fokus Momen yang Dicari AI:"))
+        ps_layout.addWidget(self.clip_flavor_combo)
 
-        self.use_audio_energy_check = QCheckBox("Deteksi Lonjakan Suara Otomatis (Tawa, Debat && Penekanan Vokal)")
+        self.use_audio_energy_check = QCheckBox()
         self.use_audio_energy_check.setChecked(True)
-        self.trim_filler_check = QCheckBox("Buang Jeda / Basa-Basi di Awal Klip (Langsung Masuk ke Inti)")
+        self.trim_filler_check = QCheckBox()
         self.trim_filler_check.setChecked(True)
-        self.snap_sentence_check = QCheckBox("Jaga Kalimat Tanya-Jawab Tetap Utuh (Anti-Potong Tengah Kalimat)")
+        self.snap_sentence_check = QCheckBox()
         self.snap_sentence_check.setChecked(True)
-        self.spicy_headline_check = QCheckBox("Buat Judul, Hook && Caption Otomatis Pemicu Save && Share FYP")
+        self.spicy_headline_check = QCheckBox()
         self.spicy_headline_check.setChecked(True)
 
-        ps_layout.addWidget(self.use_audio_energy_check)
-        ps_layout.addWidget(self.trim_filler_check)
-        ps_layout.addWidget(self.snap_sentence_check)
-        ps_layout.addWidget(self.spicy_headline_check)
+        ps_layout.addWidget(wrap_checkable(self.use_audio_energy_check, "Deteksi Lonjakan Suara Otomatis (Tawa, Debat & Penekanan Vokal)"))
+        ps_layout.addWidget(wrap_checkable(self.trim_filler_check, "Buang Jeda / Basa-Basi di Awal Klip (Langsung Masuk ke Inti)"))
+        ps_layout.addWidget(wrap_checkable(self.snap_sentence_check, "Jaga Kalimat Tanya-Jawab Tetap Utuh (Anti-Potong Tengah Kalimat)"))
+        ps_layout.addWidget(wrap_checkable(self.spicy_headline_check, "Buat Judul, Hook & Caption Otomatis Pemicu Save & Share FYP"))
 
         self.profile_hint = QLabel("AI otomatis mencari momen dengan pembuka kuat dan mengunci kalimat hingga selesai.")
         self.profile_hint.setWordWrap(True)
@@ -4292,7 +4278,7 @@ class HermesDesktop(QMainWindow):
                     sp = child.sizePolicy()
                     sp.setHorizontalPolicy(QSizePolicy.Policy.Ignored)
                     child.setSizePolicy(sp)
-                elif isinstance(child, (QLineEdit, QSpinBox, QCheckBox)):
+                elif isinstance(child, (QLineEdit, QSpinBox, QCheckBox, QPushButton)):
                     child.setMinimumWidth(0)
                     sp = child.sizePolicy()
                     sp.setHorizontalPolicy(QSizePolicy.Policy.Ignored)

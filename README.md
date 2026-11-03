@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/EdvanVPRoject/ENCLip/releases">
-    <img src="https://img.shields.io/badge/Release-ENCLip%20v1.0.0%20(Installer%20%26%20Portable)-00C853?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Release" />
+    <img src="https://img.shields.io/badge/Release-ENCLip%20v2.0.0%20(Native%20Installer%20%26%20Portable)-00C853?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Release" />
   </a>
 </p>
 
@@ -76,10 +76,11 @@ Pengguna dapat membangun skrip otomatisasi sendiri (menggunakan Python, Bash, at
 
 ## Pilihan Distribusi & Cara Menjalankan
 
-### Opsi 1: Versi Native Installer (`naviteversion`) — Direkomendasikan
-1. Buka folder `naviteversion/` (atau unduh dari tab [Releases](https://github.com/EdvanVPRoject/ENCLip/releases)).
-2. Jalankan file **`ENCLip_Setup_v1.0.exe`**.
+### Opsi 1: Versi Native Installer (`Native_Installer/`) — Direkomendasikan
+1. Unduh installer standalone resmi dari tab [GitHub Releases v2.0.0](https://github.com/EdvanVPRoject/ENCLip/releases/tag/v2.0.0) (file: **`ENCLip_Setup_v2.0.0_Native_Installer.exe`**) atau buka folder `Native_Installer/`.
+2. Jalankan file **`ENCLip_Setup_v2.0_Terbaru.exe`** (atau jalankan **`1_ENCLip_Native_App.bat`**).
 3. Ikuti wizard instalasi Windows:
+   - Include semua dependensi lengkap di dalamnya (tinggal install & langsung pakai).
    - Otomatis membuat Shortcut di Desktop dan Start Menu.
    - Terpasang rapi di Program Files.
    - Dilengkapi uninstaller resmi Windows (*Settings > Apps / Control Panel*).
@@ -88,7 +89,7 @@ Pengguna dapat membangun skrip otomatisasi sendiri (menggunakan Python, Bash, at
 
 ### Opsi 2: Versi Portable (`portable/`) — Tanpa Instalasi
 1. Buka folder `portable/`.
-2. Klik dua kali pada **`ENCLip.exe`** atau jalankan **`Buka_ENCLip_Portable.bat`**.
+2. Klik dua kali pada **`ENCLip.exe`** atau jalankan **`2_ENCLip_Portable_App.bat`**.
 3. Aplikasi langsung berjalan secara mandiri tanpa menyentuh registry sistem. Sangat cocok ditaruh di Flashdisk atau dipindahkan antar-PC.
 
 ---
