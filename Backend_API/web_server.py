@@ -142,8 +142,9 @@ class CreateJobRequest(BaseModel):
     smart_duration_mode: str = Field(default="auto", pattern="^(auto|fixed)$")
     smart_fixed_duration: int = Field(default=60, ge=5, le=3600)
     max_clips: int = Field(default=10, ge=1, le=200)
-    clip_mode: str = Field(default="smart", pattern="^(smart|split_count|split_duration)$")
+    clip_mode: str = Field(default="smart", pattern="^(smart|manual|split_count|split_duration)$")
     clip_profile: str = Field(default="auto", pattern="^(auto|live|standard|manual)$")
+    manual_segments: list[dict[str, Any]] = Field(default_factory=list)
     clip_flavor: str = Field(
         default="spicy_drama",
         pattern="^(spicy_drama|viral_all|funny_blunder|deep_meat|hype_rage)$",
@@ -161,8 +162,12 @@ class CreateJobRequest(BaseModel):
     whisper_model: str = Field(default="small")
     video_encoder: str = Field(default="auto")
     aspect_ratio: str = Field(default="16:9", pattern="^(16:9|9:16|4:3|1:1)$")
-    framing: str = Field(default="fit", pattern="^(fit|crop)$")
-    layout: str = Field(default="standard", pattern="^(auto_smart|standard|facecam_top|podcast_split)$")
+    framing: str = Field(default="ambient", pattern="^(fit|crop|ambient)$")
+    layout: str = Field(default="standard", pattern="^(auto_smart|auto_single|auto_split|standard|facecam_top|podcast_split|manual_split)$")
+    framing_mode: str = Field(default="auto", pattern="^(auto|manual)$")
+    manual_crop_x: float = Field(default=0.5, ge=0.0, le=1.0)
+    manual_crop_y: float = Field(default=0.5, ge=0.0, le=1.0)
+    manual_zoom: float = Field(default=1.0, ge=1.0, le=3.0)
     subtitle_style: str = Field(default="bold", pattern="^(classic|bold|highlight|minimal|neon|karaoke|box|none)$")
     subtitle_position: str = Field(default="auto", pattern="^(auto|top|center|bottom|free)$")
     subtitle_color: str = Field(default="auto", pattern="^(auto|white|yellow|cyan|red|green|pink|#[0-9A-Fa-f]{6})$")
@@ -184,11 +189,14 @@ class CreateJobRequest(BaseModel):
     watermark_opacity: float = Field(default=0.65, ge=0.05, le=1.0)
     hook_banner_enabled: bool = Field(default=True)
     hook_banner_text: str = Field(default="", max_length=120)
-    hook_banner_duration: int = Field(default=1, ge=0, le=300)
+    hook_banner_duration: int = Field(default=0, ge=0, le=3600)
+    hook_banner_position: str = Field(default="top")
+    hook_banner_x: float = Field(default=0.5, ge=0.0, le=1.0)
+    hook_banner_y: float = Field(default=0.11, ge=0.0, le=1.0)
     facecam_crop: list[float] | None = None
     mirror_video: bool = Field(default=False)
-    speed_shift: bool = Field(default=False)
-    color_boost: bool = Field(default=False)
+    speed_shift: bool = Field(default=True)
+    color_boost: bool = Field(default=True)
     emoji_subtitles: bool = Field(default=True)
     dynamic_micro_zoom: bool = Field(default=True)
     auto_broll: bool = Field(default=False)
@@ -199,8 +207,12 @@ class CreateJobRequest(BaseModel):
 class RenderRequest(BaseModel):
     subtitle_style: str = Field(default="bold", pattern="^(classic|bold|highlight|minimal|neon|karaoke|box|none)$")
     aspect_ratio: str = Field(default="16:9", pattern="^(16:9|9:16|4:3|1:1)$")
-    framing: str = Field(default="fit", pattern="^(fit|crop)$")
-    layout: str = Field(default="standard", pattern="^(auto_smart|standard|facecam_top|podcast_split)$")
+    framing: str = Field(default="fit", pattern="^(fit|crop|ambient)$")
+    layout: str = Field(default="standard", pattern="^(auto_smart|auto_single|auto_split|standard|facecam_top|podcast_split|manual_split)$")
+    framing_mode: str = Field(default="auto", pattern="^(auto|manual)$")
+    manual_crop_x: float = Field(default=0.5, ge=0.0, le=1.0)
+    manual_crop_y: float = Field(default=0.5, ge=0.0, le=1.0)
+    manual_zoom: float = Field(default=1.0, ge=1.0, le=3.0)
     subtitle_position: str = Field(default="auto", pattern="^(auto|top|center|bottom|free)$")
     subtitle_color: str = Field(default="auto", pattern="^(auto|white|yellow|cyan|red|green|pink|#[0-9A-Fa-f]{6})$")
     subtitle_active_color: str = Field(default="#FFDD00")
@@ -221,11 +233,14 @@ class RenderRequest(BaseModel):
     watermark_opacity: float = Field(default=0.65, ge=0.05, le=1.0)
     hook_banner_enabled: bool = Field(default=True)
     hook_banner_text: str = Field(default="", max_length=120)
-    hook_banner_duration: int = Field(default=1, ge=0, le=300)
+    hook_banner_duration: int = Field(default=0, ge=0, le=3600)
+    hook_banner_position: str = Field(default="top")
+    hook_banner_x: float = Field(default=0.5, ge=0.0, le=1.0)
+    hook_banner_y: float = Field(default=0.11, ge=0.0, le=1.0)
     facecam_crop: list[float] | None = None
     mirror_video: bool = Field(default=False)
-    speed_shift: bool = Field(default=False)
-    color_boost: bool = Field(default=False)
+    speed_shift: bool = Field(default=True)
+    color_boost: bool = Field(default=True)
     emoji_subtitles: bool = Field(default=True)
     dynamic_micro_zoom: bool = Field(default=True)
     auto_broll: bool = Field(default=False)
@@ -748,6 +763,16 @@ INDONESIAN_TRANSCRIPT_NORMALIZATION_MAP: dict[str, str] = {
     "sdh": "sudah",
     "blm": "belum",
     "tp": "tapi",
+    "sosia": "sosmed",
+    "minstan": "mie instan",
+    "dabrik": "ada break",
+    "dipus": "di-pause",
+    "membanta": "membantah",
+    "pelati": "pelatih",
+    "siaskah": "usia",
+    "nguamok": "ngamuk",
+    "nguamoook": "ngamuk",
+    "bener": "benar",
 }
 
 _SORTED_NORM_KEYS = sorted(INDONESIAN_TRANSCRIPT_NORMALIZATION_MAP.keys(), key=len, reverse=True)
@@ -761,6 +786,9 @@ def normalize_indonesian_transcript_text(text: str) -> str:
     if not text:
         return ""
 
+    # Perbaiki spasi tanda hubung kata ulang ("teman -teman" -> "teman-teman")
+    cleaned = re.sub(r"([a-zA-Z0-9]+)\s+-\s*([a-zA-Z0-9]+)", r"\1-\2", text)
+
     def _replace_match(m: re.Match[str]) -> str:
         word = m.group(0)
         norm = INDONESIAN_TRANSCRIPT_NORMALIZATION_MAP.get(word.lower())
@@ -772,7 +800,7 @@ def normalize_indonesian_transcript_text(text: str) -> str:
             return norm.capitalize()
         return norm.lower()
 
-    return _INDONESIAN_NORM_REGEX.sub(_replace_match, text)
+    return _INDONESIAN_NORM_REGEX.sub(_replace_match, cleaned)
 
 
 def split_segment_into_cues(
@@ -1104,6 +1132,15 @@ def transcribe(
             message="Transkripsi audio selesai!",
             sub_message="Semua percakapan berhasil diubah menjadi teks",
         )
+    try:
+        if "model" in locals():
+            if hasattr(model, "model") and hasattr(model.model, "unload_model"):
+                model.model.unload_model()
+            del model
+            import gc
+            gc.collect()
+    except Exception:
+        pass
     return result
 
 
@@ -1519,28 +1556,32 @@ def fallback_metadata(text: str, current_title: str = "") -> tuple[str, str, lis
                 title = " ".join(w_tokens[:7]).title()
             else:
                 title = " ".join(chosen.split()[:6]).title()
-        else:
-            # Ekstrak kata kunci topik
-            stop_w = {
-                "yang", "dan", "di", "ke", "dari", "ini", "itu", "kalau", "kalo", "karena",
-                "jadi", "terus", "tapi", "sama", "buat", "untuk", "dengan", "ada", "bisa",
-                "kita", "kami", "saya", "aku", "kamu", "dia", "mereka", "nggak", "enggak",
-                "udah", "sudah", "aja", "saja", "kan", "gini", "gitu", "tau", "tahu",
-            }
-            important = [w.capitalize() for w in words(clean_text) if len(w) >= 4 and w not in stop_w]
-            uniq_imp = list(dict.fromkeys(important))[:4]
-            title = f"Fakta Penting Tentang {' '.join(uniq_imp[:3])}" if uniq_imp else "Pembahasan Penting Podcast"
+    stop_w = {
+        "yang", "dan", "di", "ke", "dari", "ini", "itu", "kalau", "kalo", "karena", "karna",
+        "jadi", "terus", "tapi", "sama", "buat", "untuk", "dengan", "ada", "bisa", "boleh",
+        "kita", "kami", "saya", "aku", "kamu", "kalian", "dia", "mereka", "nggak", "enggak",
+        "udah", "sudah", "aja", "saja", "kan", "gini", "gitu", "begitu", "begini", "tau", "tahu",
+        "apaan", "teman", "temen", "juga", "bener", "benar", "makanya", "padahal", "sebenarnya",
+        "mungkin", "kayak", "seperti", "banget", "sekali", "lebih", "paling", "bukan", "tidak",
+        "jangan", "harus", "mau", "ingin", "akan", "lagi", "masih", "baru", "pernah", "sering",
+        "selalu", "banyak", "semua", "segala", "macam", "orang", "waktu", "saat", "ketika",
+        "habis", "setelah", "sebelum", "sampai", "cuma", "hanya", "pertama", "kedua", "ketiga",
+    }
+    if not title:
+        important = [w.capitalize() for w in words(clean_text) if len(w) >= 4 and w not in stop_w]
+        uniq_imp = list(dict.fromkeys(important))[:4]
+        title = f"Fakta Penting Tentang {' '.join(uniq_imp[:3])}" if uniq_imp else "Pembahasan Penting Podcast"
 
     caption = clean_text[:280] + ("..." if len(clean_text) > 280 else "")
-    tokens = [token for token in words(clean_text) if len(token) >= 5]
-    hashtags = ["#podcastindonesia", "#fyp"]
+    tokens = [token for token in words(clean_text) if len(token) >= 5 and token.lower() not in stop_w]
+    hashtags = ["#PodcastIndonesia", "#CurhatBang", "#PotonganPodcast", "#fyp"]
     for token in tokens:
-        tag = f"#{token}"
-        if tag not in hashtags and not is_sensitive_content(token):
-            hashtags.append(tag)
+        tag = f"#{token.capitalize()}"
+        if tag.lower() not in {h.lower() for h in hashtags} and not is_sensitive_content(token):
+            hashtags.insert(2, tag)
         if len(hashtags) >= 5:
             break
-    return title, caption, hashtags
+    return title, caption, hashtags[:5]
 
 
 def generate_clip_metadata(
@@ -2217,17 +2258,27 @@ def detect_word_context_color(
     return base_hex, hex_to_ass_bgr(base_hex, "&H0000DDFF"), False
 
 
+_HOOK_HANGING_TAIL_WORDS = {
+    "dan", "atau", "yang", "di", "ke", "dari", "untuk", "buat", "kalau", "kalo",
+    "karena", "karna", "apa", "itu", "ini", "sama", "juga", "malah", "pas", "kita",
+    "aku", "saya", "gue", "dia", "dengan", "pada", "dalam", "tapi", "tetapi", "jadi",
+}
+
+
 def build_thumbnail_hook_headline(raw_title: str, custom_text: str = "") -> str:
     """
     Meracik teks pancingan (Thumbnail Hook) dari judul klip agar padat, memicu penasaran,
-    dan siap ditampilkan di 1 detik pertama.
+    dan siap ditampilkan di bagian atas tanpa kata menggantung.
     """
     source = (custom_text or raw_title or "MOMEN PALING KRUSIAL").strip()
+    source = normalize_indonesian_transcript_text(source)
     source = sanitize_for_tiktok_safety(source)
     source = re.sub(r"^(part\s*\d+|clip\s*\d+|highlight\s*\d+)\s*[:\-·]?\s*", "", source, flags=re.IGNORECASE).strip()
-    words_list = source.split()
-    if len(words_list) > 9:
-        words_list = words_list[:9]
+    words_list = [w.strip(" ,;:-") for w in source.split() if w.strip(" ,;:-")]
+    if len(words_list) > 7:
+        words_list = words_list[:7]
+    while len(words_list) > 3 and re.sub(r"[^a-zA-Z0-9]", "", words_list[-1]).lower() in _HOOK_HANGING_TAIL_WORDS:
+        words_list.pop()
     headline = " ".join(words_list).upper()
     if headline and not headline.endswith(("!", "?", "...")):
         lower_h = headline.lower()
@@ -2652,27 +2703,41 @@ def detect_faces_robust(
                     if not (0.65 <= aspect <= 1.45):
                         continue
                     cy = fy + fh / 2.0
-                    # Wajah pembicara podcast selalu di area atas/tengah (bukan meja bawah tempat radio/mic)
-                    if cy < h * 0.08 or cy > h * 0.56:
+                    # Wajah pembicara podcast berada di area atas/tengah hingga dada (0.06 - 0.68 tinggi frame)
+                    if cy < h * 0.06 or cy > h * 0.68:
                         continue
                     detected.append((int(fx), int(fy), int(fw), int(fh)))
             return _deduplicate_faces(detected)
     except Exception:
         pass
 
-    # Fallback Haar Cascade HANYA jika YuNet gagal dimuat sama sekali
+    # Fallback Haar Cascade (Frontal + Profile) HANYA jika YuNet gagal dimuat sama sekali
     try:
         import cv2
 
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if (len(frame.shape) == 3 and frame.shape[2] == 3) else frame
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if (len(frame.shape) == 3 and len(frame.shape) == 3) else frame
         gray = cv2.equalizeHist(gray)
         frontal = load_safe_cascade("haarcascade_frontalface_default.xml")
         if frontal is not None and not frontal.empty():
-            f1 = frontal.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=6, minSize=(min_size, min_size))
+            f1 = frontal.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(min_size, min_size))
             for x, y, bw, bh in f1:
                 cy = y + bh / 2.0
-                if h * 0.08 <= cy <= h * 0.54:
+                if h * 0.06 <= cy <= h * 0.68:
                     detected.append((int(x), int(y), int(bw), int(bh)))
+        profile = load_safe_cascade("haarcascade_profileface.xml")
+        if profile is not None and not profile.empty():
+            f2 = profile.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(min_size, min_size))
+            for x, y, bw, bh in f2:
+                cy = y + bh / 2.0
+                if h * 0.06 <= cy <= h * 0.68:
+                    detected.append((int(x), int(y), int(bw), int(bh)))
+            flipped = cv2.flip(gray, 1)
+            f3 = profile.detectMultiScale(flipped, scaleFactor=1.1, minNeighbors=5, minSize=(min_size, min_size))
+            for x, y, bw, bh in f3:
+                real_x = w - x - bw
+                cy = y + bh / 2.0
+                if h * 0.06 <= cy <= h * 0.68:
+                    detected.append((int(real_x), int(y), int(bw), int(bh)))
     except Exception:
         pass
 
@@ -2703,14 +2768,14 @@ def filter_distinct_podcast_faces(
         return []
 
     candidates: list[tuple[int, int, int, int]] = []
-    min_sz = max(32, int(min(frame_w, frame_h) * 0.04))
+    min_sz = max(28, int(min(frame_w, frame_h) * 0.035))
     for fx, fy, fw, fh in faces:
         if fw < min_sz or fh < min_sz:
             continue
         if fw > frame_w * 0.72 or fh > frame_h * 0.72:
             continue
         cy = fy + fh / 2.0
-        if cy < frame_h * 0.08 or cy > frame_h * 0.56:
+        if cy < frame_h * 0.06 or cy > frame_h * 0.68:
             continue
         candidates.append((fx, fy, fw, fh))
 
@@ -2730,10 +2795,10 @@ def filter_distinct_podcast_faces(
         bcx = bx + bw / 2.0
         bcy = by + bh / 2.0
 
-        # Validasi konsistensi ukuran & kesetaraan tinggi mata terhadap wajah utama
-        if (bw * bh) < max_area * 0.38 or bh < max_fh * 0.58:
+        # Validasi konsistensi ukuran & kesetaraan tinggi mata terhadap wajah utama (toleransi sudut podcast)
+        if (bw * bh) < max_area * 0.24 or bh < max_fh * 0.48:
             continue
-        if abs(bcy - main_cy) > frame_h * 0.20:
+        if abs(bcy - main_cy) > frame_h * 0.28:
             continue
 
         duplicate = False
@@ -2849,11 +2914,11 @@ def _crop_around_face(
         x = max(0, min(vw - crop_w, x))
         return x, 0, crop_w, crop_h
 
-    # Split Panel (2 Panel atau 3 Panel)
+    # Split Panel (2 Panel atau 3 Panel) — Chest-Up Safe Margin agar wajah & bahu tidak terpotong saat bergerak
     if panel_ar >= 1.4:
-        desired_h = max(int(fh * 2.6), int(vh * 0.36))
+        desired_h = max(int(fh * 3.4), int(vh * 0.48))
     else:
-        desired_h = max(int(fh * 3.0), int(vh * 0.46))
+        desired_h = max(int(fh * 4.2), int(vh * 0.68))
 
     crop_h = min(vh, desired_h)
     crop_w = int(round(crop_h * panel_ar))
@@ -2867,7 +2932,7 @@ def _crop_around_face(
     x = int(round(cx - crop_w / 2.0))
     x = max(0, min(vw - crop_w, x))
 
-    headroom_ratio = 0.40 if panel_ar >= 1.4 else 0.38
+    headroom_ratio = 0.38 if panel_ar >= 1.4 else 0.35
     y = int(round(cy - crop_h * headroom_ratio))
     y = max(0, min(vh - crop_h, y))
     return x, y, crop_w, crop_h
@@ -3183,8 +3248,9 @@ def analyze_smart_clip_segments(
     video_path: Path,
     start_sec: float,
     end_sec: float,
-    target_w: int,
-    target_h: int,
+    target_w: int = 1080,
+    target_h: int = 1920,
+    interval_sec: float = 1.5,
 ) -> list[dict[str, Any]]:
     """
     Menganalisis setiap shot kamera di dalam klip menggunakan 100% Gemini Vision AI Director
@@ -3455,7 +3521,10 @@ def write_ass_pop_subtitle(
     subtitle_y: float = 0.78,
     hook_banner_enabled: bool = True,
     hook_banner_text: str = "",
-    hook_banner_duration: float = 1.0,
+    hook_banner_duration: float = 0.0,
+    hook_banner_position: str = "top",
+    hook_banner_x: float = 0.5,
+    hook_banner_y: float = 0.11,
     layout_segments: list[dict[str, Any]] | None = None,
     emoji_subtitles: bool = True,
     **kwargs: Any,
@@ -3467,10 +3536,12 @@ def write_ass_pop_subtitle(
         scale_factor = (height / 360.0)
         scaled_font_size = max(32, min(72, int(font_size * scale_factor * 0.95)))
         thumb_font_size = max(58, min(96, int(height * 0.072)))
+        top_header_font_size = 50
     else:
         scale_factor = (height / 420.0)
         scaled_font_size = max(42, min(92, int(font_size * scale_factor)))
         thumb_font_size = max(68, min(110, int(width * 0.078)))
+        top_header_font_size = max(44, min(76, int(width * 0.052)))
 
     primary_ass = hex_to_ass_bgr(base_color_hex, "&H00FFFFFF")
     default_active_ass = hex_to_ass_bgr(
@@ -3486,7 +3557,7 @@ def write_ass_pop_subtitle(
         margin_v = int(height * (0.08 if is_landscape else 0.14))
     else:
         alignment = 2
-        margin_v = int(height * (0.075 if is_landscape else 0.18))
+        margin_v = int(height * (0.075 if is_landscape else 0.14))
 
     free_pos_tag = ""
     if position == "free":
@@ -3510,44 +3581,62 @@ ScaledBorderAndShadow: yes
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: SmartNotice,Arial Black,{scaled_font_size},{primary_ass},{default_active_ass},&H00000000,&H80000000,-1,0,0,0,100,100,1.0,0,1,{outline_w},{shadow_w},{alignment},40,40,{margin_v},1
 Style: ThumbnailHook,Arial Black,{thumb_font_size},&H00FFFFFF,&H0000DDFF,&H00000000,&HB0000000,-1,0,0,0,100,100,1.5,0,1,6.0,3.5,5,50,50,0,1
+Style: TopHeader,Arial Black,{top_header_font_size},&H00FFFFFF,&H0000DDFF,&H00000000,&H90000000,-1,0,0,0,100,100,1.2,0,1,5.0,2.5,8,50,50,220,1
+Style: OutroCTA,Arial Black,38,&H0000DDFF,&H00FFFFFF,&H00000000,&HB0000000,-1,0,0,0,100,100,1.0,0,1,4.5,2.5,5,40,40,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     events: list[str] = []
     clip_dur = max(0.1, end - start)
-    hook_dur = max(0.0, min(clip_dur, float(hook_banner_duration))) if hook_banner_enabled else 0.0
+    raw_hb_dur = float(hook_banner_duration if hook_banner_duration is not None else 0.0)
+    # 0 atau negatif = tampil selamanya (sepanjang durasi klip)
+    hook_dur = (clip_dur if raw_hb_dur <= 0.0 else min(clip_dur, raw_hb_dur)) if hook_banner_enabled else 0.0
 
-    # 1. RENDER THUMBNAIL HOOK DI AWAL VIDEO (DEFAULT 1 DETIK PERTAMA)
+    # Hitung koordinat penempatan Hook fleksibel (top, upper_mid, center, bottom_above_sub, free)
+    hb_pos_mode = str(hook_banner_position or "top").strip().lower()
+    if hb_pos_mode == "free":
+        hb_cx = max(80, min(width - 80, int(width * float(hook_banner_x if hook_banner_x is not None else 0.5))))
+        hb_cy = max(60, min(height - 60, int(height * float(hook_banner_y if hook_banner_y is not None else 0.11))))
+    elif hb_pos_mode == "upper_mid":
+        hb_cx = width // 2
+        hb_cy = int(height * 0.28)
+    elif hb_pos_mode == "center":
+        hb_cx = width // 2
+        hb_cy = int(height * 0.45)
+    elif hb_pos_mode == "bottom_above_sub":
+        hb_cx = width // 2
+        hb_cy = int(height * 0.65)
+    else:
+        hb_cx = width // 2
+        hb_cy = int(height * (0.11 if not is_landscape else 0.15))
+
+    # 1. RENDER HOOK BANNER FLEKSIBEL (9:16 MAUPUN 16:9, BISA SELAMANYA ATAU N DETIK PERTAMA)
     if hook_banner_enabled and hook_dur > 0 and hook_banner_text.strip():
-        hb_words = hook_banner_text.strip().split()
-        colored_hb_tokens: list[str] = []
+        hdr_words = normalize_indonesian_transcript_text(hook_banner_text.strip()).split()
+        colored_hdr_tokens: list[str] = []
         has_special_colored = False
-        for idx_w, hw in enumerate(hb_words):
+        for idx_w, hw in enumerate(hdr_words):
             _, w_ass, is_spec = detect_word_context_color(hw, hook_banner_text, "auto_context")
             if is_spec:
                 has_special_colored = True
-                colored_hb_tokens.append(f"{{\\c{w_ass}}}{hw}{{\\c&H00FFFFFF}}")
-            elif not has_special_colored and idx_w >= len(hb_words) - 2:
-                # Jika tidak ada kata di kamus, beri warna Kuning Emas pada 2 kata terakhir sebagai punchline thumbnail
-                colored_hb_tokens.append(f"{{\\c&H0000DDFF}}{hw}{{\\c&H00FFFFFF}}")
+                colored_hdr_tokens.append(f"{{\\c{w_ass}}}{hw.upper()}{{\\c&H00FFFFFF}}")
+            elif not has_special_colored and idx_w >= len(hdr_words) - 2:
+                colored_hdr_tokens.append(f"{{\\c&H0000DDFF}}{hw.upper()}{{\\c&H00FFFFFF}}")
             else:
-                colored_hb_tokens.append(hw)
-
-        max_per_line = 4 if is_landscape else 3
-        hb_lines: list[str] = []
-        for i in range(0, len(colored_hb_tokens), max_per_line):
-            hb_lines.append(" ".join(colored_hb_tokens[i : i + max_per_line]))
-        hb_body = "\\N".join(hb_lines[:3])
-
-        cx = width // 2
-        cy = int(height * (0.48 if is_landscape else 0.45))
-        pop_anim = f"{{\\an5\\pos({cx},{cy})\\fscx115\\fscy115\\t(0,140,\\fscx100\\fscy100)}}"
+                colored_hdr_tokens.append(hw.upper())
+        mid_h = (len(colored_hdr_tokens) + 1) // 2
+        hdr_text = (
+            " ".join(colored_hdr_tokens[:mid_h]) + "\\N" + " ".join(colored_hdr_tokens[mid_h:])
+            if len(colored_hdr_tokens) > 3
+            else " ".join(colored_hdr_tokens)
+        )
+        style_name = "TopHeader" if not is_landscape else "ThumbnailHook"
         events.append(
-            f"Dialogue: 2,{ass_timestamp(0.0)},{ass_timestamp(hook_dur)},ThumbnailHook,,0,0,0,,{pop_anim}{hb_body}"
+            f"Dialogue: 2,{ass_timestamp(0.0)},{ass_timestamp(hook_dur)},{style_name},,0,0,0,,{{\\an8\\pos({hb_cx},{hb_cy})\\fscx112\\fscy112\\t(0,180,\\fscx100\\fscy100)}}{hdr_text}"
         )
 
-    # 2. RENDER SUBTITLE PERCAKAPAN KONTEKSTUAL
+    # 2. RENDER SUBTITLE PERCAKAPAN KONTEKSTUAL (DENGAN NORMALISASI TYPO ASR & TANPA EMOJI TOFU LIBASS)
     for item in transcript:
         seg_abs_start = float(item.get("start", 0.0))
         seg_abs_end = float(item.get("end", 0.0))
@@ -3557,7 +3646,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         item_end = min(clip_dur, seg_abs_end - start)
         if item_end <= item_start:
             continue
-        item_text = str(item.get("text", "")).strip()
+        item_text = normalize_indonesian_transcript_text(str(item.get("text", "")).strip())
         if not item_text:
             continue
 
@@ -3566,6 +3655,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         if raw_words:
             for w in raw_words:
                 w_txt = str(getattr(w, "word", "") if hasattr(w, "word") else w.get("word", "")).strip()
+                w_txt = normalize_indonesian_transcript_text(w_txt)
                 if not w_txt:
                     continue
                 w_txt = censor_word_if_enabled(w_txt, censor_profanity)
@@ -3605,8 +3695,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     _, word_ass, _ = detect_word_context_color(nw["word"], item_text, active_color_hex)
                     act_ass = word_ass
                 raw_tok = nw["word"].upper()
-                if emoji_subtitles:
-                    raw_tok = decorate_word_with_emoji(raw_tok, enabled=True)
                 cue_text = f"{free_pos_tag}{{\\c{act_ass}\\fscx122\\fscy122\\t(0,110,\\fscx106\\fscy106)}}{raw_tok}"
                 events.append(f"Dialogue: 0,{ass_timestamp(ws_t)},{ass_timestamp(we_t)},SmartNotice,,0,0,0,,{cue_text}")
             continue
@@ -3634,10 +3722,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 formatted_tokens: list[str] = []
                 for i, cw_obj in enumerate(chunk):
                     raw_tok = cw_obj["word"].upper()
-                    if emoji_subtitles:
-                        emo = map_word_to_emoji(raw_tok)
-                        if emo:
-                            raw_tok = f"{raw_tok} {emo}"
                     if i == active_i:
                         act_ass = "&H0000DDFF" if active_color_hex in ("#FFDD00", "auto_context") else default_active_ass
                         if active_color_hex == "auto_context":
@@ -3657,6 +3741,23 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
                 events.append(f"Dialogue: 0,{ass_timestamp(ws_t)},{ass_timestamp(we_t)},SmartNotice,,0,0,0,,{free_pos_tag}{cue_text}")
 
+    # 3. RENDER DYNAMIC OUTRO CTA (SAVE / SHARE) PADA 3.5 DETIK TERAKHIR UNTUK 9:16 (TANPA EMOJI UNICODE RUSAK)
+    if not is_landscape and clip_dur >= 8.0:
+        outro_start = max(2.5, clip_dur - 3.5)
+        insight_keywords = {
+            "alasan", "rahasia", "cara", "tips", "fakta", "bahaya", "sehat", "jantung",
+            "dokter", "uang", "bisnis", "kaya", "sukses", "hukum", "belajar", "penting",
+            "ilmu", "strategi", "solusi", "manfaat", "efek", "dampak", "biaya", "investasi",
+        }
+        lower_hb = (hook_banner_text or "").lower()
+        if any(k in lower_hb for k in insight_keywords):
+            cta_overlay_txt = "[ SIMPAN VIDEO INI BIAR GAK LUPA ]\\N{\\c&H00FFFFFF}PAS BUTUH NANTI!"
+        else:
+            cta_overlay_txt = "[ SHARE KE TEMEN KAMU ]\\N{\\c&H00FFFFFF}YANG RELATE SAMA INI!"
+        events.append(
+            f"Dialogue: 2,{ass_timestamp(outro_start)},{ass_timestamp(clip_dur)},OutroCTA,,0,0,0,,{{\\an5\\pos({width // 2},1380)\\fad(250,0)}}{cta_overlay_txt}"
+        )
+
     ass_path.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
 
 
@@ -3666,16 +3767,50 @@ def video_layout_filter(
     layout: str,
     face_crop: tuple[int, int, int, int] | None,
     quality: str = "1080",
+    manual_crop_x: float = 0.5,
+    manual_crop_y: float = 0.5,
+    manual_zoom: float = 1.0,
 ) -> str:
     width, height = output_dimensions(aspect_ratio, quality)
 
+    if layout in ("podcast_split", "manual_split"):
+        h1 = _make_even(height // 2)
+        h2 = height - h1
+        return (
+            f"split=2[ms_top][ms_bot];"
+            f"[ms_top]crop=iw*0.52:ih:iw*0.04:0,scale={width}:{h1}:force_original_aspect_ratio=increase,crop={width}:{h1}[p_top];"
+            f"[ms_bot]crop=iw*0.52:ih:iw*0.44:0,scale={width}:{h2}:force_original_aspect_ratio=increase,crop={width}:{h2}[p_bot];"
+            f"[p_top][p_bot]vstack=inputs=2,"
+            f"drawbox=x=0:y={h1-2}:w={width}:h=4:color=black@0.88:t=fill,setsar=1"
+        )
+
     if layout != "facecam_top" or not face_crop:
+        if framing == "ambient":
+            return (
+                f"split=2[blur_bg][main_fg];"
+                f"[blur_bg]scale=360:640:force_original_aspect_ratio=increase,crop=360:640,boxblur=12:2,scale={width}:{height}[blurred];"
+                f"[main_fg]scale={width}:-2:force_original_aspect_ratio=decrease[fg];"
+                f"[blurred][fg]overlay=(W-w)/2:(H-h)/2:shortest=1,setsar=1"
+            )
         if framing == "fit":
             return (
                 f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
                 f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,setsar=1"
             )
-        return f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setsar=1"
+        cx_ratio = max(0.0, min(1.0, float(manual_crop_x)))
+        cy_ratio = max(0.0, min(1.0, float(manual_crop_y)))
+        zoom_val = max(1.0, min(3.0, float(manual_zoom)))
+        if zoom_val > 1.01:
+            z_w = _make_even(int(round(width * zoom_val)))
+            z_h = _make_even(int(round(height * zoom_val)))
+            return (
+                f"scale={z_w}:{z_h}:force_original_aspect_ratio=increase,"
+                f"crop={width}:{height}:(iw-{width})*{cx_ratio:.3f}:(ih-{height})*{cy_ratio:.3f},setsar=1"
+            )
+        return (
+            f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height}:(iw-{width})*{cx_ratio:.3f}:(ih-{height})*{cy_ratio:.3f},setsar=1"
+        )
 
     crop_x, crop_y, crop_w, crop_h = face_crop
     top_height = int(height * 0.35)
@@ -3740,14 +3875,14 @@ def get_encoder_args(encoder: str) -> tuple[list[str], str]:
         return get_encoder_args("libx264")
 
     if encoder == "av1_nvenc":
-        return ["-c:v", "av1_nvenc", "-pix_fmt", "yuv420p", "-cq", "24"], "NVIDIA NVENC AV1"
+        return ["-c:v", "av1_nvenc", "-pix_fmt", "yuv420p", "-cq", "24", "-maxrate", "6500k", "-bufsize", "12000k"], "NVIDIA NVENC AV1"
     if encoder == "h264_nvenc":
-        return ["-c:v", "h264_nvenc", "-pix_fmt", "yuv420p", "-preset", "p4", "-cq", "21"], "NVIDIA NVENC H.264"
+        return ["-c:v", "h264_nvenc", "-pix_fmt", "yuv420p", "-preset", "p4", "-cq", "21", "-maxrate", "6500k", "-bufsize", "12000k"], "NVIDIA NVENC H.264"
     if encoder == "av1_amf":
         return ["-c:v", "av1_amf", "-pix_fmt", "yuv420p", "-quality", "speed"], "AMD AMF AV1"
     if encoder == "h264_amf":
-        return ["-c:v", "h264_amf", "-pix_fmt", "yuv420p", "-quality", "speed"], "AMD AMF H.264"
-    return ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast", "-crf", "21"], "CPU libx264"
+        return ["-c:v", "h264_amf", "-pix_fmt", "yuv420p", "-quality", "speed", "-maxrate", "6500k", "-bufsize", "12000k"], "AMD AMF H.264"
+    return ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast", "-crf", "21", "-maxrate", "6500k", "-bufsize", "12000k"], "CPU libx264"
 
 
 def run_ffmpeg_with_progress(
@@ -4145,17 +4280,61 @@ def render_clip(
     width, height = output_dimensions(options.aspect_ratio, q_opt)
 
     layout_segments: list[dict[str, Any]] | None = None
+    framing_mode = getattr(options, "framing_mode", "auto")
+    manual_crop_x = float(getattr(options, "manual_crop_x", 0.5))
+    manual_crop_y = float(getattr(options, "manual_crop_y", 0.5))
+    manual_zoom = float(getattr(options, "manual_zoom", 1.0))
+    is_auto_ai_layout = (
+        framing_mode != "manual"
+        and options.aspect_ratio == "9:16"
+        and options.layout in ("auto_smart", "auto_single", "auto_split", "podcast_split", "auto", "smart")
+    )
+
     if options.layout == "facecam_top":
         effective_face_crop = (
             resolve_pixel_face_crop(video, options, clip.start, clip.end)
         )
         layout_filter = video_layout_filter(
-            options.aspect_ratio, options.framing, options.layout, effective_face_crop, quality=q_opt
+            options.aspect_ratio,
+            options.framing,
+            options.layout,
+            effective_face_crop,
+            quality=q_opt,
+            manual_crop_x=manual_crop_x,
+            manual_crop_y=manual_crop_y,
+            manual_zoom=manual_zoom,
         )
+    elif is_auto_ai_layout and video.is_file():
+        layout_segments = analyze_smart_clip_segments(video, clip.start, clip.end, target_w=width, target_h=height, interval_sec=1.5)
+        if layout_segments and options.layout == "auto_single":
+            for seg in layout_segments:
+                if seg.get("crops"):
+                    seg["crops"] = [seg["crops"][0]]
+                    seg["face_count"] = 1
+                    seg["layout_type"] = "single_center"
+        if layout_segments:
+            layout_filter = build_dynamic_segments_filter(layout_segments, width, height, framing=options.framing)
+        else:
+            layout_filter = video_layout_filter(
+                options.aspect_ratio,
+                options.framing,
+                "standard",
+                None,
+                quality=q_opt,
+                manual_crop_x=manual_crop_x,
+                manual_crop_y=manual_crop_y,
+                manual_zoom=manual_zoom,
+            )
     else:
-        # Mengabaikan auto framing podcast: gunakan framing standar bersih 9:16 (crop/fit)
         layout_filter = video_layout_filter(
-            options.aspect_ratio, options.framing, "standard", None, quality=q_opt
+            options.aspect_ratio,
+            options.framing,
+            options.layout,
+            None,
+            quality=q_opt,
+            manual_crop_x=manual_crop_x,
+            manual_crop_y=manual_crop_y,
+            manual_zoom=manual_zoom,
         )
 
     emoji_flag = bool(getattr(options, "emoji_subtitles", True))
@@ -4185,7 +4364,10 @@ def render_clip(
         emoji_subtitles=emoji_flag,
     )
     hb_enabled = bool(getattr(options, "hook_banner_enabled", True))
-    hb_dur = int(getattr(options, "hook_banner_duration", 1))
+    hb_dur = int(getattr(options, "hook_banner_duration", 0))
+    hb_pos = str(getattr(options, "hook_banner_position", "top") or "top")
+    hb_x = float(getattr(options, "hook_banner_x", 0.5))
+    hb_y = float(getattr(options, "hook_banner_y", 0.11))
     hb_headline = build_thumbnail_hook_headline(clip.title, getattr(options, "hook_banner_text", "")) if hb_enabled else ""
     write_ass_pop_subtitle(
         sub_transcript,
@@ -4207,6 +4389,9 @@ def render_clip(
         hook_banner_enabled=hb_enabled,
         hook_banner_text=hb_headline,
         hook_banner_duration=hb_dur,
+        hook_banner_position=hb_pos,
+        hook_banner_x=hb_x,
+        hook_banner_y=hb_y,
         layout_segments=layout_segments,
         emoji_subtitles=emoji_flag,
     )
@@ -4237,7 +4422,7 @@ def render_clip(
                 f"[pre_broll_{b_idx}][broll_{b_idx}]overlay=0:0:enable='between(t,{b_s:.2f},{b_e:.2f})':eof_action=pass"
             )
 
-    if hb_enabled and hb_dur > 0 and hb_headline:
+    if hb_enabled and hb_dur > 0 and hb_headline and options.aspect_ratio != "9:16":
         box_y = int(height * 0.26)
         box_h = int(height * 0.44)
         layout_filter = (
@@ -4305,7 +4490,9 @@ def render_clip(
             logger.warning(f"Gagal memasang watermark gambar: {e}")
 
     if getattr(options, "speed_shift", False):
-        video_filter = f"{video_filter},setpts=PTS/1.03"
+        video_filter = f"{video_filter},setpts=PTS/1.03,fps=30"
+    else:
+        video_filter = f"{video_filter},fps=30"
 
     enc_args, enc_name = get_encoder_args(getattr(options, "video_encoder", "auto"))
     resolved_video = str(Path(video).resolve())
@@ -4314,13 +4501,15 @@ def render_clip(
     bgm_file = getattr(options, "bgm_path", "").strip()
     has_bgm = bool(bgm_file and Path(bgm_file).is_file())
     voice_vol = float(getattr(options, "voice_volume", 1.0))
-    bgm_vol = float(getattr(options, "bgm_volume", 0.18))
+    bgm_vol = float(getattr(options, "bgm_volume", 0.16))
     use_autoduck = bool(getattr(options, "bgm_autoduck", True))
-    use_loudnorm = bool(getattr(options, "audio_loudnorm", False))
+    use_loudnorm = bool(getattr(options, "audio_loudnorm", True))
 
-    voice_chain = f"volume={voice_vol:.2f}"
+    voice_chain = f"highpass=f=75,equalizer=f=3200:t=q:w=1.2:g=2.2,acompressor=threshold=-18dB:ratio=2.5:attack=15:release=180:makeup=2dB"
     if use_loudnorm:
-        voice_chain = f"loudnorm=I=-16:TP=-1.5:LRA=11,{voice_chain}"
+        voice_chain = f"{voice_chain},loudnorm=I=-14:TP=-1.0:LRA=9,volume={voice_vol:.2f}"
+    else:
+        voice_chain = f"{voice_chain},volume={voice_vol:.2f}"
     if getattr(options, "speed_shift", False):
         voice_chain = f"{voice_chain},atempo=1.03"
 
@@ -4336,14 +4525,14 @@ def render_clip(
             audio_filter_complex = (
                 f"[0:a]{voice_chain},asplit=2[v_main][v_sc];"
                 f"[1:a]{bgm_chain}[bgm_raw];"
-                f"[bgm_raw][v_sc]sidechaincompress=threshold=0.03:ratio=6:attack=50:release=400[bgm_ducked];"
-                f"[v_main][bgm_ducked]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+                f"[bgm_raw][v_sc]sidechaincompress=threshold=0.025:ratio=7:attack=35:release=420[bgm_ducked];"
+                f"[v_main][bgm_ducked]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[aout]"
             )
         else:
             audio_filter_complex = (
                 f"[0:a]{voice_chain}[v_main];"
                 f"[1:a]{bgm_chain}[bgm_raw];"
-                f"[v_main][bgm_raw]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+                f"[v_main][bgm_raw]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[aout]"
             )
         full_filter_complex = f"[0:v]{video_filter}[vout];{audio_filter_complex}"
         base_cmd = (
@@ -4360,10 +4549,10 @@ def render_clip(
                 "-map", "[aout]",
             ]
         )
-        cmd = base_cmd + enc_args + ["-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", "clip.mp4"]
+        cmd = base_cmd + enc_args + ["-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000", "-shortest", "-movflags", "+faststart", "clip.mp4"]
         fallback_cmd = (
             base_cmd
-            + ["-c:v", "libx264", "-preset", "fast", "-crf", "21", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", "clip.mp4"]
+            + ["-c:v", "libx264", "-preset", "fast", "-crf", "21", "-maxrate", "6500k", "-bufsize", "12000k", "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000", "-shortest", "-movflags", "+faststart", "clip.mp4"]
         )
     else:
         base_cmd = (
@@ -4377,10 +4566,10 @@ def render_clip(
                 "-af", voice_chain,
             ]
         )
-        cmd = base_cmd + enc_args + ["-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "clip.mp4"]
+        cmd = base_cmd + enc_args + ["-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000", "-movflags", "+faststart", "clip.mp4"]
         fallback_cmd = (
             base_cmd
-            + ["-c:v", "libx264", "-preset", "fast", "-crf", "21", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "clip.mp4"]
+            + ["-c:v", "libx264", "-preset", "fast", "-crf", "21", "-maxrate", "6500k", "-bufsize", "12000k", "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000", "-movflags", "+faststart", "clip.mp4"]
         )
 
     try:
@@ -4562,33 +4751,64 @@ def process_job(job_id: str, options: CreateJobRequest, source_path: str | None 
             job_dir.mkdir(parents=True, exist_ok=True)
         if job_id in CANCELED_JOBS:
             raise RuntimeError("Proses dibatalkan oleh pengguna.")
-        update_job(job_id, progress=25, message="Mengambil audio untuk transkripsi...")
+        is_manual_clip_mode = (
+            options.clip_mode == "manual"
+            or (options.clip_mode == "smart" and options.clip_profile == "manual")
+        )
         audio = job_dir / "audio.wav"
-        extract_audio(video, audio)
-        if job_id in CANCELED_JOBS:
-            raise RuntimeError("Proses dibatalkan oleh pengguna.")
-        selected_audio_model = getattr(options, "whisper_model", MODEL_NAME)
-        if selected_audio_model == "gemini":
-            update_job(job_id, progress=38, message="Mentranskrip audio via Gemini API...")
+        if is_manual_clip_mode and options.subtitle_style == "none":
+            vid_dur = media_duration(video, 60.0)
+            transcript = [{"start": 0.0, "end": max(1.0, vid_dur), "text": ""}]
         else:
-            update_job(job_id, progress=38, message=f"Transkripsi dengan Whisper {selected_audio_model}...")
-        transcript = transcribe(audio, options.language, selected_audio_model, job_id=job_id)
+            update_job(job_id, progress=25, message="Mengambil audio untuk transkripsi...")
+            extract_audio(video, audio)
+            if job_id in CANCELED_JOBS:
+                raise RuntimeError("Proses dibatalkan oleh pengguna.")
+            selected_audio_model = getattr(options, "whisper_model", MODEL_NAME)
+            if selected_audio_model == "gemini":
+                update_job(job_id, progress=38, message="Mentranskrip audio via Gemini API...")
+            else:
+                update_job(job_id, progress=38, message=f"Transkripsi dengan Whisper {selected_audio_model}...")
+            transcript = transcribe(audio, options.language, selected_audio_model, job_id=job_id)
         if job_id in CANCELED_JOBS:
             raise RuntimeError("Proses dibatalkan oleh pengguna.")
+        vid_total_dur = media_duration(video, transcript[-1]["end"] if transcript else 60.0)
         update_job(
             job_id,
             source_url=f"/raw/{video.parent.name}/{video.name}" if source_path else f"/media/{job_dir.name}/{video.name}",
             source_path=str(video),
             transcript=transcript,
-            duration=media_duration(video, transcript[-1]["end"]),
+            duration=vid_total_dur,
             progress=62,
-            message="Mencari momen terbaik...",
+            message="Menyiapkan potongan klip manual..." if is_manual_clip_mode else "Mencari momen terbaik...",
         )
-        energy_map = compute_audio_energy_map(audio) if getattr(options, "use_audio_energy", True) else None
+        energy_map = (
+            compute_audio_energy_map(audio)
+            if (not is_manual_clip_mode and getattr(options, "use_audio_energy", True) and audio.exists())
+            else None
+        )
         flavor = getattr(options, "clip_flavor", "spicy_drama")
 
-        if options.clip_mode == "smart" and options.clip_profile == "manual":
+        if is_manual_clip_mode:
             selected = []
+            for idx_m, seg_m in enumerate(getattr(options, "manual_segments", None) or [], start=1):
+                try:
+                    m_start = max(0.0, float(seg_m.get("start", 0.0)))
+                    m_end = float(seg_m.get("end", 0.0))
+                    if vid_total_dur > 0:
+                        m_end = min(vid_total_dur, m_end)
+                    if m_end > m_start:
+                        m_title = str(seg_m.get("title") or f"Klip Manual #{idx_m:02d}").strip()
+                        selected.append({
+                            "start": round(m_start, 2),
+                            "end": round(m_end, 2),
+                            "title": m_title,
+                            "hook_title": m_title,
+                            "score": 100.0,
+                            "source": "manual",
+                        })
+                except (ValueError, TypeError):
+                    pass
         elif options.clip_mode == "smart":
             smart_min = options.smart_fixed_duration if options.smart_duration_mode == "fixed" else options.min_duration
             smart_max = options.smart_fixed_duration if options.smart_duration_mode == "fixed" else options.max_duration
@@ -4647,9 +4867,9 @@ def process_job(job_id: str, options: CreateJobRequest, source_path: str | None 
                 options.segment_duration,
                 media_duration(video, transcript[-1]["end"]),
             )
-        if not selected and options.clip_profile != "manual":
+        if not selected and not is_manual_clip_mode:
             raise RuntimeError("Tidak menemukan kandidat clip. Coba durasi yang lebih pendek.")
-        if options.clip_mode == "smart" and selected:
+        if options.clip_mode == "smart" and not is_manual_clip_mode and selected:
             smart_min = options.smart_fixed_duration if options.smart_duration_mode == "fixed" else options.min_duration
             smart_max = options.smart_fixed_duration if options.smart_duration_mode == "fixed" else options.max_duration
             selected = broaden_smart_clips(
@@ -4664,13 +4884,15 @@ def process_job(job_id: str, options: CreateJobRequest, source_path: str | None 
         clips = []
         for index, item in enumerate(selected, start=1):
             h_title = str(item.get("hook_title") or item.get("title") or "").strip()
+            src_kind = "manual" if (is_manual_clip_mode or item.get("source") == "manual") else "ai"
+            c_id = f"manual-{index:02}" if src_kind == "manual" else f"clip-{index:02}"
             clip = Clip(
-                id=f"clip-{index:02}",
+                id=c_id,
                 start=float(item["start"]),
                 end=float(item["end"]),
                 score=float(item.get("score", 88.0)),
                 title=h_title,
-                source="ai",
+                source=src_kind,
                 core_topic=str(item.get("core_topic") or ""),
                 hook_title=h_title,
             )
@@ -4919,7 +5141,7 @@ def get_trend_hijacker_queries(limit: int = 15) -> list[str]:
     for t in trends[:12]:
         if len(t) <= 2:
             continue
-        hijacker_queries.append(f"podcast {t} terbaru")
+        hijacker_queries.append(f"podcast indonesia {t} terbaru")
         show = random.choice(top_shows)
         hijacker_queries.append(f"{show} {t}")
     return list(dict.fromkeys(hijacker_queries))[:limit]

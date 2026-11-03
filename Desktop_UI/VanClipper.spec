@@ -2,11 +2,12 @@ import os
 from PyInstaller.utils.hooks import collect_submodules
 from PyInstaller.utils.hooks import collect_all
 
+root_dir = os.path.abspath(os.path.join(SPECPATH, '..'))
 backend_dir = os.path.abspath(os.path.join(SPECPATH, '..', 'Backend_API'))
 
 datas = [('icon.ico', '.'), ('icon.png', '.')]
 binaries = []
-hiddenimports = ['web_server']
+hiddenimports = ['web_server', 'auto_clipper_tiktok', 'clipper_hud']
 hiddenimports += collect_submodules('cv2')
 tmp_ret = collect_all('PyQt6')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
@@ -22,7 +23,7 @@ datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 a = Analysis(
     ['desktop_gui.py'],
-    pathex=[backend_dir],
+    pathex=[root_dir, backend_dir],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,

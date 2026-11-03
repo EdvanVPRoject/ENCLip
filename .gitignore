@@ -16,7 +16,7 @@ Desktop_UI/dist/
 !Desktop_UI/VanClipper.spec
 *.manifest
 *.exe
-!ENCLip.exe
+
 *.lnk
 *.zip
 
@@ -120,3 +120,5 @@ _internal/
 portable/
 naviteversion/
 nativeversion/
+*studio_hook_settings*
+*tiktok_performance*

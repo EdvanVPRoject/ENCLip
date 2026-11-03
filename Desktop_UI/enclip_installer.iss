@@ -1,5 +1,5 @@
 #define MyAppName "ENCLip Studio"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "2.0.0"
 #define MyAppPublisher "ENCLip"
 #define MyAppExeName "ENCLip.exe"
 #define SourceDir "D:\ProjekAntigravity\ENCLip\portable"
@@ -13,10 +13,10 @@ DefaultDirName={autopf}\{#MyAppName}
 UninstallDisplayIcon={app}\{#MyAppExeName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
-OutputDir=D:\ProjekAntigravity\ENCLip\naviteversion
-OutputBaseFilename=ENCLip_Setup_v1.0
+OutputDir=D:\ProjekAntigravity\ENCLip\Native_Installer
+OutputBaseFilename=ENCLip_Setup_v2.0_Terbaru
 SetupIconFile=D:\ProjekAntigravity\ENCLip\Desktop_UI\icon.ico
-Compression=lzma2/max
+Compression=lzma2/fast
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequiredOverridesAllowed=dialog
