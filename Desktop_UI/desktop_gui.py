@@ -6853,6 +6853,8 @@ class HermesDesktop(QMainWindow):
         self.apply_model_paths()
         self.save_model_paths()
         self.current_options = options
+        if hasattr(core, "reset_canceled_job"):
+            core.reset_canceled_job(self.current_job_id)
         with core.JOBS_LOCK:
             core.JOB_OPTIONS[self.current_job_id] = options
         self.set_create_inputs_locked(True)
@@ -6920,6 +6922,8 @@ class HermesDesktop(QMainWindow):
         elif snapshot["status"] == "canceled":
             if hasattr(self, "dl_progress_card"):
                 self.dl_progress_card.setVisible(False)
+            if hasattr(self, "progress_panel"):
+                self.progress_panel.setVisible(False)
             self.poll_timer.stop()
             self.set_create_inputs_locked(False)
             self.status_label.setText("Proses dibatalkan.")
@@ -6934,8 +6938,16 @@ class HermesDesktop(QMainWindow):
             self.set_create_inputs_locked(False)
             self.render_button.setEnabled(True)
             self.add_manual_button.setEnabled(True)
-            self.log_terminal(f"ERROR: {snapshot.get('error') or snapshot['message']}")
-            QMessageBox.critical(self, "Proses gagal", snapshot.get("error") or snapshot["message"])
+            err_msg = str(snapshot.get("error") or snapshot.get("message") or "")
+            if "dibatalkan" in err_msg.lower():
+                if hasattr(self, "progress_panel"):
+                    self.progress_panel.setVisible(False)
+                self.status_label.setText("Proses dibatalkan.")
+                self.sub_status_label.setText("Pengaturan klip telah dibuka kembali.")
+                self.log_terminal("Proses telah dibatalkan.")
+            else:
+                self.log_terminal(f"ERROR: {err_msg}")
+                QMessageBox.critical(self, "Proses gagal", err_msg)
 
     def open_live_hud(self) -> None:
         try:
@@ -7835,14 +7847,18 @@ class HermesDesktop(QMainWindow):
                 self.worker.wait(500)
             except Exception:
                 pass
+        if self.current_job_id and hasattr(core, "reset_canceled_job"):
+            core.reset_canceled_job(self.current_job_id)
         self.set_create_inputs_locked(False)
+        if hasattr(self, "progress_panel"):
+            self.progress_panel.setVisible(False)
         self.status_label.setText("Proses dibatalkan.")
         self.sub_status_label.setText("Pengaturan klip telah dibuka kembali.")
         self.progress.setValue(0)
         self.total_percent_label.setText("0%")
         self.sub_progress.setValue(0)
         self.sub_percent_label.setText("0%")
-        self.log_terminal("Proses render dibatalkan. Pengaturan klip dibuka kembali.")
+        self.log_terminal("Proses dibatalkan oleh pengguna. Pengaturan klip dibuka kembali.")
 
     def cancel_to_edit_step2(self) -> None:
         self.cancel_current_process()

@@ -475,6 +475,19 @@ def cancel_job(job_id: str) -> None:
         if job_id in JOBS:
             JOBS[job_id].status = "canceled"
             JOBS[job_id].message = "Proses dibatalkan oleh pengguna."
+            JOBS[job_id].error = ""
+
+
+def reset_canceled_job(job_id: str) -> None:
+    CANCELED_JOBS.discard(job_id)
+    with JOBS_LOCK:
+        if job_id in JOBS:
+            if JOBS[job_id].status in ("canceled", "failed"):
+                JOBS[job_id].status = "downloaded"
+                JOBS[job_id].message = "Siap untuk diproses"
+                JOBS[job_id].error = ""
+                JOBS[job_id].progress = 0
+                JOBS[job_id].sub_progress = 0
 
 
 def run_command(args: list[str], cwd: Path | None = None) -> str:
@@ -4790,6 +4803,7 @@ def render_selected_clips(
 
 
 def process_job(job_id: str, options: CreateJobRequest, source_path: str | None = None) -> None:
+    CANCELED_JOBS.discard(job_id)
     try:
         from clipper_hud import launch_hud_process
         launch_hud_process()
@@ -5017,10 +5031,15 @@ def process_job(job_id: str, options: CreateJobRequest, source_path: str | None 
             message="Clip AI siap. Tonton video penuh atau tambahkan clip manual sebelum render final.",
         )
     except Exception as exc:
-        update_job(job_id, status="failed", progress=100, message="Proses gagal", error=str(exc))
+        if job_id in CANCELED_JOBS or "dibatalkan" in str(exc).lower():
+            logger.info(f"Job {job_id} dihentikan karena dibatalkan oleh pengguna.")
+            update_job(job_id, status="canceled", progress=0, message="Proses dibatalkan.", error="")
+        else:
+            update_job(job_id, status="failed", progress=100, message="Proses gagal", error=str(exc))
 
 
 def render_job(job_id: str, options: CreateJobRequest) -> None:
+    CANCELED_JOBS.discard(job_id)
     try:
         from clipper_hud import launch_hud_process
         launch_hud_process()
@@ -5055,7 +5074,11 @@ def render_job(job_id: str, options: CreateJobRequest) -> None:
         )
         update_job(job_id, render_profile=render_profile(options), status="completed", progress=100, message="Selesai")
     except Exception as exc:
-        update_job(job_id, status="failed", progress=100, message="Proses gagal", error=str(exc))
+        if job_id in CANCELED_JOBS or "dibatalkan" in str(exc).lower():
+            logger.info(f"Job render {job_id} dihentikan karena dibatalkan oleh pengguna.")
+            update_job(job_id, status="canceled", progress=0, message="Proses render dibatalkan.", error="")
+        else:
+            update_job(job_id, status="failed", progress=100, message="Proses gagal", error=str(exc))
 
 
 @app.get("/")
