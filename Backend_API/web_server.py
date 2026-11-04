@@ -195,11 +195,11 @@ class CreateJobRequest(BaseModel):
     smart_fixed_duration: int = Field(default=60, ge=5, le=3600)
     max_clips: int = Field(default=10, ge=1, le=200)
     clip_mode: str = Field(default="smart", pattern="^(smart|manual|split_count|split_duration)$")
-    clip_profile: str = Field(default="auto", pattern="^(auto|live|standard|manual)$")
+    clip_profile: str = Field(default="auto", pattern="^(auto|live|standard|music|manual)$")
     manual_segments: list[dict[str, Any]] = Field(default_factory=list)
     clip_flavor: str = Field(
         default="spicy_drama",
-        pattern="^(spicy_drama|viral_all|funny_blunder|deep_meat|hype_rage)$",
+        pattern="^(spicy_drama|viral_all|funny_blunder|deep_meat|hype_rage|music_lyrics)$",
     )
     use_audio_energy: bool = Field(default=True)
     snap_sentence_bounds: bool = Field(default=True)
@@ -1328,6 +1328,21 @@ CLIP_FLAVOR_PROFILES: dict[str, dict[str, Any]] = {
         "energy_weight": 2.4,
         "ideal_min": 30,
         "ideal_max": 85,
+    },
+    "music_lyrics": {
+        "label": "Lagu & Musik / Reff & Lirik",
+        "prompt_rule": (
+            "FOKUS UTAMA: Cari bait lagu paling menarik, seperti REFF, CHORUS, DROP MUSIK, "
+            "atau lirik yang paling emosional dan enak didengar. Potong klip tepat di awal bait lirik dan akhiri di nada akhir bait lagu!"
+        ),
+        "headline_rule": "Buat judul klip yang menyebutkan penggalan lirik atau judul lagu yang sedang dinyanyikan.",
+        "keywords": {
+            "lagu", "reff", "chorus", "cinta", "hati", "sayang", "jiwa", "rindu", "nada", "melodi",
+            "nyanyi", "lirik", "song", "love", "heart", "sing", "music", "musisi", "vokal",
+        },
+        "energy_weight": 1.2,
+        "ideal_min": 30,
+        "ideal_max": 90,
     },
 }
 

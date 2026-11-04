@@ -4338,6 +4338,7 @@ class HermesDesktop(QMainWindow):
             ("Otomatis Sesuaikan Jenis Video (Podcast / Obrolan)", "auto"),
             ("Live Stream / Reaksi Spontan", "live"),
             ("Podcast / Wawancara Mendalam", "standard"),
+            ("🎵 Klip Lagu & Video Musik (Lirik & Reff)", "music"),
             ("Pilih Klip Sendiri Nanti di Menu Review", "manual"),
         ])
         self.profile_combo.setMinimumHeight(38)
@@ -4386,6 +4387,7 @@ class HermesDesktop(QMainWindow):
             ("🥩 Insight Daging, Tips Penting & Ilmu Bermanfaat (Pemicu Save)", "deep_meat"),
             ("😂 Momen Lucu, Tawa Pecah & Hiburan (Pemicu Share)", "funny_blunder"),
             ("⚡ Momen Emosi Tinggi & Reaksi Heboh", "hype_rage"),
+            ("🎵 Klip Lagu: Reff, Chorus & Lirik Paling Puitis", "music_lyrics"),
         ], selected=0)
         self.clip_flavor_combo.setMinimumHeight(38)
 
@@ -5361,9 +5363,18 @@ class HermesDesktop(QMainWindow):
             "auto": "AI mendeteksi siklus tanya-jawab utuh secara otomatis.",
             "live": "Fokus pada blunder, reaksi spontan, emosi, kelucuan, dan interaksi.",
             "standard": "Fokus pada pertanyaan pemicu, insight mendalam, cerita, dan kesimpulan utuh.",
+            "music": "Fokus pada bagian lagu, reff / chorus, bait lirik terbaik, dan otomatis mengaktifkan fitur terjemahan lirik.",
             "manual": "Transkripsi tetap dibuat, tetapi clip dipilih sendiri melalui tab Review & manual.",
         }
-        self.profile_hint.setText(hints.get(self.profile_combo.currentData(), hints["auto"]))
+        p_val = self.profile_combo.currentData() if hasattr(self, "profile_combo") else "auto"
+        self.profile_hint.setText(hints.get(p_val, hints["auto"]))
+        if p_val == "music":
+            if hasattr(self, "translate_lyrics_check") and not self.translate_lyrics_check.isChecked():
+                self.translate_lyrics_check.setChecked(True)
+            if hasattr(self, "clip_flavor_combo"):
+                m_idx = self.clip_flavor_combo.findData("music_lyrics")
+                if m_idx >= 0:
+                    self.clip_flavor_combo.setCurrentIndex(m_idx)
 
     def update_smart_duration_fields(self) -> None:
         if not hasattr(self, "smart_duration_mode"):
@@ -5949,21 +5960,28 @@ class HermesDesktop(QMainWindow):
         self.subtitle_free_x = max(0.0, min(1.0, x))
         self.subtitle_free_y = max(0.0, min(1.0, y))
         if hasattr(self, "translate_lyrics_check") and self.translate_lyrics_check.isChecked():
-            if hasattr(self, "lyrics_pos_combo") and self.lyrics_pos_combo.currentData() == "free":
-                self.lyrics_free_x = self.subtitle_free_x
-                self.lyrics_free_y = self.subtitle_free_y
-                if hasattr(self, "lyrics_x_slider"):
-                    self.lyrics_x_slider.blockSignals(True)
-                    self.lyrics_x_slider.setValue(int(self.lyrics_free_x * 100))
-                    self.lyrics_x_slider.blockSignals(False)
-                if hasattr(self, "lyrics_x_val_lbl"):
-                    self.lyrics_x_val_lbl.setText(f"{int(self.lyrics_free_x * 100)}%")
-                if hasattr(self, "lyrics_y_slider"):
-                    self.lyrics_y_slider.blockSignals(True)
-                    self.lyrics_y_slider.setValue(int(self.lyrics_free_y * 100))
-                    self.lyrics_y_slider.blockSignals(False)
-                if hasattr(self, "lyrics_y_val_lbl"):
-                    self.lyrics_y_val_lbl.setText(f"{int(self.lyrics_free_y * 100)}%")
+            if hasattr(self, "lyrics_pos_combo") and self.lyrics_pos_combo.currentData() != "free":
+                idx_free = self.lyrics_pos_combo.findData("free")
+                if idx_free >= 0:
+                    self.lyrics_pos_combo.blockSignals(True)
+                    self.lyrics_pos_combo.setCurrentIndex(idx_free)
+                    self.lyrics_pos_combo.blockSignals(False)
+            if hasattr(self, "lyrics_free_pos_widget"):
+                self.lyrics_free_pos_widget.setVisible(True)
+            self.lyrics_free_x = self.subtitle_free_x
+            self.lyrics_free_y = self.subtitle_free_y
+            if hasattr(self, "lyrics_x_slider"):
+                self.lyrics_x_slider.blockSignals(True)
+                self.lyrics_x_slider.setValue(int(self.lyrics_free_x * 100))
+                self.lyrics_x_slider.blockSignals(False)
+            if hasattr(self, "lyrics_x_val_lbl"):
+                self.lyrics_x_val_lbl.setText(f"{int(self.lyrics_free_x * 100)}%")
+            if hasattr(self, "lyrics_y_slider"):
+                self.lyrics_y_slider.blockSignals(True)
+                self.lyrics_y_slider.setValue(int(self.lyrics_free_y * 100))
+                self.lyrics_y_slider.blockSignals(False)
+            if hasattr(self, "lyrics_y_val_lbl"):
+                self.lyrics_y_val_lbl.setText(f"{int(self.lyrics_free_y * 100)}%")
         if hasattr(self, "preview_summary"):
             if hasattr(self, "translate_lyrics_check") and self.translate_lyrics_check.isChecked() and hasattr(self, "lyrics_pos_combo") and self.lyrics_pos_combo.currentData() == "free":
                 self.preview_summary.setText(
