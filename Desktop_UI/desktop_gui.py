@@ -1636,43 +1636,45 @@ class SafeZoneOverlayWidget(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         w = self.width()
         h = self.height()
-        if w < 20 or h < 20:
+        if w < 40 or h < 40:
             return
 
-        top_h = int(h * 0.14)
-        painter.fillRect(0, 0, w, top_h, QColor(239, 68, 68, 45))
+        top_h = int(h * 0.12)
+        bot_h = int(h * 0.18)
+        right_w = int(w * 0.16)
 
-        bot_h = int(h * 0.20)
-        painter.fillRect(0, h - bot_h, w, bot_h, QColor(239, 68, 68, 45))
+        # Soft dark tint for outer non-safe areas (simulates real phone UI obstruction cleanly)
+        painter.fillRect(0, 0, w, top_h, QColor(0, 0, 0, 75))
+        painter.fillRect(0, h - bot_h, w, bot_h, QColor(0, 0, 0, 85))
+        painter.fillRect(w - right_w, top_h, right_w, h - top_h - bot_h, QColor(0, 0, 0, 65))
 
-        right_w = int(w * 0.18)
-        painter.fillRect(w - right_w, top_h, right_w, h - top_h - bot_h, QColor(245, 158, 11, 45))
-
+        # Clean dashed safe zone boundary
         safe_x = int(w * 0.05)
-        safe_y = top_h
-        safe_w = max(10, (w - right_w) - safe_x)
-        safe_h = max(10, h - top_h - bot_h)
+        safe_y = top_h + 3
+        safe_w = max(10, (w - right_w) - safe_x - 3)
+        safe_h = max(10, (h - bot_h) - safe_y - 3)
 
-        pen_safe = QPen(QColor(16, 185, 129, 210), 1.5, Qt.PenStyle.DashLine)
+        pen_safe = QPen(QColor(56, 189, 248, 160), 1.2, Qt.PenStyle.DashLine)
         painter.setPen(pen_safe)
-        painter.drawRect(safe_x, safe_y, safe_w, safe_h)
+        painter.drawRoundedRect(safe_x, safe_y, safe_w, safe_h, 6, 6)
 
-        pen_danger = QPen(QColor(239, 68, 68, 150), 1, Qt.PenStyle.DashLine)
-        painter.setPen(pen_danger)
-        painter.drawLine(0, top_h, w, top_h)
-        painter.drawLine(0, h - bot_h, w, h - bot_h)
-        painter.drawLine(w - right_w, top_h, w - right_w, h - bot_h)
+        # Subtle, clean labels
+        painter.setFont(QFont("Segoe UI", 8, QFont.Weight.DemiBold))
 
-        painter.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
-        painter.setPen(QColor(248, 113, 113, 230))
-        painter.drawText(QRect(8, 4, w - 16, 18), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "Header UI (TikTok/Reels)")
-        painter.drawText(QRect(8, h - bot_h + 4, w - 16, 18), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "Area Caption & Audio Ticker")
+        # Top area label
+        painter.setPen(QColor(203, 213, 225, 175))
+        painter.drawText(QRect(safe_x, 2, safe_w, top_h - 4), Qt.AlignmentFlag.AlignCenter, "📱 UI Atas (Nama Akun / Search)")
 
-        painter.setPen(QColor(251, 191, 36, 230))
-        painter.drawText(QRect(w - right_w + 2, top_h + 8, right_w - 4, 36), Qt.AlignmentFlag.AlignCenter, "Like / Komen")
+        # Bottom area label
+        painter.drawText(QRect(safe_x, h - bot_h + 4, safe_w, bot_h - 8), Qt.AlignmentFlag.AlignCenter, "💬 Area Caption & Sound HP")
 
-        painter.setPen(QColor(52, 211, 153, 230))
-        painter.drawText(QRect(safe_x + 6, safe_y + 6, safe_w - 12, 18), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "SAFE ZONE (Area Subtitle)")
+        # Right sidebar icons
+        painter.setPen(QColor(245, 158, 11, 200))
+        painter.drawText(QRect(w - right_w, top_h + 8, right_w - 4, 60), Qt.AlignmentFlag.AlignCenter, "❤️\n💬\n↗️")
+
+        # Safe area tag
+        painter.setPen(QColor(56, 189, 248, 210))
+        painter.drawText(QRect(safe_x + 6, safe_y + 4, safe_w - 12, 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "✓ Area Aman Konten")
 
 
 class SmartLayoutOverlayWidget(QWidget):
@@ -6024,6 +6026,9 @@ class HermesDesktop(QMainWindow):
             is_vis = not self.safe_zone_overlay.isVisible()
             self.safe_zone_overlay.setVisible(is_vis)
             if hasattr(self, "btn_safe_zone"):
+                self.btn_safe_zone.setText(
+                    "👁️ Sembunyikan Area Aman HP" if is_vis else "👁️ Panduan Area Aman HP (Safe Zone)"
+                )
                 self.btn_safe_zone.setStyleSheet(
                     "background: #1D4ED8; color: #FFFFFF; font-weight: 600; border-radius: 6px; padding: 4px 10px;"
                     if is_vis
