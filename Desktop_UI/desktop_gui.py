@@ -16,7 +16,9 @@ if not getattr(sys, "frozen", False):
         sys.path.insert(0, backend_path)
 import web_server as core
 from PyQt6.QtCore import (
+    QAbstractAnimation,
     QEasingCurve,
+    QParallelAnimationGroup,
     QPoint,
     QPointF,
     QPropertyAnimation,
@@ -2390,6 +2392,10 @@ class HermesDesktop(QMainWindow):
         self.metadata_worker: MetadataWorker | None = None
         self.manual_render_worker: ManualRenderWorker | None = None
         self.page_animation: QPropertyAnimation | None = None
+        self._tab_anim_state: dict[QTabWidget, tuple[Any, QLabel | None, QWidget | None]] = {}
+        self._bar_anims: dict[Any, QPropertyAnimation] = {}
+        self._drawer_anim: QPropertyAnimation | None = None
+        self._panel_anim: QPropertyAnimation | None = None
         self.auto_preview_items: list[dict[str, Any]] = []
         self.review_entries: list[dict[str, Any]] = []
         self.clip_preview_dialog: ClipPreviewDialog | None = None
@@ -3222,6 +3228,14 @@ class HermesDesktop(QMainWindow):
             self.video_widget.set_preview_mode(prev_mode)
 
         self.update_create_preview()
+
+    def on_subtab_bar_clicked(self, target_idx: int) -> None:
+        if not hasattr(self, "create_subtabs"):
+            return
+        from_idx = self.create_subtabs.currentIndex()
+        if target_idx == from_idx or target_idx < 0:
+            return
+        self.animate_tab_transition(self.create_subtabs, from_idx, target_idx, duration_ms=190)
 
     def on_subtab_changed(self, idx: int) -> None:
         if not hasattr(self, "create_subtabs"):
@@ -4409,6 +4423,7 @@ class HermesDesktop(QMainWindow):
         self.create_subtabs.addTab(wrap_tab(t2_widget), "2. Subtitle && Hook")
         self.create_subtabs.addTab(wrap_tab(t3_widget), "3. Audio && Musik")
         self.create_subtabs.addTab(wrap_tab(t4_widget), "4. AI && Durasi")
+        self.create_subtabs.tabBarClicked.connect(self.on_subtab_bar_clicked)
         self.create_subtabs.currentChanged.connect(self.on_subtab_changed)
 
         left_outer_layout.addWidget(self.create_subtabs, 1)
@@ -6760,7 +6775,7 @@ class HermesDesktop(QMainWindow):
             self.dl_percent_label.setText("0%")
             self.dl_status_label.setText("Mengunduh video sumber...")
             self.dl_detail_label.setText("Menghubungkan ke server sumber...")
-        self.progress_panel.setVisible(True)
+        self.set_progress_panel_visible(True)
         self.progress.setValue(0)
         self.total_percent_label.setText("0%")
         self.sub_progress.setValue(0)
@@ -6806,7 +6821,7 @@ class HermesDesktop(QMainWindow):
                 self.preview_placeholder.setVisible(False)
             self.update_create_preview()
             self.update_segment_estimate()
-        self.progress_panel.setVisible(False)
+        self.set_progress_panel_visible(False)
         for widget in self.clip_stage_widgets:
             widget.setVisible(True)
         self.set_create_inputs_locked(False)
@@ -6860,7 +6875,7 @@ class HermesDesktop(QMainWindow):
         self.set_create_inputs_locked(True)
         self.tabs.setTabEnabled(3, False)
         self.tabs.setTabEnabled(4, False)
-        self.progress_panel.setVisible(True)
+        self.set_progress_panel_visible(True)
         self.progress.setValue(0)
         self.total_percent_label.setText("0%")
         self.sub_progress.setValue(0)
@@ -6886,17 +6901,17 @@ class HermesDesktop(QMainWindow):
         msg = snapshot.get("message", "Memproses...")
         sub_msg = snapshot.get("sub_message", "")
 
-        self.progress.setValue(overall_pct)
+        self.animate_progress_bar(self.progress, overall_pct)
         self.total_percent_label.setText(f"{overall_pct}%")
         self.status_label.setText(msg)
 
-        self.sub_progress.setValue(sub_pct)
+        self.animate_progress_bar(self.sub_progress, sub_pct)
         self.sub_percent_label.setText(f"{sub_pct}%")
         self.sub_status_label.setText(sub_msg or msg)
 
         if hasattr(self, "dl_progress_card") and self.dl_progress_card.isVisible():
             effective_pct = sub_pct if sub_pct > 0 else overall_pct
-            self.dl_progress_bar.setValue(effective_pct)
+            self.animate_progress_bar(self.dl_progress_bar, effective_pct)
             self.dl_percent_label.setText(f"{effective_pct}%")
             if msg:
                 self.dl_status_label.setText(msg)
@@ -6922,8 +6937,7 @@ class HermesDesktop(QMainWindow):
         elif snapshot["status"] == "canceled":
             if hasattr(self, "dl_progress_card"):
                 self.dl_progress_card.setVisible(False)
-            if hasattr(self, "progress_panel"):
-                self.progress_panel.setVisible(False)
+            self.set_progress_panel_visible(False)
             self.poll_timer.stop()
             self.set_create_inputs_locked(False)
             self.status_label.setText("Proses dibatalkan.")
@@ -6940,8 +6954,7 @@ class HermesDesktop(QMainWindow):
             self.add_manual_button.setEnabled(True)
             err_msg = str(snapshot.get("error") or snapshot.get("message") or "")
             if "dibatalkan" in err_msg.lower():
-                if hasattr(self, "progress_panel"):
-                    self.progress_panel.setVisible(False)
+                self.set_progress_panel_visible(False)
                 self.status_label.setText("Proses dibatalkan.")
                 self.sub_status_label.setText("Pengaturan klip telah dibuka kembali.")
                 self.log_terminal("Proses telah dibatalkan.")
@@ -7717,28 +7730,177 @@ class HermesDesktop(QMainWindow):
         label.raise_()
 
     def switch_tab(self, index: int) -> None:
-        if not self.tabs.isTabEnabled(index):
+        if not hasattr(self, "tabs") or not self.tabs.isTabEnabled(index):
             return
-        self.tabs.setCurrentIndex(index)
+        current_idx = self.tabs.currentIndex()
         for button_index, button in self.nav_buttons.items():
             button.setChecked(button_index == index)
+
+        if current_idx == index:
+            return
+
+        self.animate_tab_transition(self.tabs, current_idx, index, duration_ms=220)
+
         if index == 2 and hasattr(self, "create_preview_frame"):
             self.update_create_preview()
-        page = self.tabs.widget(index)
-        if page is None or index in (2, 3):
+
+    def animate_tab_transition(self, tab_widget: QTabWidget, from_idx: int, to_idx: int, duration_ms: int = 220) -> None:
+        if from_idx == to_idx or from_idx < 0 or to_idx < 0:
+            tab_widget.setCurrentIndex(to_idx)
             return
-        if self.page_animation is not None:
-            self.page_animation.stop()
-        effect = QGraphicsOpacityEffect(page)
-        page.setGraphicsEffect(effect)
-        animation = QPropertyAnimation(effect, b"opacity", self)
-        animation.setDuration(180)
-        animation.setStartValue(0.55)
-        animation.setEndValue(1.0)
-        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-        animation.finished.connect(lambda p=page: p.setGraphicsEffect(None))
-        self.page_animation = animation
-        animation.start()
+
+        old_w = tab_widget.widget(from_idx)
+        new_w = tab_widget.widget(to_idx)
+        if old_w is None or new_w is None or not old_w.isVisible() or old_w.width() <= 0:
+            tab_widget.setCurrentIndex(to_idx)
+            return
+
+        if not hasattr(self, "_tab_anim_state"):
+            self._tab_anim_state = {}
+        if tab_widget in self._tab_anim_state:
+            prev_group, prev_overlay, prev_new = self._tab_anim_state.pop(tab_widget, (None, None, None))
+            if prev_group is not None:
+                try:
+                    prev_group.stop()
+                except Exception:
+                    pass
+            if prev_overlay is not None:
+                try:
+                    prev_overlay.deleteLater()
+                except Exception:
+                    pass
+            if prev_new is not None:
+                try:
+                    prev_new.setGraphicsEffect(None)
+                except Exception:
+                    pass
+
+        try:
+            geom = old_w.geometry()
+            pm = old_w.grab()
+        except Exception:
+            tab_widget.setCurrentIndex(to_idx)
+            return
+
+        overlay = QLabel(tab_widget)
+        overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        overlay.setPixmap(pm)
+        overlay.setGeometry(geom)
+        overlay.show()
+        overlay.raise_()
+
+        tab_widget.setCurrentIndex(to_idx)
+
+        effect_old = QGraphicsOpacityEffect(overlay)
+        overlay.setGraphicsEffect(effect_old)
+
+        anim_group = QParallelAnimationGroup(tab_widget)
+
+        anim_fade_old = QPropertyAnimation(effect_old, b"opacity", anim_group)
+        anim_fade_old.setDuration(duration_ms)
+        anim_fade_old.setStartValue(1.0)
+        anim_fade_old.setEndValue(0.0)
+        anim_fade_old.setEasingCurve(QEasingCurve.Type.OutCubic)
+        anim_group.addAnimation(anim_fade_old)
+
+        delta_x = -24 if to_idx > from_idx else 24
+        anim_pos_old = QPropertyAnimation(overlay, b"pos", anim_group)
+        anim_pos_old.setDuration(duration_ms)
+        anim_pos_old.setStartValue(geom.topLeft())
+        anim_pos_old.setEndValue(geom.topLeft() + QPoint(delta_x, 0))
+        anim_pos_old.setEasingCurve(QEasingCurve.Type.OutCubic)
+        anim_group.addAnimation(anim_pos_old)
+
+        effect_new = QGraphicsOpacityEffect(new_w)
+        new_w.setGraphicsEffect(effect_new)
+        anim_fade_new = QPropertyAnimation(effect_new, b"opacity", anim_group)
+        anim_fade_new.setDuration(duration_ms)
+        anim_fade_new.setStartValue(0.25)
+        anim_fade_new.setEndValue(1.0)
+        anim_fade_new.setEasingCurve(QEasingCurve.Type.OutCubic)
+        anim_group.addAnimation(anim_fade_new)
+
+        def on_transition_finished() -> None:
+            try:
+                overlay.deleteLater()
+            except Exception:
+                pass
+            try:
+                new_w.setGraphicsEffect(None)
+            except Exception:
+                pass
+            if tab_widget in self._tab_anim_state:
+                del self._tab_anim_state[tab_widget]
+
+        anim_group.finished.connect(on_transition_finished)
+        self._tab_anim_state[tab_widget] = (anim_group, overlay, new_w)
+        anim_group.start()
+
+    def animate_progress_bar(self, bar: Any, target_value: int | float, duration_ms: int = 250) -> None:
+        target = max(0, min(100, int(target_value)))
+        if not hasattr(self, "_bar_anims"):
+            self._bar_anims = {}
+        current_anim = self._bar_anims.get(bar)
+        if current_anim is not None and current_anim.state() == QAbstractAnimation.State.Running:
+            current_anim.stop()
+        curr = bar.value()
+        if curr == target:
+            return
+        if target < curr:
+            bar.setValue(target)
+            return
+        anim = QPropertyAnimation(bar, b"value", self)
+        anim.setDuration(duration_ms)
+        anim.setStartValue(curr)
+        anim.setEndValue(target)
+        anim.setEasingCurve(QEasingCurve.Type.OutQuad)
+        self._bar_anims[bar] = anim
+        anim.start()
+
+    def set_progress_panel_visible(self, visible: bool, animated: bool = True) -> None:
+        if not hasattr(self, "progress_panel"):
+            return
+        if not animated:
+            self.progress_panel.setVisible(visible)
+            return
+
+        if self._panel_anim is not None and self._panel_anim.state() == QAbstractAnimation.State.Running:
+            self._panel_anim.stop()
+
+        if visible:
+            self.progress_panel.setVisible(True)
+            eff = self.progress_panel.graphicsEffect()
+            if not isinstance(eff, QGraphicsOpacityEffect):
+                eff = QGraphicsOpacityEffect(self.progress_panel)
+                self.progress_panel.setGraphicsEffect(eff)
+            eff.setOpacity(0.0)
+            anim = QPropertyAnimation(eff, b"opacity", self)
+            anim.setDuration(240)
+            anim.setStartValue(0.0)
+            anim.setEndValue(1.0)
+            anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            anim.finished.connect(lambda: self.progress_panel.setGraphicsEffect(None))
+            self._panel_anim = anim
+            anim.start()
+        else:
+            if not self.progress_panel.isVisible():
+                return
+            eff = self.progress_panel.graphicsEffect()
+            if not isinstance(eff, QGraphicsOpacityEffect):
+                eff = QGraphicsOpacityEffect(self.progress_panel)
+                self.progress_panel.setGraphicsEffect(eff)
+            start_op = eff.opacity() if eff.opacity() > 0.05 else 1.0
+            anim = QPropertyAnimation(eff, b"opacity", self)
+            anim.setDuration(200)
+            anim.setStartValue(start_op)
+            anim.setEndValue(0.0)
+            anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            def on_hidden() -> None:
+                self.progress_panel.setVisible(False)
+                self.progress_panel.setGraphicsEffect(None)
+            anim.finished.connect(on_hidden)
+            self._panel_anim = anim
+            anim.start()
 
     def toggle_theme(self) -> None:
         self.apply_theme(self.current_theme != "light")
@@ -7760,14 +7922,17 @@ class HermesDesktop(QMainWindow):
                 "QLabel { background: transparent; color: #334155; padding: 2px 6px; } "
                 "QToolBar { background: #ffffff; border-bottom: 1px solid #e2e8f0; spacing: 8px; padding: 8px 16px; } "
                 "QFrame#navPillTrack { background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 10px; } "
-                "QPushButton#navButton { background: transparent; border: 1px solid transparent; border-radius: 7px; padding: 6px 12px; color: #64748b; font-weight: 600; font-size: 12px; } "
-                "QPushButton#navButton:hover { background: #e2e8f0; color: #0f172a; } "
+                "QPushButton#navButton { background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 6px 13px; color: #64748b; font-weight: 600; font-size: 12px; } "
+                "QPushButton#navButton:hover { background: #e2e8f0; border-color: #cbd5e1; color: #0f172a; } "
+                "QPushButton#navButton:pressed { background: #cbd5e1; } "
                 "QPushButton#navButton:checked { background: #2563eb; border: 1px solid #1d4ed8; color: #ffffff; font-weight: 700; } "
                 "QGroupBox { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 14px; margin-top: 0px; padding: 40px 16px 14px 16px; } "
                 "QGroupBox::title { subcontrol-origin: padding; subcontrol-position: top left; left: 14px; top: 10px; padding: 4px 10px; color: #1e40af; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 7px; font-weight: 800; font-size: 12px; } "
                 "QLineEdit, QComboBox, QSpinBox, QTextEdit { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 12px; min-height: 24px; color: #0f172a; } "
                 "QPushButton { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 16px; color: #334155; font-weight: 600; } "
                 "QPushButton#primary { background: #2563eb; color: #ffffff; font-weight: 700; border: 1px solid #2563eb; border-radius: 10px; padding: 10px 24px; } "
+                "QPushButton#primary:hover { background: #1d4ed8; border-color: #1e40af; } "
+                "QPushButton#primary:pressed { background: #1e40af; } "
                 "QScrollBar:vertical { background: transparent; width: 7px; margin: 2px 1px; } "
                 "QScrollBar::handle:vertical { background: #94a3b8; min-height: 28px; border-radius: 3px; } "
                 "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; } "
@@ -7782,8 +7947,9 @@ class HermesDesktop(QMainWindow):
             "QToolBar { background: #0A0F1A; border-bottom: 1px solid #1E293B; spacing: 6px; padding: 6px 14px; } "
             "QLabel#brand { color: #f8fafc; font-size: 17px; font-weight: 900; padding-right: 4px; letter-spacing: 0.3px; } "
             "QFrame#navPillTrack { background: #0E1525; border: 1px solid #1E293B; border-radius: 10px; } "
-            "QPushButton#navButton { background: transparent; border: 1px solid transparent; border-radius: 7px; padding: 6px 12px; color: #94a3b8; font-weight: 600; font-size: 12px; } "
-            "QPushButton#navButton:hover { background: #162033; color: #f8fafc; } "
+            "QPushButton#navButton { background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 6px 13px; color: #94a3b8; font-weight: 600; font-size: 12px; } "
+            "QPushButton#navButton:hover { background: rgba(56, 189, 248, 0.09); border-color: rgba(56, 189, 248, 0.28); color: #f8fafc; } "
+            "QPushButton#navButton:pressed { background: rgba(37, 99, 235, 0.25); } "
             "QPushButton#navButton:checked { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563EB, stop:1 #1D4ED8); border: 1px solid #60A5FA; color: #FFFFFF; font-weight: 700; } "
             "QGroupBox { background: #0E1525; border: 1px solid #1E293B; border-radius: 14px; margin-top: 0px; padding: 40px 14px 14px 14px; } "
             "QGroupBox::title { subcontrol-origin: padding; subcontrol-position: top left; left: 14px; top: 10px; padding: 4px 12px; color: #E0F2FE; background: #172554; border: 1px solid #2563EB; border-radius: 7px; font-size: 12px; font-weight: 800; } "
@@ -7797,8 +7963,10 @@ class HermesDesktop(QMainWindow):
             "QComboBox QAbstractItemView { background: #0F172A; border: 1px solid #334155; border-radius: 8px; color: #f1f5f9; selection-background-color: #2563eb; selection-color: #ffffff; padding: 4px; } "
             "QPushButton { background: #162032; border: 1px solid #2C3E58; border-radius: 8px; padding: 7px 14px; color: #e2e8f0; font-weight: 600; } "
             "QPushButton:hover { background: #1E2D45; border-color: #475569; color: #ffffff; } "
+            "QPushButton:pressed { background: #111A29; } "
             "QPushButton#primary { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563eb, stop:1 #4f46e5); color: #ffffff; font-weight: 800; border: 1px solid #60a5fa; border-radius: 10px; padding: 10px 24px; } "
             "QPushButton#primary:hover { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1d4ed8, stop:1 #4338ca); border-color: #93c5fd; } "
+            "QPushButton#primary:pressed { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1e40af, stop:1 #3730a3); border-color: #60a5fa; } "
             "QPushButton:disabled { color: #475569; background: #0B0F18; border-color: #161F2E; } "
             "QCheckBox { spacing: 10px; padding: 4px 4px; color: #f1f5f9; font-weight: 500; } "
             "QCheckBox::indicator { width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid #3B4C68; background: #090D16; } "
@@ -7850,8 +8018,7 @@ class HermesDesktop(QMainWindow):
         if self.current_job_id and hasattr(core, "reset_canceled_job"):
             core.reset_canceled_job(self.current_job_id)
         self.set_create_inputs_locked(False)
-        if hasattr(self, "progress_panel"):
-            self.progress_panel.setVisible(False)
+        self.set_progress_panel_visible(False)
         self.status_label.setText("Proses dibatalkan.")
         self.sub_status_label.setText("Pengaturan klip telah dibuka kembali.")
         self.progress.setValue(0)
@@ -7867,7 +8034,8 @@ class HermesDesktop(QMainWindow):
     def build_terminal_drawer(self) -> QWidget:
         drawer = QFrame()
         drawer.setObjectName("terminalDrawer")
-        drawer.setFixedHeight(170)
+        drawer.setMaximumHeight(170)
+        drawer.setMinimumHeight(0)
         drawer.setStyleSheet("QFrame#terminalDrawer { background: #090d16; border-top: 1px solid #1e293b; }")
         layout = QVBoxLayout(drawer)
         layout.setContentsMargins(12, 6, 12, 8)
@@ -7909,11 +8077,39 @@ class HermesDesktop(QMainWindow):
         return drawer
 
     def toggle_terminal_drawer(self) -> None:
-        if hasattr(self, "terminal_drawer"):
-            visible = not self.terminal_drawer.isVisible()
-            self.terminal_drawer.setVisible(visible)
-            if hasattr(self, "terminal_toggle_btn"):
-                self.terminal_toggle_btn.setChecked(visible)
+        if not hasattr(self, "terminal_drawer"):
+            return
+        is_opening = not self.terminal_drawer.isVisible()
+        if hasattr(self, "terminal_toggle_btn"):
+            self.terminal_toggle_btn.setChecked(is_opening)
+
+        if self._drawer_anim is not None and self._drawer_anim.state() == QAbstractAnimation.State.Running:
+            self._drawer_anim.stop()
+
+        target_height = 170
+        if is_opening:
+            self.terminal_drawer.setMaximumHeight(0)
+            self.terminal_drawer.setVisible(True)
+            anim = QPropertyAnimation(self.terminal_drawer, b"maximumHeight", self)
+            anim.setDuration(220)
+            anim.setStartValue(0)
+            anim.setEndValue(target_height)
+            anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            self._drawer_anim = anim
+            anim.start()
+        else:
+            current_h = self.terminal_drawer.height()
+            anim = QPropertyAnimation(self.terminal_drawer, b"maximumHeight", self)
+            anim.setDuration(180)
+            anim.setStartValue(current_h)
+            anim.setEndValue(0)
+            anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            def on_drawer_closed() -> None:
+                self.terminal_drawer.setVisible(False)
+                self.terminal_drawer.setMaximumHeight(target_height)
+            anim.finished.connect(on_drawer_closed)
+            self._drawer_anim = anim
+            anim.start()
 
     def log_terminal(self, msg: str) -> None:
         if hasattr(self, "terminal_box"):
