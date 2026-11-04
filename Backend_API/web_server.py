@@ -254,6 +254,16 @@ class CreateJobRequest(BaseModel):
     auto_broll: bool = Field(default=False)
     broll_folder: str = Field(default="")
     skip_if_has_subtitles: bool = Field(default=False, description="Otomatis lewati penambahan subtitle jika video sudah memiliki subtitle (embedded/hardsub).")
+    translate_lyrics: bool = Field(default=False)
+    lyrics_target_lang: str = Field(default="id")
+    lyrics_display_mode: str = Field(default="dual", pattern="^(dual|translated_only|original_only)$")
+    lyrics_position: str = Field(default="auto", pattern="^(auto|top|center|bottom|free)$")
+    lyrics_pos_x: float = Field(default=0.15, ge=0.0, le=1.0)
+    lyrics_pos_y: float = Field(default=0.78, ge=0.0, le=1.0)
+    save_translated_srt: bool = Field(default=True)
+    save_translated_lrc: bool = Field(default=True)
+    save_translated_txt: bool = Field(default=True)
+    lyrics_save_folder: str = Field(default="")
 
 
 class RenderRequest(BaseModel):
@@ -298,6 +308,16 @@ class RenderRequest(BaseModel):
     auto_broll: bool = Field(default=False)
     broll_folder: str = Field(default="")
     skip_if_has_subtitles: bool = Field(default=False, description="Otomatis lewati penambahan subtitle jika video sudah memiliki subtitle (embedded/hardsub).")
+    translate_lyrics: bool = Field(default=False)
+    lyrics_target_lang: str = Field(default="id")
+    lyrics_display_mode: str = Field(default="dual", pattern="^(dual|translated_only|original_only)$")
+    lyrics_position: str = Field(default="auto", pattern="^(auto|top|center|bottom|free)$")
+    lyrics_pos_x: float = Field(default=0.15, ge=0.0, le=1.0)
+    lyrics_pos_y: float = Field(default=0.78, ge=0.0, le=1.0)
+    save_translated_srt: bool = Field(default=True)
+    save_translated_lrc: bool = Field(default=True)
+    save_translated_txt: bool = Field(default=True)
+    lyrics_save_folder: str = Field(default="")
 
 
 class ManualClipRequest(BaseModel):
@@ -3589,6 +3609,172 @@ def check_video_has_subtitles(video_path: Path | str, start_sec: float = 0.0, en
     return False
 
 
+def write_lrc(transcript: list[dict[str, Any]], lrc_path: Path, mode: str = "dual") -> None:
+    """
+    Menulis file lirik lagu terstandar .lrc (format yang didukung pemutar musik dan karaoke).
+    """
+    lines = [
+        "[ti:Lirik Lagu ENCLip]",
+        "[re:ENCLip AI Video Clipper]",
+        "",
+    ]
+    for seg in transcript:
+        s = float(seg.get("start", 0.0))
+        mins = int(s // 60)
+        secs = s % 60
+        ts = f"[{mins:02d}:{secs:05.2f}]"
+        orig = seg.get("text", "").strip()
+        trans = seg.get("translated_text", "").strip()
+        if mode == "dual" and trans and trans != orig:
+            lines.append(f"{ts}{orig} / {trans}")
+        elif mode == "translated_only" and trans:
+            lines.append(f"{ts}{trans}")
+        else:
+            lines.append(f"{ts}{orig}")
+    try:
+        lrc_path.write_text("\n".join(lines), encoding="utf-8")
+    except Exception as exc:
+        logger.warning(f"Gagal menulis file .lrc ({lrc_path}): {exc}")
+
+
+def write_lyrics_txt(transcript: list[dict[str, Any]], txt_path: Path, mode: str = "dual") -> None:
+    """
+    Menulis file teks lirik lagu lengkap (.txt).
+    """
+    lines = ["=== LIRIK LAGU LENGKAP ===", ""]
+    for seg in transcript:
+        s = float(seg.get("start", 0.0))
+        e = float(seg.get("end", 0.0))
+        orig = seg.get("text", "").strip()
+        trans = seg.get("translated_text", "").strip()
+        mins_s = int(s // 60)
+        secs_s = int(s % 60)
+        mins_e = int(e // 60)
+        secs_e = int(e % 60)
+        ts_str = f"[{mins_s:02d}:{secs_s:02d} - {mins_e:02d}:{secs_e:02d}]"
+        if mode == "dual" and trans and trans != orig:
+            lines.append(f"{ts_str}")
+            lines.append(f"  Asli       : {orig}")
+            lines.append(f"  Terjemahan : {trans}")
+            lines.append("")
+        elif mode == "translated_only" and trans:
+            lines.append(f"{ts_str} {trans}")
+        else:
+            lines.append(f"{ts_str} {orig}")
+    try:
+        txt_path.write_text("\n".join(lines), encoding="utf-8")
+    except Exception as exc:
+        logger.warning(f"Gagal menulis file lirik .txt ({txt_path}): {exc}")
+
+
+def write_translated_srt(
+    transcript: list[dict[str, Any]],
+    start: float,
+    end: float,
+    srt_path: Path,
+    mode: str = "dual",
+) -> None:
+    """
+    Menulis file subtitle .srt khusus untuk terjemahan lirik lagu.
+    """
+    lines = []
+    idx = 1
+    for seg in transcript:
+        s = float(seg.get("start", 0.0))
+        e = float(seg.get("end", 0.0))
+        if e <= start or s >= end:
+            continue
+        rel_s = max(0.0, s - start)
+        rel_e = max(rel_s + 0.1, e - start)
+        orig = seg.get("text", "").strip()
+        trans = seg.get("translated_text", "").strip()
+
+        if mode == "dual" and trans and trans != orig:
+            text_block = f"{orig}\n{trans}"
+        elif mode == "translated_only" and trans:
+            text_block = trans
+        else:
+            text_block = orig
+
+        lines.append(str(idx))
+        lines.append(f"{srt_timestamp(rel_s)} --> {srt_timestamp(rel_e)}")
+        lines.append(text_block)
+        lines.append("")
+        idx += 1
+    try:
+        srt_path.write_text("\n".join(lines), encoding="utf-8")
+    except Exception as exc:
+        logger.warning(f"Gagal menulis file SRT terjemahan ({srt_path}): {exc}")
+
+
+def translate_lyrics_transcript(
+    transcript: list[dict[str, Any]],
+    target_lang: str = "id",
+    job_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Menerjemahkan setiap baris lirik lagu/subtitle ke bahasa target.
+    Menggunakan Gemini AI (gemini-3.5-flash-lite) jika API key tersedia.
+    """
+    if not transcript:
+        return transcript
+
+    texts_to_translate = [seg.get("text", "").strip() for seg in transcript]
+    translated_map: dict[int, str] = {}
+
+    api_key = get_active_gemini_api_key()
+    if api_key:
+        try:
+            from google import genai
+            from google.genai import types
+
+            client = genai.Client(api_key=api_key)
+            target_name = {
+                "id": "Bahasa Indonesia",
+                "en": "English",
+                "ja": "Bahasa Jepang",
+                "ko": "Bahasa Korea",
+                "zh": "Bahasa Mandarin",
+                "es": "Bahasa Spanyol",
+                "ar": "Bahasa Arab",
+            }.get(target_lang, target_lang)
+
+            batch_size = 25
+            for b_start in range(0, len(texts_to_translate), batch_size):
+                b_lines = texts_to_translate[b_start : b_start + batch_size]
+                prompt = (
+                    f"Anda adalah penerjemah lirik lagu profesional. Terjemahkan setiap baris lirik berikut ke {target_name}. "
+                    "Terjemahan harus puitis, enak didengar, dan sesuai rima/makna lagu. "
+                    "Kembalikan HANYA format JSON list of string (panjang list harus tepat sama dengan input): "
+                    + json.dumps(b_lines, ensure_ascii=False)
+                )
+                try:
+                    resp = client.models.generate_content(
+                        model="gemini-3.5-flash-lite",
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                            temperature=0.3,
+                        ),
+                    )
+                    trans_list = json.loads(resp.text)
+                    if isinstance(trans_list, list):
+                        for idx_offset, trans_str in enumerate(trans_list):
+                            if idx_offset < len(b_lines):
+                                translated_map[b_start + idx_offset] = str(trans_str).strip()
+                except Exception as b_exc:
+                    logger.warning(f"Batch translation warning ({b_exc}), skipping batch {b_start}")
+        except Exception as exc:
+            logger.warning(f"Gemini translation failed: {exc}")
+
+    for i, seg in enumerate(transcript):
+        orig_text = seg.get("text", "").strip()
+        trans = translated_map.get(i, orig_text)
+        seg["translated_text"] = trans
+
+    return transcript
+
+
 def write_ass_pop_subtitle(
     transcript: list[dict[str, Any]],
     start: float,
@@ -3614,10 +3800,19 @@ def write_ass_pop_subtitle(
     hook_banner_y: float = 0.11,
     layout_segments: list[dict[str, Any]] | None = None,
     emoji_subtitles: bool = True,
+    translate_lyrics: bool = False,
+    lyrics_display_mode: str = "dual",
+    lyrics_position: str = "auto",
+    lyrics_pos_x: float = 0.15,
+    lyrics_pos_y: float = 0.78,
     **kwargs: Any,
 ) -> None:
     width, height = output_dimensions(aspect_ratio, quality)
     is_landscape = width >= height
+
+    eff_pos = lyrics_position if (translate_lyrics and lyrics_position != "auto") else position
+    eff_sub_x = lyrics_pos_x if (translate_lyrics and lyrics_position == "free") else subtitle_x
+    eff_sub_y = lyrics_pos_y if (translate_lyrics and lyrics_position == "free") else subtitle_y
 
     if is_landscape:
         scale_factor = (height / 360.0)
@@ -3636,10 +3831,10 @@ def write_ass_pop_subtitle(
         "&H0000DDFF",
     )
 
-    if position == "center" or (layout == "podcast_split" and position in ("auto", "bottom")):
+    if eff_pos == "center" or (layout == "podcast_split" and eff_pos in ("auto", "bottom")):
         alignment = 5
         margin_v = 0
-    elif position == "top":
+    elif eff_pos == "top":
         alignment = 8
         margin_v = int(height * (0.08 if is_landscape else 0.14))
     else:
@@ -3647,9 +3842,9 @@ def write_ass_pop_subtitle(
         margin_v = int(height * (0.075 if is_landscape else 0.14))
 
     free_pos_tag = ""
-    if position == "free":
-        fx = max(60, min(width - 60, int(width * subtitle_x)))
-        fy = max(40, min(height - 40, int(height * subtitle_y)))
+    if eff_pos == "free":
+        fx = max(60, min(width - 60, int(width * eff_sub_x)))
+        fy = max(40, min(height - 40, int(height * eff_sub_y)))
         alignment = 5
         margin_v = 0
         free_pos_tag = f"{{\\an5\\pos({fx},{fy})}}"
@@ -3783,6 +3978,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     act_ass = word_ass
                 raw_tok = nw["word"].upper()
                 cue_text = f"{free_pos_tag}{{\\c{act_ass}\\fscx122\\fscy122\\t(0,110,\\fscx106\\fscy106)}}{raw_tok}"
+                trans_str = str(nw.get("translated_text") or item.get("translated_text", "")).strip()
+                if translate_lyrics and trans_str and trans_str != item_text:
+                    if lyrics_display_mode == "dual":
+                        sub_fs = max(22, int(scaled_font_size * 0.72))
+                        cue_text = f"{cue_text}\\N{{\\fs{sub_fs}\\c&H00D0FFFF&\\fscx100\\fscy100}}{trans_str}"
+                    elif lyrics_display_mode == "translated_only":
+                        cue_text = f"{free_pos_tag}{{\\c{act_ass}\\fscx100\\fscy100}}{trans_str}"
                 events.append(f"Dialogue: 0,{ass_timestamp(ws_t)},{ass_timestamp(we_t)},SmartNotice,,0,0,0,,{cue_text}")
             continue
 
@@ -3825,6 +4027,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     cue_text = " ".join(formatted_tokens[:mid]) + "\\N" + " ".join(formatted_tokens[mid:])
                 else:
                     cue_text = " ".join(formatted_tokens)
+
+                trans_str = str(item.get("translated_text", "")).strip()
+                if translate_lyrics and trans_str and trans_str != item_text:
+                    if lyrics_display_mode == "dual":
+                        sub_fs = max(22, int(scaled_font_size * 0.72))
+                        cue_text = f"{cue_text}\\N{{\\fs{sub_fs}\\c&H00D0FFFF&\\fscx100\\fscy100}}{trans_str}"
+                    elif lyrics_display_mode == "translated_only":
+                        cue_text = trans_str
 
                 events.append(f"Dialogue: 0,{ass_timestamp(ws_t)},{ass_timestamp(we_t)},SmartNotice,,0,0,0,,{free_pos_tag}{cue_text}")
 
@@ -4485,6 +4695,11 @@ def render_clip(
         hook_banner_y=hb_y,
         layout_segments=layout_segments,
         emoji_subtitles=emoji_flag,
+        translate_lyrics=getattr(options, "translate_lyrics", False),
+        lyrics_display_mode=getattr(options, "lyrics_display_mode", "dual"),
+        lyrics_position=getattr(options, "lyrics_position", "auto"),
+        lyrics_pos_x=getattr(options, "lyrics_pos_x", 0.15),
+        lyrics_pos_y=getattr(options, "lyrics_pos_y", 0.78),
     )
 
     if getattr(options, "mirror_video", False):
@@ -4528,7 +4743,7 @@ def render_clip(
             video_filter = layout_filter
     elif options.subtitle_style == "none" and not (hb_enabled and hb_dur > 0):
         video_filter = layout_filter
-    elif hb_enabled or sub_mode in ("active_highlight", "single_word") or active_col == "auto_context" or options.layout == "podcast_split" or options.subtitle_position == "center":
+    elif getattr(options, "translate_lyrics", False) or hb_enabled or sub_mode in ("active_highlight", "single_word") or active_col == "auto_context" or options.layout == "podcast_split" or options.subtitle_position in ("center", "free"):
         video_filter = f"{layout_filter},ass=subtitle.ass"
     else:
         subtitle_style = subtitle_style_with_position(
@@ -4693,6 +4908,41 @@ def render_clip(
             raise
     clip.subtitle_url = f"/media/{job_dir.name}/{clip.id}/subtitle.srt"
     clip.video_url = f"/media/{job_dir.name}/{clip.id}/clip.mp4"
+
+    if getattr(options, "translate_lyrics", False):
+        display_m = getattr(options, "lyrics_display_mode", "dual")
+        custom_save_dir_str = str(getattr(options, "lyrics_save_folder", "") or "").strip()
+        custom_folder = Path(custom_save_dir_str).resolve() if custom_save_dir_str else None
+        if custom_folder:
+            try:
+                custom_folder.mkdir(parents=True, exist_ok=True)
+            except Exception as _dir_err:
+                logger.warning(f"Gagal membuat direktori penyimpanan kustom lirik {custom_folder}: {_dir_err}")
+                custom_folder = None
+
+        if getattr(options, "save_translated_lrc", True):
+            write_lrc(sub_transcript, clip_dir / "lirik_lagu.lrc", mode=display_m)
+            if custom_folder:
+                try:
+                    write_lrc(sub_transcript, custom_folder / f"{clip.id}_lirik.lrc", mode=display_m)
+                except Exception as _e:
+                    logger.warning(f"Gagal simpan lrc ke folder kustom: {_e}")
+
+        if getattr(options, "save_translated_txt", True):
+            write_lyrics_txt(sub_transcript, clip_dir / "lirik_lengkap.txt", mode=display_m)
+            if custom_folder:
+                try:
+                    write_lyrics_txt(sub_transcript, custom_folder / f"{clip.id}_lirik.txt", mode=display_m)
+                except Exception as _e:
+                    logger.warning(f"Gagal simpan txt ke folder kustom: {_e}")
+
+        if getattr(options, "save_translated_srt", True):
+            write_translated_srt(sub_transcript, clip.start, clip.end, clip_dir / "lirik_terjemahan.srt", mode=display_m)
+            if custom_folder:
+                try:
+                    write_translated_srt(sub_transcript, clip.start, clip.end, custom_folder / f"{clip.id}_lirik.srt", mode=display_m)
+                except Exception as _e:
+                    logger.warning(f"Gagal simpan srt ke folder kustom: {_e}")
 
 
 def media_duration(video_path: Path, fallback: float) -> float:
@@ -4862,6 +5112,13 @@ def process_job(job_id: str, options: CreateJobRequest, source_path: str | None 
             else:
                 update_job(job_id, progress=38, message=f"Transkripsi dengan Whisper {selected_audio_model}...")
             transcript = transcribe(audio, options.language, selected_audio_model, job_id=job_id)
+        if getattr(options, "translate_lyrics", False) and transcript:
+            update_job(job_id, progress=50, message="Menerjemahkan lirik lagu / subtitle...")
+            transcript = translate_lyrics_transcript(
+                transcript,
+                target_lang=getattr(options, "lyrics_target_lang", "id"),
+                job_id=job_id,
+            )
         if job_id in CANCELED_JOBS:
             raise RuntimeError("Proses dibatalkan oleh pengguna.")
         vid_total_dur = media_duration(video, transcript[-1]["end"] if transcript else 60.0)

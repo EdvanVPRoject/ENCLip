@@ -2411,6 +2411,8 @@ class HermesDesktop(QMainWindow):
         self.subtitle_free_y = 0.78
         self.hook_banner_free_x = 0.5
         self.hook_banner_free_y = 0.11
+        self.lyrics_free_x = 0.15
+        self.lyrics_free_y = 0.78
 
         self.tabs = QTabWidget()
         self.setup_tab = self.build_setup_tab()
@@ -3832,6 +3834,144 @@ class HermesDesktop(QMainWindow):
         self.emoji_subtitles_check.setChecked(True)
         sub_layout.addWidget(wrap_checkable(self.emoji_subtitles_check, "Tambahkan Emoji Kontekstual Otomatis pada Kata Kunci Penting"))
         t2_layout.addWidget(subtitle_group)
+
+        # GROUP: TERJEMAHAN LIRIK LAGU & SUBTITLE MUSIK
+        lyrics_group = QGroupBox("🎵 Terjemahan Lirik Lagu & Subtitle Musik")
+        lyr_layout = QVBoxLayout(lyrics_group)
+        lyr_layout.setContentsMargins(14, 14, 14, 14)
+        lyr_layout.setSpacing(10)
+
+        self.translate_lyrics_check = QCheckBox()
+        self.translate_lyrics_check.setChecked(False)
+        lyr_layout.addWidget(
+            wrap_checkable(
+                self.translate_lyrics_check,
+                "Terjemahkan Lirik Lagu / Subtitle Otomatis (AI Lyrics Translator)",
+                bold=True,
+            )
+        )
+
+        self.lyrics_options_widget = QWidget()
+        lyr_opts_layout = QVBoxLayout(self.lyrics_options_widget)
+        lyr_opts_layout.setContentsMargins(0, 4, 0, 0)
+        lyr_opts_layout.setSpacing(10)
+
+        # Target language combo
+        self.lyrics_target_lang_combo = self.combo([
+            ("🇮🇩 Bahasa Indonesia (ID)", "id"),
+            ("🇺🇸 English (EN)", "en"),
+            ("🇯🇵 Jepang (JA)", "ja"),
+            ("🇰🇷 Korea (KO)", "ko"),
+            ("🇨🇳 Mandarin (ZH)", "zh"),
+            ("🇪🇸 Spanyol (ES)", "es"),
+            ("🇸🇦 Arab (AR)", "ar"),
+            ("🇫🇷 Prancis (FR)", "fr"),
+            ("🇩🇪 Jerman (DE)", "de"),
+        ], selected=0)
+        self.lyrics_target_lang_combo.setMinimumHeight(36)
+
+        # Display mode combo
+        self.lyrics_display_mode_combo = self.combo([
+            ("Dual Subtitle (Lirik Asli + Terjemahan)", "dual"),
+            ("Hanya Terjemahan", "translated_only"),
+            ("Hanya Lirik Asli (Simpan File Terjemahan Saja)", "original_only"),
+        ], selected=0)
+        self.lyrics_display_mode_combo.setMinimumHeight(36)
+
+        # Position combo
+        self.lyrics_pos_combo = self.combo([
+            ("Otomatis (Ikuti Posisi Subtitle)", "auto"),
+            ("Bawah Layar", "bottom"),
+            ("Tengah Layar", "center"),
+            ("Atas Layar", "top"),
+            ("Geser Bebas (Custom X & Y)", "free"),
+        ], selected=0)
+        self.lyrics_pos_combo.setMinimumHeight(36)
+
+        # Free position sliders panel
+        self.lyrics_free_pos_widget = QWidget()
+        lyr_free_layout = QVBoxLayout(self.lyrics_free_pos_widget)
+        lyr_free_layout.setContentsMargins(0, 0, 0, 0)
+        lyr_free_layout.setSpacing(6)
+
+        lyr_x_row = QHBoxLayout()
+        lyr_x_lbl = QLabel("Posisi X (Kiri-Kanan):")
+        lyr_x_lbl.setStyleSheet("color: #94A3B8; font-size: 11px;")
+        self.lyrics_x_slider = QSlider(Qt.Orientation.Horizontal)
+        self.lyrics_x_slider.setRange(0, 100)
+        self.lyrics_x_slider.setValue(15)
+        self.lyrics_x_val_lbl = QLabel("15%")
+        self.lyrics_x_val_lbl.setStyleSheet("color: #38BDF8; font-size: 11px; min-width: 32px;")
+        lyr_x_row.addWidget(lyr_x_lbl)
+        lyr_x_row.addWidget(self.lyrics_x_slider, 1)
+        lyr_x_row.addWidget(self.lyrics_x_val_lbl)
+
+        lyr_y_row = QHBoxLayout()
+        lyr_y_lbl = QLabel("Posisi Y (Atas-Bawah):")
+        lyr_y_lbl.setStyleSheet("color: #94A3B8; font-size: 11px;")
+        self.lyrics_y_slider = QSlider(Qt.Orientation.Horizontal)
+        self.lyrics_y_slider.setRange(0, 100)
+        self.lyrics_y_slider.setValue(78)
+        self.lyrics_y_val_lbl = QLabel("78%")
+        self.lyrics_y_val_lbl.setStyleSheet("color: #38BDF8; font-size: 11px; min-width: 32px;")
+        lyr_y_row.addWidget(lyr_y_lbl)
+        lyr_y_row.addWidget(self.lyrics_y_slider, 1)
+        lyr_y_row.addWidget(self.lyrics_y_val_lbl)
+
+        lyr_free_layout.addLayout(lyr_x_row)
+        lyr_free_layout.addLayout(lyr_y_row)
+        self.lyrics_free_pos_widget.setVisible(False)
+
+        # File save options
+        self.save_lyrics_srt_check = QCheckBox()
+        self.save_lyrics_srt_check.setChecked(True)
+        self.save_lyrics_lrc_check = QCheckBox()
+        self.save_lyrics_lrc_check.setChecked(True)
+        self.save_lyrics_txt_check = QCheckBox()
+        self.save_lyrics_txt_check.setChecked(True)
+
+        lyr_folder_box = QWidget()
+        lyr_folder_row = QHBoxLayout(lyr_folder_box)
+        lyr_folder_row.setContentsMargins(0, 0, 0, 0)
+        lyr_folder_row.setSpacing(6)
+        self.lyrics_folder_edit = QLineEdit()
+        self.lyrics_folder_edit.setPlaceholderText("Default: Disimpan di folder klip hasil render...")
+        self.lyrics_folder_edit.setMinimumHeight(36)
+        btn_lyrics_folder = QPushButton("Pilih Folder...")
+        btn_lyrics_folder.setMinimumHeight(36)
+        btn_lyrics_folder.clicked.connect(self.choose_lyrics_folder)
+        lyr_folder_row.addWidget(self.lyrics_folder_edit, 1)
+        lyr_folder_row.addWidget(btn_lyrics_folder)
+
+        lyr_opts_layout.addWidget(QLabel("Bahasa Target Terjemahan:"))
+        lyr_opts_layout.addWidget(self.lyrics_target_lang_combo)
+        lyr_opts_layout.addWidget(QLabel("Mode Tampilan Lirik di Video:"))
+        lyr_opts_layout.addWidget(self.lyrics_display_mode_combo)
+        lyr_opts_layout.addWidget(QLabel("Posisi Tampil Lirik di Layar:"))
+        lyr_opts_layout.addWidget(self.lyrics_pos_combo)
+        lyr_opts_layout.addWidget(self.lyrics_free_pos_widget)
+
+        file_save_title = QLabel("📁 Simpan File Lirik / Subtitle:")
+        file_save_title.setStyleSheet("font-weight: 700; color: #E2E8F0; margin-top: 4px;")
+        lyr_opts_layout.addWidget(file_save_title)
+        lyr_opts_layout.addWidget(wrap_checkable(self.save_lyrics_srt_check, "Simpan File Subtitle Terjemahan (.srt)"))
+        lyr_opts_layout.addWidget(wrap_checkable(self.save_lyrics_lrc_check, "Simpan File Lirik Sinkron Musik / Karaoke (.lrc)"))
+        lyr_opts_layout.addWidget(wrap_checkable(self.save_lyrics_txt_check, "Simpan File Teks Lirik Lengkap (.txt)"))
+        lyr_opts_layout.addWidget(QLabel("Folder Khusus Simpan File Lirik (Opsional):"))
+        lyr_opts_layout.addWidget(lyr_folder_box)
+
+        lyr_layout.addWidget(self.lyrics_options_widget)
+        self.lyrics_options_widget.setVisible(False)
+
+        # Signals
+        self.translate_lyrics_check.toggled.connect(self.on_translate_lyrics_toggled)
+        self.lyrics_target_lang_combo.currentIndexChanged.connect(self.update_create_preview)
+        self.lyrics_display_mode_combo.currentIndexChanged.connect(self.update_create_preview)
+        self.lyrics_pos_combo.currentIndexChanged.connect(self.on_lyrics_pos_changed)
+        self.lyrics_x_slider.valueChanged.connect(self.on_lyrics_x_slider_changed)
+        self.lyrics_y_slider.valueChanged.connect(self.on_lyrics_y_slider_changed)
+
+        t2_layout.addWidget(lyrics_group)
 
         wm_group = QGroupBox("🔥 Judul Hook & Watermark")
         wm_layout = QVBoxLayout(wm_group)
@@ -5346,6 +5486,14 @@ class HermesDesktop(QMainWindow):
             else:
                 sample_text = f"{emoji_prefix}Ternyata rahasia sukses ini<br>bikin semua orang kaget!"
 
+            if hasattr(self, "translate_lyrics_check") and self.translate_lyrics_check.isChecked():
+                lyr_mode = self.lyrics_display_mode_combo.currentData() if hasattr(self, "lyrics_display_mode_combo") else "dual"
+                if lyr_mode == "dual":
+                    sub_fs = max(10, int(sz * 0.78))
+                    sample_text = f"{sample_text}<br><font color='#7DD3FC' style='font-size:{sub_fs}px;'><i>(Kupikir kaulah satu-satunya tujuanku)</i></font>"
+                elif lyr_mode == "translated_only":
+                    sample_text = f"🎵 Kupikir kaulah satu-satunya tujuanku"
+
             if style == "neon":
                 label.setText(f"✦ {sample_text} ✦")
             elif style == "karaoke" and sub_mode != "active_highlight":
@@ -5698,6 +5846,10 @@ class HermesDesktop(QMainWindow):
             label.setParent(self.create_preview_video)
 
         position = self.subtitle_position_combo.currentData() if hasattr(self, "subtitle_position_combo") else "auto"
+        if hasattr(self, "translate_lyrics_check") and self.translate_lyrics_check.isChecked():
+            lyr_pos = self.lyrics_pos_combo.currentData() if hasattr(self, "lyrics_pos_combo") else "auto"
+            if lyr_pos != "auto":
+                position = lyr_pos
         pw = max(1, self.create_preview_video.width())
         ph = max(1, self.create_preview_video.height())
         label.setMaximumWidth(max(120, int(pw * 0.88)))
@@ -5709,7 +5861,9 @@ class HermesDesktop(QMainWindow):
         if position == "free":
             available_width = max(0, pw - lw)
             available_height = max(0, ph - lh)
-            label.move(int(available_width * self.subtitle_free_x), int(available_height * self.subtitle_free_y))
+            fx = self.lyrics_free_x if (hasattr(self, "translate_lyrics_check") and self.translate_lyrics_check.isChecked() and hasattr(self, "lyrics_pos_combo") and self.lyrics_pos_combo.currentData() == "free") else self.subtitle_free_x
+            fy = self.lyrics_free_y if (hasattr(self, "translate_lyrics_check") and self.translate_lyrics_check.isChecked() and hasattr(self, "lyrics_pos_combo") and self.lyrics_pos_combo.currentData() == "free") else self.subtitle_free_y
+            label.move(int(available_width * fx), int(available_height * fy))
         elif position == "top":
             x = (pw - lw) // 2
             y = int(ph * 0.16)
@@ -5746,10 +5900,31 @@ class HermesDesktop(QMainWindow):
     def on_free_subtitle_moved(self, x: float, y: float) -> None:
         self.subtitle_free_x = max(0.0, min(1.0, x))
         self.subtitle_free_y = max(0.0, min(1.0, y))
-        if hasattr(self, "preview_summary") and self.subtitle_position_combo.currentData() == "free":
-            self.preview_summary.setText(
-                f"Subtitle bebas · posisi {self.subtitle_free_x:.0%} kiri, {self.subtitle_free_y:.0%} atas · seret teks langsung di layar"
-            )
+        if hasattr(self, "translate_lyrics_check") and self.translate_lyrics_check.isChecked():
+            if hasattr(self, "lyrics_pos_combo") and self.lyrics_pos_combo.currentData() == "free":
+                self.lyrics_free_x = self.subtitle_free_x
+                self.lyrics_free_y = self.subtitle_free_y
+                if hasattr(self, "lyrics_x_slider"):
+                    self.lyrics_x_slider.blockSignals(True)
+                    self.lyrics_x_slider.setValue(int(self.lyrics_free_x * 100))
+                    self.lyrics_x_slider.blockSignals(False)
+                if hasattr(self, "lyrics_x_val_lbl"):
+                    self.lyrics_x_val_lbl.setText(f"{int(self.lyrics_free_x * 100)}%")
+                if hasattr(self, "lyrics_y_slider"):
+                    self.lyrics_y_slider.blockSignals(True)
+                    self.lyrics_y_slider.setValue(int(self.lyrics_free_y * 100))
+                    self.lyrics_y_slider.blockSignals(False)
+                if hasattr(self, "lyrics_y_val_lbl"):
+                    self.lyrics_y_val_lbl.setText(f"{int(self.lyrics_free_y * 100)}%")
+        if hasattr(self, "preview_summary"):
+            if hasattr(self, "translate_lyrics_check") and self.translate_lyrics_check.isChecked() and hasattr(self, "lyrics_pos_combo") and self.lyrics_pos_combo.currentData() == "free":
+                self.preview_summary.setText(
+                    f"Lirik bebas · posisi {self.lyrics_free_x:.0%} kiri, {self.lyrics_free_y:.0%} atas · seret lirik langsung di layar"
+                )
+            elif self.subtitle_position_combo.currentData() == "free":
+                self.preview_summary.setText(
+                    f"Subtitle bebas · posisi {self.subtitle_free_x:.0%} kiri, {self.subtitle_free_y:.0%} atas · seret teks langsung di layar"
+                )
 
     def on_hook_banner_dur_combo_changed(self) -> None:
         if hasattr(self, "hook_banner_dur_combo") and hasattr(self, "hook_banner_dur_spin"):
@@ -6061,6 +6236,38 @@ class HermesDesktop(QMainWindow):
         if path and hasattr(self, "watermark_image_edit"):
             self.watermark_image_edit.setText(path)
             self.update_create_preview()
+
+    def choose_lyrics_folder(self) -> None:
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "Pilih Folder Penyimpanan File Lirik",
+            self.lyrics_folder_edit.text().strip() or str(core.DATA_DIR),
+        )
+        if folder and hasattr(self, "lyrics_folder_edit"):
+            self.lyrics_folder_edit.setText(folder)
+
+    def on_translate_lyrics_toggled(self, checked: bool) -> None:
+        if hasattr(self, "lyrics_options_widget"):
+            self.lyrics_options_widget.setVisible(checked)
+        self.update_create_preview()
+
+    def on_lyrics_pos_changed(self) -> None:
+        pos = self.lyrics_pos_combo.currentData() if hasattr(self, "lyrics_pos_combo") else "auto"
+        if hasattr(self, "lyrics_free_pos_widget"):
+            self.lyrics_free_pos_widget.setVisible(pos == "free")
+        self.update_create_preview()
+
+    def on_lyrics_x_slider_changed(self, val: int) -> None:
+        self.lyrics_free_x = val / 100.0
+        if hasattr(self, "lyrics_x_val_lbl"):
+            self.lyrics_x_val_lbl.setText(f"{val}%")
+        self.update_create_preview()
+
+    def on_lyrics_y_slider_changed(self, val: int) -> None:
+        self.lyrics_free_y = val / 100.0
+        if hasattr(self, "lyrics_y_val_lbl"):
+            self.lyrics_y_val_lbl.setText(f"{val}%")
+        self.update_create_preview()
 
     def get_active_facecam_crop(self) -> list[float] | None:
         if hasattr(self, "layout_combo") and self.layout_combo.currentData() == "facecam_top":
@@ -6696,8 +6903,9 @@ class HermesDesktop(QMainWindow):
             if hasattr(self, "hook_banner_pos_combo")
             else "top"
         )
+        effective_url = self.url_edit.text().strip() or getattr(self, "selected_source_video_path", "") or "local_video"
         return core.CreateJobRequest(
-            url=self.url_edit.text().strip(),
+            url=effective_url,
             clip_count=self.clip_count.value(),
             language=self.language_combo.currentData(),
             whisper_model=self.whisper_combo.currentData(),
@@ -6762,6 +6970,16 @@ class HermesDesktop(QMainWindow):
             dynamic_micro_zoom=self.micro_zoom_check.isChecked() if hasattr(self, "micro_zoom_check") else True,
             auto_broll=self.auto_broll_check.isChecked() if hasattr(self, "auto_broll_check") else False,
             broll_folder="",
+            translate_lyrics=self.translate_lyrics_check.isChecked() if hasattr(self, "translate_lyrics_check") else False,
+            lyrics_target_lang=self.lyrics_target_lang_combo.currentData() if hasattr(self, "lyrics_target_lang_combo") else "id",
+            lyrics_display_mode=self.lyrics_display_mode_combo.currentData() if hasattr(self, "lyrics_display_mode_combo") else "dual",
+            lyrics_position=self.lyrics_pos_combo.currentData() if hasattr(self, "lyrics_pos_combo") else "auto",
+            lyrics_pos_x=self.lyrics_free_x if hasattr(self, "lyrics_free_x") else 0.15,
+            lyrics_pos_y=self.lyrics_free_y if hasattr(self, "lyrics_free_y") else 0.78,
+            save_translated_srt=self.save_lyrics_srt_check.isChecked() if hasattr(self, "save_lyrics_srt_check") else True,
+            save_translated_lrc=self.save_lyrics_lrc_check.isChecked() if hasattr(self, "save_lyrics_lrc_check") else True,
+            save_translated_txt=self.save_lyrics_txt_check.isChecked() if hasattr(self, "save_lyrics_txt_check") else True,
+            lyrics_save_folder=self.lyrics_folder_edit.text().strip() if hasattr(self, "lyrics_folder_edit") else "",
         )
 
     def start_download(self) -> None:
