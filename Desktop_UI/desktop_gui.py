@@ -1230,9 +1230,12 @@ class VideoSurfaceWidget(QWidget):
         self._last_face_count: int = -1
         self.setMouseTracking(True)
 
+    def is_manual_framing(self) -> bool:
+        return self.preview_mode in ("manual_crop", "manual_fit", "manual_ambient", "standard_16_9", "ambient_9_16") or str(self.preview_mode).startswith("manual_")
+
     def set_preview_mode(self, mode: str) -> None:
         self.preview_mode = mode
-        if self.preview_mode == "manual_crop":
+        if self.is_manual_framing():
             self.setCursor(Qt.CursorShape.OpenHandCursor)
         else:
             self.setCursor(Qt.CursorShape.ArrowCursor)
@@ -1241,7 +1244,7 @@ class VideoSurfaceWidget(QWidget):
     def set_manual_crop(self, x: float, y: float, zoom: float = 1.0) -> None:
         self.manual_crop_x = max(0.0, min(1.0, float(x)))
         self.manual_crop_y = max(0.0, min(1.0, float(y)))
-        self.manual_zoom = max(1.0, min(3.0, float(zoom)))
+        self.manual_zoom = max(0.20, min(3.00, float(zoom)))
         self.update()
 
     def set_manual_crop_x(self, val: float) -> None:
@@ -1253,11 +1256,11 @@ class VideoSurfaceWidget(QWidget):
         self.update()
 
     def set_manual_zoom(self, val: float) -> None:
-        self.manual_zoom = max(1.0, min(3.0, float(val)))
+        self.manual_zoom = max(0.20, min(3.00, float(val)))
         self.update()
 
     def mousePressEvent(self, event: Any) -> None:
-        if self.preview_mode == "manual_crop" and event.button() == Qt.MouseButton.LeftButton:
+        if self.is_manual_framing() and event.button() == Qt.MouseButton.LeftButton:
             self.is_dragging_video = True
             self._drag_start_pos = event.position().toPoint()
             self._drag_start_crop_x = self.manual_crop_x
@@ -1268,15 +1271,15 @@ class VideoSurfaceWidget(QWidget):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: Any) -> None:
-        if self.preview_mode == "manual_crop":
+        if self.is_manual_framing():
             if self.is_dragging_video and self._drag_start_pos:
                 delta = event.position().toPoint() - self._drag_start_pos
                 w = max(20, self.width())
                 h = max(20, self.height())
-                dx_ratio = delta.x() / float(w)
-                dy_ratio = delta.y() / float(h)
-                self.manual_crop_x = max(0.0, min(1.0, self._drag_start_crop_x - dx_ratio))
-                self.manual_crop_y = max(0.0, min(1.0, self._drag_start_crop_y - dy_ratio))
+                span_x = max(20.0, float(w) * 0.8)
+                span_y = max(20.0, float(h) * 0.8)
+                self.manual_crop_x = max(0.0, min(1.0, self._drag_start_crop_x + (float(delta.x()) / span_x)))
+                self.manual_crop_y = max(0.0, min(1.0, self._drag_start_crop_y + (float(delta.y()) / span_y)))
                 self.manualCropChanged.emit(self.manual_crop_x, self.manual_crop_y, self.manual_zoom)
                 self.update()
                 event.accept()
@@ -1286,7 +1289,7 @@ class VideoSurfaceWidget(QWidget):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: Any) -> None:
-        if self.preview_mode == "manual_crop" and event.button() == Qt.MouseButton.LeftButton:
+        if self.is_manual_framing() and event.button() == Qt.MouseButton.LeftButton:
             self.is_dragging_video = False
             self._drag_start_pos = None
             self.setCursor(Qt.CursorShape.OpenHandCursor)
@@ -1295,9 +1298,9 @@ class VideoSurfaceWidget(QWidget):
         super().mouseReleaseEvent(event)
 
     def wheelEvent(self, event: Any) -> None:
-        if self.preview_mode == "manual_crop":
+        if self.is_manual_framing():
             step = 0.05 if event.angleDelta().y() > 0 else -0.05
-            self.manual_zoom = max(1.0, min(3.0, round(self.manual_zoom + step, 2)))
+            self.manual_zoom = max(0.20, min(3.00, round(self.manual_zoom + step, 2)))
             self.manualCropChanged.emit(self.manual_crop_x, self.manual_crop_y, self.manual_zoom)
             self.update()
             event.accept()
@@ -1528,29 +1531,44 @@ class VideoSurfaceWidget(QWidget):
             self.video_rect = QRect(0, 0, w, h)
             return
 
-        if self.preview_mode == "manual_crop":
-            base_scaled = img.scaled(
-                self.size(),
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            z = max(1.0, min(3.0, self.manual_zoom))
-            if z > 1.005:
-                scaled = base_scaled.scaled(
-                    int(base_scaled.width() * z),
-                    int(base_scaled.height() * z),
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
+        if self.preview_mode in ("manual_crop", "manual_fit", "manual_ambient") or (
+            self.is_manual_framing() and self.preview_mode not in ("auto_podcast_9_16", "split_2_9_16", "crop_9_16", "facecam_9_16", "manual_split")
+        ):
+            # 1. Background
+            if self.preview_mode in ("manual_ambient", "ambient_9_16"):
+                tiny = img.scaled(36, 64, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.FastTransformation)
+                bg = tiny.scaled(w, h, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
+                bx = max(0, (bg.width() - w) // 2)
+                by = max(0, (bg.height() - h) // 2)
+                p.drawImage(0, 0, bg, bx, by, w, h)
+                p.fillRect(0, 0, w, h, QColor(6, 10, 18, 125))
             else:
-                scaled = base_scaled
+                p.fillRect(0, 0, w, h, QColor(0, 0, 0))
 
-            max_ox = max(0, scaled.width() - w)
-            max_oy = max(0, scaled.height() - h)
-            ox = int(max_ox * self.manual_crop_x) if max_ox > 0 else 0
-            oy = int(max_oy * self.manual_crop_y) if max_oy > 0 else 0
-            p.drawImage(0, 0, scaled, ox, oy, w, h)
-            badge_r = QRect(8, 8, min(w - 16, 280), 22)
+            # 2. Scaling
+            if self.preview_mode == "manual_crop":
+                base_scale = max(float(w) / max(1, img.width()), float(h) / max(1, img.height()))
+            else:
+                base_scale = min(float(w) / max(1, img.width()), float(h) / max(1, img.height()))
+
+            z = max(0.20, min(3.00, self.manual_zoom))
+            vw = max(10, int(round(img.width() * base_scale * z)))
+            vh = max(10, int(round(img.height() * base_scale * z)))
+            scaled = img.scaled(vw, vh, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+
+            # 3. Position matching FFmpeg formula
+            travel_x = max(abs(w - vw), int(w * 0.8))
+            travel_y = max(abs(h - vh), int(h * 0.8))
+            fx = int((w - vw) * 0.5 + (self.manual_crop_x - 0.5) * travel_x)
+            fy = int((h - vh) * 0.5 + (self.manual_crop_y - 0.5) * travel_y)
+
+            p.drawImage(fx, fy, scaled)
+
+            # Subtle frame boundary
+            p.setPen(QPen(QColor(56, 189, 248, 110), 1, Qt.PenStyle.DashLine))
+            p.drawRect(fx, fy, vw, vh)
+
+            badge_r = QRect(8, 8, min(w - 16, 310), 22)
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(QColor(9, 13, 22, 215))
             p.drawRoundedRect(badge_r, 6, 6)
@@ -1559,9 +1577,9 @@ class VideoSurfaceWidget(QWidget):
             p.drawText(
                 badge_r.adjusted(8, 0, -8, 0),
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                f"✋ Geser Bebas: X {int(self.manual_crop_x * 100)}% | Y {int(self.manual_crop_y * 100)}% | {z:.2f}x",
+                f"✋ Bebas: X {int(self.manual_crop_x * 100)}% | Y {int(self.manual_crop_y * 100)}% | {z:.2f}x",
             )
-            self.video_rect = QRect(0, 0, w, h)
+            self.video_rect = QRect(fx, fy, vw, vh)
             return
 
         if is_portrait_canvas and self.preview_mode in ("auto_podcast_9_16", "split_2_9_16", "crop_9_16"):
@@ -3026,7 +3044,7 @@ class HermesDesktop(QMainWindow):
         self.update_create_preview()
 
     def on_manual_zoom_changed(self, value: int) -> None:
-        zoom = max(1.0, min(3.0, value / 100.0))
+        zoom = max(0.20, min(3.0, value / 100.0))
         if hasattr(self, "manual_zoom_val_lbl"):
             self.manual_zoom_val_lbl.setText(f"{zoom:.2f}x")
         if hasattr(self, "create_preview_video"):
@@ -3066,37 +3084,67 @@ class HermesDesktop(QMainWindow):
             if hasattr(self, "manual_zoom_val_lbl"):
                 self.manual_zoom_val_lbl.setText(f"{zoom:.2f}x")
 
+    def set_custom_ratio_preset(self, w: int, h: int) -> None:
+        if hasattr(self, "custom_aspect_w") and hasattr(self, "custom_aspect_h"):
+            self.custom_aspect_w.blockSignals(True)
+            self.custom_aspect_h.blockSignals(True)
+            self.custom_aspect_w.setValue(w)
+            self.custom_aspect_h.setValue(h)
+            self.custom_aspect_w.blockSignals(False)
+            self.custom_aspect_h.blockSignals(False)
+            self.on_custom_ratio_changed()
+
+    def on_custom_ratio_changed(self) -> None:
+        if hasattr(self, "custom_aspect_w") and hasattr(self, "custom_aspect_h"):
+            w = self.custom_aspect_w.value()
+            h = self.custom_aspect_h.value()
+            if hasattr(self, "custom_ratio_desc_lbl"):
+                self.custom_ratio_desc_lbl.setText(f"= {w}:{h}")
+            self.on_unified_format_changed()
+
     def on_unified_format_changed(self) -> None:
         if not hasattr(self, "unified_format_combo"):
             return
         mode = getattr(self, "framing_mode_state", "auto")
 
         if mode == "manual" and hasattr(self, "manual_style_combo") and hasattr(self, "manual_aspect_combo"):
-            aspect_val = str(self.manual_aspect_combo.currentData() or "9:16")
-            m_style = str(self.manual_style_combo.currentData() or "manual_ambient")
+            raw_aspect = str(self.manual_aspect_combo.currentData() or "9:16")
+            is_custom = raw_aspect == "custom"
+            if hasattr(self, "custom_ratio_widget"):
+                self.custom_ratio_widget.setVisible(is_custom)
+            if is_custom and hasattr(self, "custom_aspect_w") and hasattr(self, "custom_aspect_h"):
+                aspect_val = f"{self.custom_aspect_w.value()}:{self.custom_aspect_h.value()}"
+            else:
+                aspect_val = raw_aspect
+
+            m_style = str(self.manual_style_combo.currentData() or "manual_fit")
             manual_map = {
-                "manual_ambient": ("ambient", "standard", "0", "ambient_9_16" if aspect_val == "9:16" else "standard_16_9"),
+                "manual_ambient": ("ambient", "standard", "0", "manual_ambient"),
                 "manual_crop": ("crop", "standard", "1", "manual_crop"),
                 "manual_split": ("crop", "manual_split", "2", "manual_split"),
                 "manual_facecam": ("fit", "facecam_top", "1", "facecam_9_16"),
-                "manual_fit": ("fit", "standard", "0", "standard_16_9"),
+                "manual_fit": ("fit", "standard", "0", "manual_fit"),
             }
             framing_val, layout_val, sim_val, prev_mode = manual_map.get(
-                m_style, ("ambient", "standard", "0", "ambient_9_16")
+                m_style, ("fit", "standard", "0", "manual_fit")
             )
             if hasattr(self, "manual_crop_pan_widget"):
-                self.manual_crop_pan_widget.setVisible(m_style == "manual_crop")
+                self.manual_crop_pan_widget.setVisible(m_style in ("manual_crop", "manual_fit", "manual_ambient"))
             if hasattr(self, "facecam_guide_box"):
                 self.facecam_guide_box.setVisible(m_style == "manual_facecam")
 
             manual_desc_map = {
+                "manual_fit": (
+                    "✋ <b>Mode Manual · Fit Standar (Latar Hitam):</b> Menampilkan seluruh frame video utuh dengan latar hitam bersih tanpa pemotongan. "
+                    "Posisi dan ukuran video bebas digeser & diubah dengan mouse drag/wheel atau slider di bawah."
+                ),
                 "manual_ambient": (
-                    "✋ <b>Mode Manual · Cinema Blur:</b> Video ditampilkan utuh di tengah layar dengan latar belakang blur sinematik "
-                    "tanpa AI auto-switching. Aman 100% anti-potong wajah."
+                    "✋ <b>Mode Manual · Cinema Blur:</b> Video ditampilkan dengan latar belakang blur sinematik dinamis tanpa AI auto-switching. "
+                    "Posisi dan ukuran video bebas digeser & diubah dengan mouse drag/wheel atau slider di bawah."
                 ),
                 "manual_crop": (
-                    "✋ <b>Mode Manual · Crop Penuh:</b> Memotong layar sesuai rasio pilihan pada posisi horizontal tetap (gunakan slider "
-                    "Kiri ↔ Kanan di atas untuk menggeser titik fokus kamera)."
+                    "✋ <b>Mode Manual · Crop Penuh:</b> Video mengisi frame penuh sesuai rasio pilihan. "
+                    "Posisi dan ukuran video bebas digeser & diubah dengan mouse drag/wheel atau slider di bawah."
                 ),
                 "manual_split": (
                     "✋ <b>Mode Manual · Split 2 Panel Statis:</b> Membagi sisi kiri video ke panel atas dan sisi kanan ke panel bawah "
@@ -3105,13 +3153,12 @@ class HermesDesktop(QMainWindow):
                 "manual_facecam": (
                     "✋ <b>Mode Manual · Streamer Facecam:</b> Menempatkan kotak kamera wajah di bagian atas dan layar utama/game di bawah."
                 ),
-                "manual_fit": (
-                    "✋ <b>Mode Manual · Fit Utuh Standar:</b> Menampilkan seluruh frame video utuh dengan latar hitam bersih tanpa pemotongan."
-                ),
             }
             if hasattr(self, "format_mode_hint"):
                 self.format_mode_hint.setText(manual_desc_map.get(m_style, ""))
         else:
+            if hasattr(self, "custom_ratio_widget"):
+                self.custom_ratio_widget.setVisible(False)
             preset = str(self.unified_format_combo.currentData() or "auto_podcast_9_16")
             mapping = {
                 "auto_podcast_9_16": ("9:16", "crop", "auto_smart", "1", "auto_podcast_9_16"),
@@ -3144,8 +3191,16 @@ class HermesDesktop(QMainWindow):
             if hasattr(self, "format_mode_hint"):
                 self.format_mode_hint.setText(desc_map.get(preset, desc_map["auto_podcast_9_16"]))
 
+        if hasattr(self, "aspect_combo"):
+            idx_asp = self.aspect_combo.findData(aspect_val)
+            if idx_asp < 0:
+                self.aspect_combo.addItem(f"{aspect_val} (Kustom)", aspect_val)
+                idx_asp = self.aspect_combo.findData(aspect_val)
+            self.aspect_combo.blockSignals(True)
+            self.aspect_combo.setCurrentIndex(idx_asp)
+            self.aspect_combo.blockSignals(False)
+
         for combo_w, val in (
-            (self.aspect_combo, aspect_val),
             (self.framing_combo, framing_val),
             (self.layout_combo, layout_val),
             (self.smart_preview_sim_combo, sim_val),
@@ -3383,33 +3438,91 @@ class HermesDesktop(QMainWindow):
         man_grid.addWidget(lbl_man_style, 0, 1)
 
         self.manual_aspect_combo = self.combo([
-            ("9:16 · Vertikal (TikTok/Reels)", "9:16"),
+            ("9:16 · Vertikal (TikTok/Reels/Shorts)", "9:16"),
             ("16:9 · Landscape (YouTube)", "16:9"),
-            ("1:1 · Kotak (Instagram)", "1:1"),
-            ("4:3 · Klasik", "4:3"),
+            ("1:1 · Kotak (Instagram Feed)", "1:1"),
+            ("4:5 · Portrait Feed (Instagram)", "4:5"),
+            ("4:3 · Klasik (Tablet/Old)", "4:3"),
+            ("21:9 · Ultrawide Cinema", "21:9"),
+            ("🛠️ Kustom Rasio Bebas (Atur Sendiri)...", "custom"),
         ], selected=0)
         self.manual_aspect_combo.setMinimumHeight(36)
         self.manual_aspect_combo.currentIndexChanged.connect(self.on_unified_format_changed)
         man_grid.addWidget(self.manual_aspect_combo, 1, 0)
 
         self.manual_style_combo = self.combo([
-            ("✨ Cinema Blur (Utuh + Blur)", "manual_ambient"),
-            ("🎯 Crop Penuh (Geser Manual)", "manual_crop"),
+            ("⬛ Fit Standar (Latar Hitam - Bebas Geser)", "manual_fit"),
+            ("✨ Cinema Blur (Utuh + Blur Bebas)", "manual_ambient"),
+            ("🎯 Crop Penuh (Isi Layar Bebas)", "manual_crop"),
             ("👥 Split 2 Panel Statis (Kiri/Kanan)", "manual_split"),
             ("🎮 Streamer Facecam Atas", "manual_facecam"),
-            ("⬛ Fit Standar (Latar Hitam)", "manual_fit"),
         ], selected=0)
         self.manual_style_combo.setMinimumHeight(36)
         self.manual_style_combo.currentIndexChanged.connect(self.on_unified_format_changed)
         man_grid.addWidget(self.manual_style_combo, 1, 1)
         man_lay.addLayout(man_grid)
 
+        self.custom_ratio_widget = QWidget()
+        cr_lay = QVBoxLayout(self.custom_ratio_widget)
+        cr_lay.setContentsMargins(0, 4, 0, 4)
+        cr_lay.setSpacing(6)
+
+        cr_box = QFrame()
+        cr_box.setStyleSheet("background: #091322; border: 1px solid #1E3A8A; border-radius: 8px; padding: 6px 10px;")
+        cr_box_lay = QHBoxLayout(cr_box)
+        cr_box_lay.setContentsMargins(4, 4, 4, 4)
+        cr_box_lay.setSpacing(8)
+
+        cr_lbl = QLabel("📐 Rasio Kustom (Lebar : Tinggi):")
+        cr_lbl.setStyleSheet("color: #93C5FD; font-size: 11px; font-weight: 700;")
+        cr_box_lay.addWidget(cr_lbl)
+
+        self.custom_aspect_w = QSpinBox()
+        self.custom_aspect_w.setRange(1, 9999)
+        self.custom_aspect_w.setValue(9)
+        self.custom_aspect_w.setMinimumWidth(65)
+        self.custom_aspect_w.setStyleSheet("background: #111827; color: #FFFFFF; font-weight: 700; border: 1px solid #374151; border-radius: 4px; padding: 2px 6px;")
+        self.custom_aspect_w.valueChanged.connect(self.on_custom_ratio_changed)
+        cr_box_lay.addWidget(self.custom_aspect_w)
+
+        colon_lbl = QLabel(":")
+        colon_lbl.setStyleSheet("color: #FBBF24; font-size: 14px; font-weight: 900;")
+        cr_box_lay.addWidget(colon_lbl)
+
+        self.custom_aspect_h = QSpinBox()
+        self.custom_aspect_h.setRange(1, 9999)
+        self.custom_aspect_h.setValue(16)
+        self.custom_aspect_h.setMinimumWidth(65)
+        self.custom_aspect_h.setStyleSheet("background: #111827; color: #FFFFFF; font-weight: 700; border: 1px solid #374151; border-radius: 4px; padding: 2px 6px;")
+        self.custom_aspect_h.valueChanged.connect(self.on_custom_ratio_changed)
+        cr_box_lay.addWidget(self.custom_aspect_h)
+
+        self.custom_ratio_desc_lbl = QLabel("= 9:16")
+        self.custom_ratio_desc_lbl.setStyleSheet("color: #FDE68A; font-size: 11px; font-weight: 600;")
+        cr_box_lay.addWidget(self.custom_ratio_desc_lbl)
+        cr_box_lay.addStretch()
+
+        for p_label, pw, ph in [("4:5", 4, 5), ("2:3", 2, 3), ("3:4", 3, 4), ("21:9", 21, 9), ("1:2", 1, 2)]:
+            p_btn = QPushButton(p_label)
+            p_btn.setFixedSize(40, 24)
+            p_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            p_btn.setStyleSheet(
+                "QPushButton { background: #1E293B; border: 1px solid #334155; border-radius: 4px; color: #94A3B8; font-size: 10px; font-weight: 600; } "
+                "QPushButton:hover { background: #2563EB; border-color: #3B82F6; color: #FFFFFF; }"
+            )
+            p_btn.clicked.connect(lambda _, w=pw, h=ph: self.set_custom_ratio_preset(w, h))
+            cr_box_lay.addWidget(p_btn)
+
+        cr_lay.addWidget(cr_box)
+        self.custom_ratio_widget.setVisible(False)
+        man_lay.addWidget(self.custom_ratio_widget)
+
         self.manual_crop_pan_widget = QWidget()
         pan_lay = QVBoxLayout(self.manual_crop_pan_widget)
         pan_lay.setContentsMargins(0, 4, 0, 4)
         pan_lay.setSpacing(6)
 
-        pan_hint = QLabel("💡 <b>Tarik langsung video di kanan dengan mouse</b> untuk geser bebas 360°, atau gunakan slider:")
+        pan_hint = QLabel("💡 <b>Tarik langsung video di kanan dengan mouse</b> untuk geser posisi bebas, <b>scroll mouse</b> untuk perbesar/perkecil ukuran video, atau gunakan slider:")
         pan_hint.setWordWrap(True)
         pan_hint.setStyleSheet("color: #FDE68A; font-size: 11px;")
         pan_lay.addWidget(pan_hint)
@@ -3441,15 +3554,15 @@ class HermesDesktop(QMainWindow):
         self.manual_crop_y_val_lbl = QLabel("50% (Tengah)")
         self.manual_crop_y_val_lbl.setMinimumWidth(45)
         self.manual_crop_y_val_lbl.setStyleSheet("color: #FBBF24; font-weight: 700; font-size: 11px;")
-        y_row.addWidget(self.manual_crop_y_val_lbl)
+        x_row.addWidget(self.manual_crop_y_val_lbl)
         pan_lay.addLayout(y_row)
 
         z_row = QHBoxLayout()
-        z_lbl = QLabel("🔍 Skala Zoom:")
+        z_lbl = QLabel("🔍 Ukuran / Skala Video:")
         z_lbl.setStyleSheet("color: #CBD5E1; font-size: 11px; font-weight: 600;")
         z_row.addWidget(z_lbl)
         self.manual_zoom_slider = QSlider(Qt.Orientation.Horizontal)
-        self.manual_zoom_slider.setRange(100, 250)
+        self.manual_zoom_slider.setRange(20, 300)
         self.manual_zoom_slider.setValue(100)
         self.manual_zoom_slider.valueChanged.connect(self.on_manual_zoom_changed)
         z_row.addWidget(self.manual_zoom_slider, 1)
@@ -3461,7 +3574,7 @@ class HermesDesktop(QMainWindow):
 
         btn_reset_row = QHBoxLayout()
         btn_reset_row.addStretch()
-        self.btn_reset_pan_zoom = QPushButton("🔄 Reset Posisi & Zoom")
+        self.btn_reset_pan_zoom = QPushButton("🔄 Reset Posisi & Ukuran")
         self.btn_reset_pan_zoom.setMinimumHeight(28)
         self.btn_reset_pan_zoom.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_reset_pan_zoom.setStyleSheet(
@@ -5301,9 +5414,9 @@ class HermesDesktop(QMainWindow):
         layout = self.layout_combo.currentText()
         mode_state = getattr(self, "framing_mode_state", "auto")
         if mode_state == "manual" and hasattr(self, "manual_style_combo"):
-            m_style = str(self.manual_style_combo.currentData() or "manual_ambient")
+            m_style = str(self.manual_style_combo.currentData() or "manual_fit")
             if m_style == "manual_ambient":
-                unified_mode = "ambient_9_16" if aspect == "9:16" else "standard_16_9"
+                unified_mode = "manual_ambient"
             elif m_style == "manual_crop":
                 unified_mode = "manual_crop"
             elif m_style == "manual_split":
@@ -5311,7 +5424,7 @@ class HermesDesktop(QMainWindow):
             elif m_style == "manual_facecam":
                 unified_mode = "facecam_9_16"
             else:
-                unified_mode = "standard_16_9"
+                unified_mode = "manual_fit"
         else:
             unified_mode = (
                 self.unified_format_combo.currentData()
@@ -5323,6 +5436,10 @@ class HermesDesktop(QMainWindow):
             self.create_preview_video.set_preview_mode(str(unified_mode or "auto_podcast_9_16"))
             if hasattr(self, "manual_crop_x_slider"):
                 self.create_preview_video.set_manual_crop_x(self.manual_crop_x_slider.value() / 100.0)
+            if hasattr(self, "manual_crop_y_slider"):
+                self.create_preview_video.set_manual_crop_y(self.manual_crop_y_slider.value() / 100.0)
+            if hasattr(self, "manual_zoom_slider"):
+                self.create_preview_video.set_manual_zoom(self.manual_zoom_slider.value() / 100.0)
             if hasattr(self, "realtime_face_box_check"):
                 self.create_preview_video.set_show_face_boxes(
                     mode_state == "auto" and self.realtime_face_box_check.isChecked()
@@ -5343,8 +5460,18 @@ class HermesDesktop(QMainWindow):
         else:
             avail_w = max(200, int((self.width() - 40) * 0.50) - 24)
 
-        aspect_ratios = {"9:16": 9 / 16, "1:1": 1.0, "4:3": 4 / 3, "16:9": 16 / 9}
-        ar = aspect_ratios.get(aspect, 9 / 16)
+        def _parse_ar(ar_str: Any) -> float:
+            try:
+                if ":" in str(ar_str):
+                    parts = str(ar_str).split(":")
+                    w_ar, h_ar = float(parts[0]), float(parts[1])
+                    if w_ar > 0 and h_ar > 0:
+                        return w_ar / h_ar
+            except Exception:
+                pass
+            return 9 / 16
+
+        ar = _parse_ar(aspect)
 
         if (avail_w / max_canvas_h) > ar:
             canvas_height = max_canvas_h
@@ -5362,6 +5489,8 @@ class HermesDesktop(QMainWindow):
             "split_2_9_16": "🤖 9:16 AI Split 2 Panel",
             "crop_9_16": "🤖 9:16 AI Fokus 1 Orang",
             "manual_crop": f"✋ {aspect} Manual Crop",
+            "manual_fit": f"✋ {aspect} Manual Fit",
+            "manual_ambient": f"✋ {aspect} Cinema Blur",
             "manual_split": f"✋ {aspect} Manual Split",
             "facecam_9_16": f"✋ {aspect} Streamer Facecam",
             "standard_16_9": f"✋ {aspect} Fit Utuh",
@@ -7042,6 +7171,12 @@ class HermesDesktop(QMainWindow):
             self.current_options.framing_mode = getattr(self, "framing_mode_state", "auto")
             self.current_options.manual_crop_x = (
                 (self.manual_crop_x_slider.value() / 100.0) if hasattr(self, "manual_crop_x_slider") else 0.5
+            )
+            self.current_options.manual_crop_y = (
+                (self.manual_crop_y_slider.value() / 100.0) if hasattr(self, "manual_crop_y_slider") else 0.5
+            )
+            self.current_options.manual_zoom = (
+                (self.manual_zoom_slider.value() / 100.0) if hasattr(self, "manual_zoom_slider") else 1.0
             )
         self.update_review_subtitle_position()
         if hasattr(self, "review_status"):

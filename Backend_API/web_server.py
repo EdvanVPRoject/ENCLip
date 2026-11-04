@@ -213,13 +213,13 @@ class CreateJobRequest(BaseModel):
     custom_prompt: str = Field(default="", max_length=2000)
     whisper_model: str = Field(default="small")
     video_encoder: str = Field(default="auto")
-    aspect_ratio: str = Field(default="16:9", pattern="^(16:9|9:16|4:3|1:1)$")
+    aspect_ratio: str = Field(default="16:9", pattern=r"^([0-9]+:[0-9]+)$")
     framing: str = Field(default="ambient", pattern="^(fit|crop|ambient)$")
     layout: str = Field(default="standard", pattern="^(auto_smart|auto_single|auto_split|standard|facecam_top|podcast_split|manual_split)$")
     framing_mode: str = Field(default="auto", pattern="^(auto|manual)$")
     manual_crop_x: float = Field(default=0.5, ge=0.0, le=1.0)
     manual_crop_y: float = Field(default=0.5, ge=0.0, le=1.0)
-    manual_zoom: float = Field(default=1.0, ge=1.0, le=3.0)
+    manual_zoom: float = Field(default=1.0, ge=0.1, le=5.0)
     subtitle_style: str = Field(default="bold", pattern="^(classic|bold|highlight|minimal|neon|karaoke|box|none)$")
     subtitle_position: str = Field(default="auto", pattern="^(auto|top|center|bottom|free)$")
     subtitle_color: str = Field(default="auto", pattern="^(auto|white|yellow|cyan|red|green|pink|#[0-9A-Fa-f]{6})$")
@@ -258,13 +258,13 @@ class CreateJobRequest(BaseModel):
 
 class RenderRequest(BaseModel):
     subtitle_style: str = Field(default="bold", pattern="^(classic|bold|highlight|minimal|neon|karaoke|box|none)$")
-    aspect_ratio: str = Field(default="16:9", pattern="^(16:9|9:16|4:3|1:1)$")
+    aspect_ratio: str = Field(default="16:9", pattern=r"^([0-9]+:[0-9]+)$")
     framing: str = Field(default="fit", pattern="^(fit|crop|ambient)$")
     layout: str = Field(default="standard", pattern="^(auto_smart|auto_single|auto_split|standard|facecam_top|podcast_split|manual_split)$")
     framing_mode: str = Field(default="auto", pattern="^(auto|manual)$")
     manual_crop_x: float = Field(default=0.5, ge=0.0, le=1.0)
     manual_crop_y: float = Field(default=0.5, ge=0.0, le=1.0)
-    manual_zoom: float = Field(default=1.0, ge=1.0, le=3.0)
+    manual_zoom: float = Field(default=1.0, ge=0.1, le=5.0)
     subtitle_position: str = Field(default="auto", pattern="^(auto|top|center|bottom|free)$")
     subtitle_color: str = Field(default="auto", pattern="^(auto|white|yellow|cyan|red|green|pink|#[0-9A-Fa-f]{6})$")
     subtitle_active_color: str = Field(default="#FFDD00")
@@ -2497,22 +2497,44 @@ SUBTITLE_STYLES = {
 
 def output_dimensions(aspect_ratio: str, quality: str = "1080") -> tuple[int, int]:
     q_str = str(quality).lower()
-    if q_str in ("720", "720p"):
-        if aspect_ratio == "16:9":
-            return 1280, 720
-        if aspect_ratio == "4:3":
-            return 960, 720
-        if aspect_ratio == "1:1":
-            return 720, 720
-        return 720, 1280
+    base_dim = 720 if q_str in ("720", "720p") else 1080
 
-    if aspect_ratio == "16:9":
-        return 1920, 1080
-    if aspect_ratio == "4:3":
-        return 1440, 1080
-    if aspect_ratio == "1:1":
-        return 1080, 1080
-    return 1080, 1920
+    try:
+        w_str, h_str = str(aspect_ratio).split(":")
+        w_val, h_val = float(w_str), float(h_str)
+    except Exception:
+        w_val, h_val = 9.0, 16.0
+
+    if h_val <= 0 or w_val <= 0:
+        w_val, h_val = 9.0, 16.0
+
+    ratio = w_val / h_val
+
+    # Standard well-known presets for exact pixel sharpness
+    if abs(ratio - 9 / 16) < 0.005:
+        return (720, 1280) if base_dim == 720 else (1080, 1920)
+    if abs(ratio - 16 / 9) < 0.005:
+        return (1280, 720) if base_dim == 720 else (1920, 1080)
+    if abs(ratio - 1.0) < 0.005:
+        return (720, 720) if base_dim == 720 else (1080, 1080)
+    if abs(ratio - 4 / 3) < 0.005:
+        return (960, 720) if base_dim == 720 else (1440, 1080)
+    if abs(ratio - 4 / 5) < 0.005:
+        return (720, 900) if base_dim == 720 else (1080, 1350)
+    if abs(ratio - 21 / 9) < 0.005:
+        return (1680, 720) if base_dim == 720 else (2520, 1080)
+
+    # Custom arbitrary ratio
+    if w_val >= h_val:
+        h_out = base_dim
+        w_out = int(round(base_dim * ratio))
+    else:
+        w_out = base_dim
+        h_out = int(round(base_dim / ratio))
+
+    w_out = max(160, (w_out // 2) * 2)
+    h_out = max(160, (h_out // 2) * 2)
+    return w_out, h_out
 
 
 def subtitle_style_with_position(
@@ -3837,31 +3859,35 @@ def video_layout_filter(
         )
 
     if layout != "facecam_top" or not face_crop:
+        cx_ratio = max(0.0, min(1.0, float(manual_crop_x)))
+        cy_ratio = max(0.0, min(1.0, float(manual_crop_y)))
+        zoom_val = max(0.2, min(5.0, float(manual_zoom)))
+
+        w_target = max(10, int(round(width * zoom_val)))
+        h_target = max(10, int(round(height * zoom_val)))
+        pos_x_expr = f"(W-w)/2+({cx_ratio:.3f}-0.5)*max(abs(W-w)\\,W*0.8)"
+        pos_y_expr = f"(H-h)/2+({cy_ratio:.3f}-0.5)*max(abs(H-h)\\,H*0.8)"
+
         if framing == "ambient":
             return (
-                f"split=2[blur_bg][main_fg];"
-                f"[blur_bg]scale=360:640:force_original_aspect_ratio=increase,crop=360:640,boxblur=12:2,scale={width}:{height}[blurred];"
-                f"[main_fg]scale={width}:-2:force_original_aspect_ratio=decrease[fg];"
-                f"[blurred][fg]overlay=(W-w)/2:(H-h)/2:shortest=1,setsar=1"
+                f"split=2[in_bg][in_fg];"
+                f"[in_bg]scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},boxblur=20:5[bg];"
+                f"[in_fg]scale={w_target}:{h_target}:force_original_aspect_ratio=decrease[fg];"
+                f"[bg][fg]overlay=x='{pos_x_expr}':y='{pos_y_expr}':shortest=1,setsar=1"
             )
         if framing == "fit":
             return (
-                f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-                f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,setsar=1"
+                f"split=2[in_bg][in_fg];"
+                f"[in_bg]drawbox=color=black:t=fill,scale={width}:{height}[bg];"
+                f"[in_fg]scale={w_target}:{h_target}:force_original_aspect_ratio=decrease[fg];"
+                f"[bg][fg]overlay=x='{pos_x_expr}':y='{pos_y_expr}':shortest=1,setsar=1"
             )
-        cx_ratio = max(0.0, min(1.0, float(manual_crop_x)))
-        cy_ratio = max(0.0, min(1.0, float(manual_crop_y)))
-        zoom_val = max(1.0, min(3.0, float(manual_zoom)))
-        if zoom_val > 1.01:
-            z_w = _make_even(int(round(width * zoom_val)))
-            z_h = _make_even(int(round(height * zoom_val)))
-            return (
-                f"scale={z_w}:{z_h}:force_original_aspect_ratio=increase,"
-                f"crop={width}:{height}:(iw-{width})*{cx_ratio:.3f}:(ih-{height})*{cy_ratio:.3f},setsar=1"
-            )
+        # framing == "crop"
         return (
-            f"scale={width}:{height}:force_original_aspect_ratio=increase,"
-            f"crop={width}:{height}:(iw-{width})*{cx_ratio:.3f}:(ih-{height})*{cy_ratio:.3f},setsar=1"
+            f"split=2[in_bg][in_fg];"
+            f"[in_bg]drawbox=color=black:t=fill,scale={width}:{height}[bg];"
+            f"[in_fg]scale={w_target}:{h_target}:force_original_aspect_ratio=increase[fg];"
+            f"[bg][fg]overlay=x='{pos_x_expr}':y='{pos_y_expr}':shortest=1,setsar=1"
         )
 
     crop_x, crop_y, crop_w, crop_h = face_crop
