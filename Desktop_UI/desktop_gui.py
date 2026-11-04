@@ -2413,6 +2413,8 @@ class HermesDesktop(QMainWindow):
         self.hook_banner_free_y = 0.11
         self.lyrics_free_x = 0.15
         self.lyrics_free_y = 0.78
+        self.watermark_free_x = 0.85
+        self.watermark_free_y = 0.08
 
         self.tabs = QTabWidget()
         self.setup_tab = self.build_setup_tab()
@@ -4035,14 +4037,50 @@ class HermesDesktop(QMainWindow):
             ("Pojok Kanan Atas", "top_right"),
             ("Pojok Kiri Bawah", "bottom_left"),
             ("Tengah Layar", "center"),
+            ("Geser Bebas (Custom X & Y)", "free"),
         ])
         self.watermark_pos_combo.setMinimumHeight(38)
+
+        # Free position sliders panel for watermark
+        self.watermark_free_pos_widget = QWidget()
+        wm_free_layout = QVBoxLayout(self.watermark_free_pos_widget)
+        wm_free_layout.setContentsMargins(0, 0, 0, 0)
+        wm_free_layout.setSpacing(6)
+
+        wm_x_row = QHBoxLayout()
+        wm_x_lbl = QLabel("Posisi X (Kiri-Kanan):")
+        wm_x_lbl.setStyleSheet("color: #94A3B8; font-size: 11px;")
+        self.watermark_x_slider = QSlider(Qt.Orientation.Horizontal)
+        self.watermark_x_slider.setRange(0, 100)
+        self.watermark_x_slider.setValue(85)
+        self.watermark_x_val_lbl = QLabel("85%")
+        self.watermark_x_val_lbl.setStyleSheet("color: #38BDF8; font-size: 11px; min-width: 32px;")
+        wm_x_row.addWidget(wm_x_lbl)
+        wm_x_row.addWidget(self.watermark_x_slider, 1)
+        wm_x_row.addWidget(self.watermark_x_val_lbl)
+
+        wm_y_row = QHBoxLayout()
+        wm_y_lbl = QLabel("Posisi Y (Atas-Bawah):")
+        wm_y_lbl.setStyleSheet("color: #94A3B8; font-size: 11px;")
+        self.watermark_y_slider = QSlider(Qt.Orientation.Horizontal)
+        self.watermark_y_slider.setRange(0, 100)
+        self.watermark_y_slider.setValue(8)
+        self.watermark_y_val_lbl = QLabel("8%")
+        self.watermark_y_val_lbl.setStyleSheet("color: #38BDF8; font-size: 11px; min-width: 32px;")
+        wm_y_row.addWidget(wm_y_lbl)
+        wm_y_row.addWidget(self.watermark_y_slider, 1)
+        wm_y_row.addWidget(self.watermark_y_val_lbl)
+
+        wm_free_layout.addLayout(wm_x_row)
+        wm_free_layout.addLayout(wm_y_row)
+        self.watermark_free_pos_widget.setVisible(False)
 
         wm_layout.addWidget(QLabel("Teks Watermark Channel (Opsional):"))
         wm_layout.addWidget(self.watermark_edit)
 
         wm_layout.addWidget(QLabel("Posisi Watermark:"))
         wm_layout.addWidget(self.watermark_pos_combo)
+        wm_layout.addWidget(self.watermark_free_pos_widget)
 
         op_row = QHBoxLayout()
         self.watermark_opacity_slider = QSlider(Qt.Orientation.Horizontal)
@@ -4074,7 +4112,9 @@ class HermesDesktop(QMainWindow):
 
         self.subtitle_active_color_combo.currentIndexChanged.connect(self.update_create_preview)
         self.watermark_edit.textChanged.connect(self.update_create_preview)
-        self.watermark_pos_combo.currentIndexChanged.connect(self.update_create_preview)
+        self.watermark_pos_combo.currentIndexChanged.connect(self.on_watermark_pos_changed)
+        self.watermark_x_slider.valueChanged.connect(self.on_watermark_x_slider_changed)
+        self.watermark_y_slider.valueChanged.connect(self.on_watermark_y_slider_changed)
         self.watermark_opacity_slider.valueChanged.connect(self.update_create_preview)
         self.hook_banner_toggle.toggled.connect(self.update_create_preview)
         self.hook_banner_edit.textChanged.connect(self.update_create_preview)
@@ -4746,9 +4786,11 @@ class HermesDesktop(QMainWindow):
         self.preview_hook_banner.moved.connect(self.on_free_hook_banner_moved)
         self.preview_hook_banner.setVisible(False)
 
-        self.preview_watermark_label = QLabel("", self.create_preview_video)
+        self.preview_watermark_label = DraggableSubtitleLabel("", self.create_preview_video)
         self.preview_watermark_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview_watermark_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.preview_watermark_label.setCursor(Qt.CursorShape.OpenHandCursor)
+        self.preview_watermark_label.setToolTip("Tarik & geser Watermark ini ke posisi mana saja di layar")
+        self.preview_watermark_label.moved.connect(self.on_free_watermark_moved)
         self.preview_watermark_label.setVisible(False)
 
         self.create_preview_video.videoRectChanged.connect(lambda _: self.facecam_box.update_geometry_from_parent())
@@ -5811,14 +5853,20 @@ class HermesDesktop(QMainWindow):
                 self.preview_watermark_label.adjustSize()
                 lw, lh = self.preview_watermark_label.width(), self.preview_watermark_label.height()
                 wm_pos = self.watermark_pos_combo.currentData() if hasattr(self, "watermark_pos_combo") else "bottom_right"
-                pos_coords = {
-                    "top_left": (10, 10),
-                    "top_right": (max(4, pw - lw - 10), 10),
-                    "bottom_left": (10, max(4, ph - lh - 14)),
-                    "bottom_right": (max(4, pw - lw - 10), max(4, ph - lh - 14)),
-                    "center": (max(0, (pw - lw) // 2), max(0, (ph - lh) // 2)),
-                }
-                wx, wy = pos_coords.get(wm_pos, (max(4, pw - lw - 10), max(4, ph - lh - 14)))
+                if wm_pos == "free":
+                    avail_w = max(0, pw - lw)
+                    avail_h = max(0, ph - lh)
+                    wx = int(avail_w * self.watermark_free_x)
+                    wy = int(avail_h * self.watermark_free_y)
+                else:
+                    pos_coords = {
+                        "top_left": (10, 10),
+                        "top_right": (max(4, pw - lw - 10), 10),
+                        "bottom_left": (10, max(4, ph - lh - 14)),
+                        "bottom_right": (max(4, pw - lw - 10), max(4, ph - lh - 14)),
+                        "center": (max(0, (pw - lw) // 2), max(0, (ph - lh) // 2)),
+                    }
+                    wx, wy = pos_coords.get(wm_pos, (max(4, pw - lw - 10), max(4, ph - lh - 14)))
                 self.preview_watermark_label.move(wx, wy)
                 self.preview_watermark_label.setVisible(True)
                 self.preview_watermark_label.raise_()
@@ -5956,6 +6004,62 @@ class HermesDesktop(QMainWindow):
                 f"🔥 Hook bebas · posisi {self.hook_banner_free_x:.0%} horizontal, {self.hook_banner_free_y:.0%} vertikal (tersinkron ke Auto-Clipper)"
             )
         self.save_studio_hook_settings()
+
+    def on_free_watermark_moved(self, _x: float, _y: float) -> None:
+        if not hasattr(self, "create_preview_video") or not hasattr(self, "preview_watermark_label"):
+            return
+        pw = max(1, self.create_preview_video.width())
+        ph = max(1, self.create_preview_video.height())
+        lw = self.preview_watermark_label.width()
+        lh = self.preview_watermark_label.height()
+        avail_w = max(1, pw - lw)
+        avail_h = max(1, ph - lh)
+        rx = self.preview_watermark_label.x() / avail_w
+        ry = self.preview_watermark_label.y() / avail_h
+        self.watermark_free_x = round(max(0.0, min(1.0, rx)), 4)
+        self.watermark_free_y = round(max(0.0, min(1.0, ry)), 4)
+        if hasattr(self, "watermark_pos_combo") and self.watermark_pos_combo.currentData() != "free":
+            idx_free = self.watermark_pos_combo.findData("free")
+            if idx_free >= 0:
+                self.watermark_pos_combo.blockSignals(True)
+                self.watermark_pos_combo.setCurrentIndex(idx_free)
+                self.watermark_pos_combo.blockSignals(False)
+        if hasattr(self, "watermark_free_pos_widget"):
+            self.watermark_free_pos_widget.setVisible(True)
+        if hasattr(self, "watermark_x_slider"):
+            self.watermark_x_slider.blockSignals(True)
+            self.watermark_x_slider.setValue(int(self.watermark_free_x * 100))
+            self.watermark_x_slider.blockSignals(False)
+        if hasattr(self, "watermark_x_val_lbl"):
+            self.watermark_x_val_lbl.setText(f"{int(self.watermark_free_x * 100)}%")
+        if hasattr(self, "watermark_y_slider"):
+            self.watermark_y_slider.blockSignals(True)
+            self.watermark_y_slider.setValue(int(self.watermark_free_y * 100))
+            self.watermark_y_slider.blockSignals(False)
+        if hasattr(self, "watermark_y_val_lbl"):
+            self.watermark_y_val_lbl.setText(f"{int(self.watermark_free_y * 100)}%")
+        if hasattr(self, "preview_summary"):
+            self.preview_summary.setText(
+                f"Watermark bebas · posisi {self.watermark_free_x:.0%} kiri, {self.watermark_free_y:.0%} atas"
+            )
+
+    def on_watermark_pos_changed(self) -> None:
+        pos = self.watermark_pos_combo.currentData() if hasattr(self, "watermark_pos_combo") else "bottom_right"
+        if hasattr(self, "watermark_free_pos_widget"):
+            self.watermark_free_pos_widget.setVisible(pos == "free")
+        self.update_create_preview()
+
+    def on_watermark_x_slider_changed(self, val: int) -> None:
+        self.watermark_free_x = val / 100.0
+        if hasattr(self, "watermark_x_val_lbl"):
+            self.watermark_x_val_lbl.setText(f"{val}%")
+        self.update_create_preview()
+
+    def on_watermark_y_slider_changed(self, val: int) -> None:
+        self.watermark_free_y = val / 100.0
+        if hasattr(self, "watermark_y_val_lbl"):
+            self.watermark_y_val_lbl.setText(f"{val}%")
+        self.update_create_preview()
 
     def save_studio_hook_settings(self) -> None:
         if getattr(self, "_loading_hook_settings", False):
@@ -6956,6 +7060,8 @@ class HermesDesktop(QMainWindow):
             watermark_image_path=self.watermark_image_edit.text().strip() if hasattr(self, "watermark_image_edit") else "",
             watermark_position=self.watermark_pos_combo.currentData() if hasattr(self, "watermark_pos_combo") else "bottom_right",
             watermark_opacity=self.watermark_opacity_slider.value() / 100.0 if hasattr(self, "watermark_opacity_slider") else 0.7,
+            watermark_x=self.watermark_free_x if hasattr(self, "watermark_free_x") else 0.85,
+            watermark_y=self.watermark_free_y if hasattr(self, "watermark_free_y") else 0.08,
             hook_banner_enabled=self.hook_banner_toggle.isChecked() if hasattr(self, "hook_banner_toggle") else True,
             hook_banner_text=self.hook_banner_edit.text().strip() if hasattr(self, "hook_banner_edit") else "",
             hook_banner_duration=hb_dur_val,

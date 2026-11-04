@@ -239,6 +239,8 @@ class CreateJobRequest(BaseModel):
     watermark_image_path: str = Field(default="")
     watermark_position: str = Field(default="top_right", pattern="^(top_right|top_left|bottom_right|bottom_left|center|free)$")
     watermark_opacity: float = Field(default=0.65, ge=0.05, le=1.0)
+    watermark_x: float = Field(default=0.85, ge=0.0, le=1.0)
+    watermark_y: float = Field(default=0.08, ge=0.0, le=1.0)
     hook_banner_enabled: bool = Field(default=True)
     hook_banner_text: str = Field(default="", max_length=120)
     hook_banner_duration: int = Field(default=0, ge=0, le=3600)
@@ -293,6 +295,8 @@ class RenderRequest(BaseModel):
     watermark_image_path: str = Field(default="")
     watermark_position: str = Field(default="top_right", pattern="^(top_right|top_left|bottom_right|bottom_left|center|free)$")
     watermark_opacity: float = Field(default=0.65, ge=0.05, le=1.0)
+    watermark_x: float = Field(default=0.85, ge=0.0, le=1.0)
+    watermark_y: float = Field(default=0.08, ge=0.0, le=1.0)
     hook_banner_enabled: bool = Field(default=True)
     hook_banner_text: str = Field(default="", max_length=120)
     hook_banner_duration: int = Field(default=0, ge=0, le=3600)
@@ -4760,15 +4764,20 @@ def render_clip(
     wm_text = getattr(options, "watermark_text", "").strip()
     wm_pos = getattr(options, "watermark_position", "top_right")
     wm_opacity = float(getattr(options, "watermark_opacity", 0.65))
+    wm_x = float(getattr(options, "watermark_x", 0.85))
+    wm_y = float(getattr(options, "watermark_y", 0.08))
     if wm_text:
         safe_wm = escape_drawtext(wm_text)
-        pos_xy = {
-            "top_left": "x=28:y=28",
-            "top_right": "x=w-text_w-28:y=28",
-            "bottom_right": "x=w-text_w-28:y=h-text_h-36",
-            "bottom_left": "x=28:y=h-text_h-36",
-            "center": "x=(w-text_w)/2:y=(h-text_h)/2",
-        }.get(wm_pos, "x=w-text_w-28:y=28")
+        if wm_pos == "free":
+            pos_xy = f"x=(w-text_w)*{wm_x:.4f}:y=(h-text_h)*{wm_y:.4f}"
+        else:
+            pos_xy = {
+                "top_left": "x=28:y=28",
+                "top_right": "x=w-text_w-28:y=28",
+                "bottom_right": "x=w-text_w-28:y=h-text_h-36",
+                "bottom_left": "x=28:y=h-text_h-36",
+                "center": "x=(w-text_w)/2:y=(h-text_h)/2",
+            }.get(wm_pos, "x=w-text_w-28:y=28")
         video_filter += (
             f",drawtext=text='{safe_wm}':fontcolor=white@{wm_opacity:.2f}:fontsize=18:font='Arial':"
             f"box=1:boxcolor=black@0.35:boxborderw=5:{pos_xy}"
@@ -4779,13 +4788,16 @@ def render_clip(
         wm_copy = clip_dir / "wm_logo.png"
         try:
             shutil.copy2(wm_img, wm_copy)
-            img_xy = {
-                "top_left": "28:28",
-                "top_right": "W-w-28:28",
-                "bottom_left": "28:H-h-36",
-                "bottom_right": "W-w-28:H-h-36",
-                "center": "(W-w)/2:(H-h)/2",
-            }.get(wm_pos, "W-w-28:28")
+            if wm_pos == "free":
+                img_xy = f"(W-w)*{wm_x:.4f}:(H-h)*{wm_y:.4f}"
+            else:
+                img_xy = {
+                    "top_left": "28:28",
+                    "top_right": "W-w-28:28",
+                    "bottom_left": "28:H-h-36",
+                    "bottom_right": "W-w-28:H-h-36",
+                    "center": "(W-w)/2:(H-h)/2",
+                }.get(wm_pos, "W-w-28:28")
             video_filter = (
                 f"{video_filter}[basevid];"
                 f"movie=wm_logo.png,scale=150:-1,format=rgba,"
@@ -4984,6 +4996,8 @@ def render_profile(options: CreateJobRequest) -> dict[str, str]:
         "watermark_image_path": getattr(options, "watermark_image_path", ""),
         "watermark_position": getattr(options, "watermark_position", "top_right"),
         "watermark_opacity": f"{getattr(options, 'watermark_opacity', 0.65):.2f}",
+        "watermark_x": f"{getattr(options, 'watermark_x', 0.85):.3f}",
+        "watermark_y": f"{getattr(options, 'watermark_y', 0.08):.3f}",
         "hook_banner_enabled": str(getattr(options, "hook_banner_enabled", False)),
         "hook_banner_text": getattr(options, "hook_banner_text", ""),
         "hook_banner_duration": str(getattr(options, "hook_banner_duration", 4)),
