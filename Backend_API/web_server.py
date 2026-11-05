@@ -53,8 +53,10 @@ def resolve_app_data_root() -> tuple[Path, Path]:
         exe_dir = Path(sys.executable).resolve().parent
         bundle = Path(getattr(sys, "_MEIPASS", exe_dir)).resolve()
 
-        # 1. Mode Portable: jika folder tempat .exe berada dapat ditulis, gunakan folder tersebut
-        if is_path_writable(exe_dir / "HasilClip"):
+        # 1. Mode Portable: hanya gunakan exe_dir jika BUKAN di Program Files dan root exe_dir sendiri writable
+        exe_str_low = str(exe_dir).lower()
+        is_program_files = "program files" in exe_str_low or "windowsapps" in exe_str_low
+        if not is_program_files and is_path_writable(exe_dir) and is_path_writable(exe_dir / "HasilClip"):
             return exe_dir, bundle
 
         # 2. Mode Terpasang di Program Files / Read-Only: alihkan ke folder Video pengguna
@@ -195,11 +197,11 @@ class CreateJobRequest(BaseModel):
     smart_fixed_duration: int = Field(default=60, ge=5, le=3600)
     max_clips: int = Field(default=10, ge=1, le=200)
     clip_mode: str = Field(default="smart", pattern="^(smart|manual|split_count|split_duration)$")
-    clip_profile: str = Field(default="auto", pattern="^(auto|live|standard|music|manual)$")
+    clip_profile: str = Field(default="auto", pattern="^(auto|podcast|live|standard|education|music|cinematic|manual)$")
     manual_segments: list[dict[str, Any]] = Field(default_factory=list)
     clip_flavor: str = Field(
-        default="spicy_drama",
-        pattern="^(spicy_drama|viral_all|funny_blunder|deep_meat|hype_rage|music_lyrics)$",
+        default="universal",
+        pattern="^(universal|spicy_drama|viral_all|funny_blunder|deep_meat|hype_rage|music_lyrics|cinematic_story)$",
     )
     use_audio_energy: bool = Field(default=True)
     snap_sentence_bounds: bool = Field(default=True)
@@ -213,10 +215,13 @@ class CreateJobRequest(BaseModel):
     custom_prompt: str = Field(default="", max_length=2000)
     whisper_model: str = Field(default="small")
     video_encoder: str = Field(default="auto")
-    aspect_ratio: str = Field(default="16:9", pattern=r"^([0-9]+:[0-9]+)$")
-    framing: str = Field(default="ambient", pattern="^(fit|crop|ambient)$")
-    layout: str = Field(default="standard", pattern="^(auto_smart|auto_single|auto_split|standard|facecam_top|podcast_split|manual_split)$")
-    framing_mode: str = Field(default="auto", pattern="^(auto|manual)$")
+    aspect_ratio: str = Field(default="9:16", pattern=r"^(original|[0-9]+:[0-9]+)$")
+    framing: str = Field(default="fit", pattern="^(original|fit|crop|ambient)$")
+    layout: str = Field(
+        default="auto_universal",
+        pattern="^(original|auto_universal|auto_smart|auto_single|auto_split|auto_gaming|auto_cinema|standard|facecam_top|podcast_split|manual_split)$",
+    )
+    framing_mode: str = Field(default="auto", pattern="^(none|auto|manual)$")
     manual_crop_x: float = Field(default=0.5, ge=0.0, le=1.0)
     manual_crop_y: float = Field(default=0.5, ge=0.0, le=1.0)
     manual_zoom: float = Field(default=1.0, ge=0.1, le=5.0)
@@ -241,18 +246,19 @@ class CreateJobRequest(BaseModel):
     watermark_opacity: float = Field(default=0.65, ge=0.05, le=1.0)
     watermark_x: float = Field(default=0.85, ge=0.0, le=1.0)
     watermark_y: float = Field(default=0.08, ge=0.0, le=1.0)
-    hook_banner_enabled: bool = Field(default=True)
+    hook_banner_enabled: bool = Field(default=False)
     hook_banner_text: str = Field(default="", max_length=120)
     hook_banner_duration: int = Field(default=0, ge=0, le=3600)
     hook_banner_position: str = Field(default="top")
     hook_banner_x: float = Field(default=0.5, ge=0.0, le=1.0)
     hook_banner_y: float = Field(default=0.11, ge=0.0, le=1.0)
+    outro_cta_enabled: bool = Field(default=False)
     facecam_crop: list[float] | None = None
     mirror_video: bool = Field(default=False)
-    speed_shift: bool = Field(default=True)
-    color_boost: bool = Field(default=True)
-    emoji_subtitles: bool = Field(default=True)
-    dynamic_micro_zoom: bool = Field(default=True)
+    speed_shift: bool = Field(default=False)
+    color_boost: bool = Field(default=False)
+    emoji_subtitles: bool = Field(default=False)
+    dynamic_micro_zoom: bool = Field(default=False)
     auto_broll: bool = Field(default=False)
     broll_folder: str = Field(default="")
     skip_if_has_subtitles: bool = Field(default=False, description="Otomatis lewati penambahan subtitle jika video sudah memiliki subtitle (embedded/hardsub).")
@@ -270,10 +276,13 @@ class CreateJobRequest(BaseModel):
 
 class RenderRequest(BaseModel):
     subtitle_style: str = Field(default="bold", pattern="^(classic|bold|highlight|minimal|neon|karaoke|box|none)$")
-    aspect_ratio: str = Field(default="16:9", pattern=r"^([0-9]+:[0-9]+)$")
-    framing: str = Field(default="fit", pattern="^(fit|crop|ambient)$")
-    layout: str = Field(default="standard", pattern="^(auto_smart|auto_single|auto_split|standard|facecam_top|podcast_split|manual_split)$")
-    framing_mode: str = Field(default="auto", pattern="^(auto|manual)$")
+    aspect_ratio: str = Field(default="9:16", pattern=r"^(original|[0-9]+:[0-9]+)$")
+    framing: str = Field(default="fit", pattern="^(original|fit|crop|ambient)$")
+    layout: str = Field(
+        default="auto_universal",
+        pattern="^(original|auto_universal|auto_smart|auto_single|auto_split|auto_gaming|auto_cinema|standard|facecam_top|podcast_split|manual_split)$",
+    )
+    framing_mode: str = Field(default="auto", pattern="^(none|auto|manual)$")
     manual_crop_x: float = Field(default=0.5, ge=0.0, le=1.0)
     manual_crop_y: float = Field(default=0.5, ge=0.0, le=1.0)
     manual_zoom: float = Field(default=1.0, ge=0.1, le=5.0)
@@ -297,18 +306,19 @@ class RenderRequest(BaseModel):
     watermark_opacity: float = Field(default=0.65, ge=0.05, le=1.0)
     watermark_x: float = Field(default=0.85, ge=0.0, le=1.0)
     watermark_y: float = Field(default=0.08, ge=0.0, le=1.0)
-    hook_banner_enabled: bool = Field(default=True)
+    hook_banner_enabled: bool = Field(default=False)
     hook_banner_text: str = Field(default="", max_length=120)
     hook_banner_duration: int = Field(default=0, ge=0, le=3600)
     hook_banner_position: str = Field(default="top")
     hook_banner_x: float = Field(default=0.5, ge=0.0, le=1.0)
     hook_banner_y: float = Field(default=0.11, ge=0.0, le=1.0)
+    outro_cta_enabled: bool = Field(default=False)
     facecam_crop: list[float] | None = None
     mirror_video: bool = Field(default=False)
-    speed_shift: bool = Field(default=True)
-    color_boost: bool = Field(default=True)
-    emoji_subtitles: bool = Field(default=True)
-    dynamic_micro_zoom: bool = Field(default=True)
+    speed_shift: bool = Field(default=False)
+    color_boost: bool = Field(default=False)
+    emoji_subtitles: bool = Field(default=False)
+    dynamic_micro_zoom: bool = Field(default=False)
     auto_broll: bool = Field(default=False)
     broll_folder: str = Field(default="")
     skip_if_has_subtitles: bool = Field(default=False, description="Otomatis lewati penambahan subtitle jika video sudah memiliki subtitle (embedded/hardsub).")
@@ -1238,13 +1248,47 @@ def words(text: str) -> list[str]:
 
 
 CLIP_PROFILE_GUIDANCE = {
-    "auto": "Kenali sendiri apakah transkrip berasal dari live/streamer atau konten terstruktur. Pilih momen paling kuat sesuai konteksnya.",
-    "live": "Ini adalah live atau streamer. Prioritaskan blunder, reaksi spontan, kelucuan, emosi, clutch, konflik, atau interaksi penonton. Sertakan buildup dan reaksi setelah kejadian.",
-    "standard": "Ini adalah konten biasa yang terstruktur. Prioritaskan hook, insight, tips, opini kuat, cerita, penjelasan jelas, dan payoff yang tuntas.",
-    "manual": "Jangan membuat clip otomatis. Video akan direview untuk penambahan clip manual.",
+    "auto": "Kenali sendiri jenis konten video (vlog, edukasi, gaming, obrolan, review, film, atau musik). Pilih bagian paling menarik, utuh, dan relevan sesuai konteks aslinya.",
+    "podcast": "Ini adalah podcast, wawancara, atau diskusi. Prioritaskan siklus tanya-jawab utuh, pernyataan tajam, cerita menarik, atau perdebatan dengan pembuka dan penutup jelas.",
+    "live": "Ini adalah gaming, live stream, atau konten reaksi. Prioritaskan momen aksi puncak, clutch, reaksi spontan, kelucuan, atau interaksi seru beserta buildup singkatnya.",
+    "education": "Ini adalah konten edukasi, tutorial, presentasi, atau penjelasan. Prioritaskan poin inti yang jelas, langkah penting, fakta kunci, dan kesimpulan yang utuh.",
+    "standard": "Ini adalah konten terstruktur. Prioritaskan pembuka kuat, insight jelas, cerita menarik, dan kesimpulan tuntas.",
+    "music": "Ini adalah lagu atau video musik. Prioritaskan bagian chorus/reff paling ikonik, klimaks melodi, atau bait lirik paling emosional tanpa memotong tengah baris lagu.",
+    "cinematic": "Ini adalah vlog, film pendek, dokumenter, atau cerita visual. Prioritaskan alur cerita emosional, monolog bermakna, atau transisi adegan yang utuh.",
+    "manual": "Jangan membuat clip otomatis. Video akan dipotong sesuai segmen manual pengguna.",
 }
 
 CLIP_FLAVOR_PROFILES: dict[str, dict[str, Any]] = {
+    "universal": {
+        "label": "Universal (Semua Jenis Konten)",
+        "prompt_rule": (
+            "FOKUS UTAMA: Sesuaikan pemilihan klip dengan sifat asli video (apakah edukasi, vlog, gaming, review, "
+            "cerita, musik, atau podcast). Pilih bagian yang paling menarik perhatian, memiliki pembuka jelas, isi yang "
+            "padat dan mudah dipahami tanpa konteks luar, serta penutup yang tuntas."
+        ),
+        "headline_rule": "Buat judul ringkas 4-7 kata yang natural, relevan dengan isi klip, dan tidak berlebihan.",
+        "keywords": {
+            "penting", "utama", "cara", "alasan", "fakta", "cerita", "unik", "menarik",
+            "terbaik", "tips", "kunci", "hasil", "momen", "awal", "akhir", "kesimpulan",
+        },
+        "energy_weight": 1.25,
+        "ideal_min": 35,
+        "ideal_max": 105,
+    },
+    "cinematic_story": {
+        "label": "Cerita & Alur Sinematik",
+        "prompt_rule": (
+            "FOKUS UTAMA: Cari bagian alur cerita, narasi vlog, monolog, atau adegan yang memiliki nuansa emosional "
+            "dan kesinambungan cerita yang utuh dari awal hingga akhir segmen."
+        ),
+        "headline_rule": "Buat judul elegan 4-7 kata yang menggambarkan suasana atau inti cerita klip.",
+        "keywords": {
+            "cerita", "perjalanan", "hidup", "rasa", "kenangan", "waktu", "mimpi", "awal", "akhir", "indah",
+        },
+        "energy_weight": 1.10,
+        "ideal_min": 40,
+        "ideal_max": 120,
+    },
     "spicy_drama": {
         "label": "Spicy / Drama / Kontroversi",
         "prompt_rule": (
@@ -2477,9 +2521,8 @@ def write_srt(
                     index += 1
 
         elif mode == "active_highlight":
-            chunk_size = 4 if max_lines != 1 else 3
-            for chunk_idx in range(0, len(norm_words), chunk_size):
-                chunk = norm_words[chunk_idx : chunk_idx + chunk_size]
+            chunks_list = _group_words_balanced(norm_words, max_lines=max_lines, is_landscape=False)
+            for c_i, chunk in enumerate(chunks_list):
                 chunk_words = [w["word"] for w in chunk if w.get("word")]
                 if not chunk_words:
                     continue
@@ -2489,12 +2532,14 @@ def write_srt(
                     ws = nw["start"]
                     if active_i + 1 < len(chunk):
                         nxt_s = chunk[active_i + 1]["start"]
-                        we = nxt_s if (nxt_s - nw["end"]) < 0.45 else nw["end"]
+                        we = nxt_s if (nxt_s - nw["end"]) < 0.80 else nw["end"]
                     else:
                         we = nw["end"]
-                        if chunk_idx + chunk_size < len(norm_words):
-                            next_chunk_s = norm_words[chunk_idx + chunk_size]["start"]
-                            if we > next_chunk_s:
+                        if c_i + 1 < len(chunks_list) and chunks_list[c_i + 1]:
+                            next_chunk_s = chunks_list[c_i + 1][0]["start"]
+                            if 0 <= (next_chunk_s - we) < 0.25:
+                                we = next_chunk_s
+                            elif we > next_chunk_s:
                                 we = max(ws + 0.06, next_chunk_s)
                     if we <= ws:
                         continue
@@ -2502,7 +2547,7 @@ def write_srt(
                     formatted_tokens = []
                     for i, cw in enumerate(chunk_words):
                         disp_w = decorate_word_with_emoji(cw, enabled=True) if emoji_subtitles else cw
-                        w_hex, _, is_kw = detect_word_context_color(cw, chunk_sentence, highlight_color)
+                        w_hex, _, _ = detect_word_context_color(cw, chunk_sentence, highlight_color)
                         if i == active_i:
                             act_hex = "#FFDD00" if highlight_color in ("#FFDD00", "auto_context") else highlight_color
                             if highlight_color == "auto_context":
@@ -2511,11 +2556,9 @@ def write_srt(
                         else:
                             formatted_tokens.append(disp_w)
 
-                    if max_lines >= 2 and len(formatted_tokens) >= 4:
-                        mid = len(formatted_tokens) // 2
-                        cue_text = " ".join(formatted_tokens[:mid]) + "\n" + " ".join(formatted_tokens[mid:])
-                    else:
-                        cue_text = " ".join(formatted_tokens)
+                    cue_text = _split_tokens_two_lines_balanced(
+                        chunk_words, formatted_tokens, max_lines=max_lines, line_sep="\n", single_line_char_limit=22
+                    )
 
                     lines.extend([
                         str(index),
@@ -2547,9 +2590,122 @@ SUBTITLE_STYLES = {
 }
 
 
-def output_dimensions(aspect_ratio: str, quality: str = "1080") -> tuple[int, int]:
+def _group_words_balanced(
+    norm_words: list[dict[str, Any]],
+    max_lines: int = 2,
+    is_landscape: bool = False,
+) -> list[list[dict[str, Any]]]:
+    """
+    Mengelompokkan kata menjadi potongan subtitle yang seimbang berdasarkan panjang karakter
+    dan jeda bicara alami—tanpa pernah menyisakan 1 kata yatim (orphan word) di akhir kalimat.
+    """
+    if not norm_words:
+        return []
+
+    max_chars = (34 if is_landscape else 24) if max_lines == 1 else (58 if is_landscape else 40)
+    max_words = (6 if is_landscape else 4) if max_lines == 1 else (9 if is_landscape else 6)
+
+    chunks: list[list[dict[str, Any]]] = []
+    cur: list[dict[str, Any]] = []
+    cur_chars = 0
+
+    for w in norm_words:
+        w_str = str(w.get("word", "")).strip()
+        if not w_str:
+            continue
+        w_len = len(w_str)
+        gap = (float(w["start"]) - float(cur[-1]["end"])) if cur else 0.0
+        prev_word = str(cur[-1].get("word", "")) if cur else ""
+        prev_punct = prev_word.endswith((".", "!", "?", ";"))
+
+        should_split = False
+        if cur:
+            if len(cur) >= max_words or (cur_chars + 1 + w_len) > max_chars:
+                should_split = True
+            elif gap >= 0.65 or (prev_punct and len(cur) >= 2):
+                should_split = True
+
+        if should_split:
+            chunks.append(cur)
+            cur = [w]
+            cur_chars = w_len
+        else:
+            cur_chars = (cur_chars + 1 + w_len) if cur else w_len
+            cur.append(w)
+
+    if cur:
+        chunks.append(cur)
+
+    # Gabungkan kata yatim (1 kata sendirian) ke potongan sebelahnya agar tidak ada ruang kosong janggal
+    if len(chunks) >= 2 and len(chunks[-1]) == 1:
+        prev_len = sum(len(str(x.get("word", ""))) for x in chunks[-2]) + max(0, len(chunks[-2]) - 1)
+        tail_len = len(str(chunks[-1][0].get("word", "")))
+        if (prev_len + 1 + tail_len) <= (max_chars + 10):
+            chunks[-2].extend(chunks[-1])
+            chunks.pop()
+
+    return chunks
+
+
+def _split_tokens_two_lines_balanced(
+    plain_words: list[str],
+    formatted_tokens: list[str],
+    max_lines: int = 2,
+    line_sep: str = "\\N",
+    single_line_char_limit: int = 20,
+) -> str:
+    """
+    Memecah token menjadi maksimal 2 baris dengan lebar karakter yang seimbang (atas & bawah proporsional),
+    mencegah ruang kosong lebar atau 1 kata pendek jatuh sendirian.
+    """
+    n = len(formatted_tokens)
+    if n == 0:
+        return ""
+    if max_lines == 1 or n <= 2:
+        return " ".join(formatted_tokens)
+
+    total_chars = sum(len(w) for w in plain_words) + max(0, n - 1)
+    if total_chars <= single_line_char_limit:
+        return " ".join(formatted_tokens)
+
+    best_idx = max(1, n // 2)
+    best_diff = 10**9
+    for split_i in range(1, n):
+        # Hindari 1 kata pendek (<= 3 huruf, mis. "ini", "di", "ke") sendirian di satu baris bila memungkinkan
+        if n >= 4 and (
+            (split_i == 1 and len(plain_words[0]) <= 3)
+            or (split_i == n - 1 and len(plain_words[-1]) <= 3)
+        ):
+            continue
+        left_c = sum(len(w) for w in plain_words[:split_i]) + max(0, split_i - 1)
+        right_c = sum(len(w) for w in plain_words[split_i:]) + max(0, (n - split_i) - 1)
+        diff = abs(left_c - right_c)
+        if diff < best_diff:
+            best_diff = diff
+            best_idx = split_i
+
+    return " ".join(formatted_tokens[:best_idx]) + line_sep + " ".join(formatted_tokens[best_idx:])
+
+
+def output_dimensions(
+    aspect_ratio: str,
+    quality: str = "1080",
+    source_video: Path | None = None,
+) -> tuple[int, int]:
     q_str = str(quality).lower()
-    base_dim = 720 if q_str in ("720", "720p") else 1080
+    base_dim = 720 if q_str in ("720", "720p") else (2160 if q_str in ("2160", "4k", "best") else 1080)
+
+    if str(aspect_ratio).strip().lower() == "original":
+        if source_video is not None and Path(source_video).is_file():
+            vw, vh = media_dimensions(Path(source_video))
+            if vw > 0 and vh > 0:
+                short_side = min(vw, vh)
+                if q_str not in ("best", "2160") and short_side > base_dim:
+                    scale_r = base_dim / float(short_side)
+                    vw = int(round(vw * scale_r))
+                    vh = int(round(vh * scale_r))
+                return max(160, (vw // 2) * 2), max(160, (vh // 2) * 2)
+        return (1280, 720) if base_dim == 720 else (1920, 1080)
 
     try:
         w_str, h_str = str(aspect_ratio).split(":")
@@ -3502,7 +3658,12 @@ def build_single_segment_filter(
 
     if f_count == 0 or not crops or layout_type == "none":
         if framing == "crop":
-            return f"{in_tag}scale=-1:{height},crop={width}:{height}:(in_w-{width})/2:0,setsar=1{out_tag}"
+            return f"{in_tag}scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setsar=1{out_tag}"
+        if framing == "fit":
+            return (
+                f"{in_tag}scale={width}:{height}:force_original_aspect_ratio=decrease,"
+                f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,setsar=1{out_tag}"
+            )
         return (
             f"{in_tag}split=2[fg_{uid}][bg_{uid}];"
             f"[bg_{uid}]scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},boxblur=20:5[bgblur_{uid}];"
@@ -3811,22 +3972,29 @@ def write_ass_pop_subtitle(
     quality: str = "1080",
     subtitle_x: float = 0.15,
     subtitle_y: float = 0.78,
-    hook_banner_enabled: bool = True,
+    hook_banner_enabled: bool = False,
     hook_banner_text: str = "",
     hook_banner_duration: float = 0.0,
     hook_banner_position: str = "top",
     hook_banner_x: float = 0.5,
     hook_banner_y: float = 0.11,
     layout_segments: list[dict[str, Any]] | None = None,
-    emoji_subtitles: bool = True,
+    emoji_subtitles: bool = False,
     translate_lyrics: bool = False,
     lyrics_display_mode: str = "dual",
     lyrics_position: str = "auto",
     lyrics_pos_x: float = 0.15,
     lyrics_pos_y: float = 0.78,
+    subtitle_style: str = "bold",
+    outro_cta_enabled: bool = False,
+    explicit_width: int | None = None,
+    explicit_height: int | None = None,
     **kwargs: Any,
 ) -> None:
-    width, height = output_dimensions(aspect_ratio, quality)
+    if explicit_width and explicit_height:
+        width, height = int(explicit_width), int(explicit_height)
+    else:
+        width, height = output_dimensions(aspect_ratio, quality)
     is_landscape = width >= height
 
     eff_pos = lyrics_position if (translate_lyrics and lyrics_position != "auto") else position
@@ -3834,31 +4002,32 @@ def write_ass_pop_subtitle(
     eff_sub_y = lyrics_pos_y if (translate_lyrics and lyrics_position == "free") else subtitle_y
 
     if is_landscape:
-        scale_factor = (height / 360.0)
-        scaled_font_size = max(32, min(72, int(font_size * scale_factor * 0.95)))
-        thumb_font_size = max(58, min(96, int(height * 0.072)))
-        top_header_font_size = 50
+        scale_factor = height / 360.0
+        scaled_font_size = max(28, min(68, int(font_size * scale_factor * 0.92)))
+        thumb_font_size = max(54, min(92, int(height * 0.068)))
+        top_header_font_size = 48
     else:
-        scale_factor = (height / 420.0)
-        scaled_font_size = max(42, min(92, int(font_size * scale_factor)))
-        thumb_font_size = max(68, min(110, int(width * 0.078)))
-        top_header_font_size = max(44, min(76, int(width * 0.052)))
+        scale_factor = height / 420.0
+        scaled_font_size = max(36, min(86, int(font_size * scale_factor * 0.95)))
+        thumb_font_size = max(62, min(104, int(width * 0.072)))
+        top_header_font_size = max(42, min(72, int(width * 0.048)))
 
+    style_key = str(subtitle_style or "bold").strip().lower()
     primary_ass = hex_to_ass_bgr(base_color_hex, "&H00FFFFFF")
     default_active_ass = hex_to_ass_bgr(
         "#FFDD00" if active_color_hex == "auto_context" else active_color_hex,
         "&H0000DDFF",
     )
 
-    if eff_pos == "center" or (layout == "podcast_split" and eff_pos in ("auto", "bottom")):
+    if eff_pos == "center" or (layout in ("podcast_split", "manual_split") and eff_pos in ("auto", "bottom")):
         alignment = 5
         margin_v = 0
     elif eff_pos == "top":
         alignment = 8
-        margin_v = int(height * (0.08 if is_landscape else 0.14))
+        margin_v = int(height * (0.08 if is_landscape else 0.13))
     else:
         alignment = 2
-        margin_v = int(height * (0.075 if is_landscape else 0.14))
+        margin_v = int(height * (0.075 if is_landscape else 0.135))
 
     free_pos_tag = ""
     if eff_pos == "free":
@@ -3868,22 +4037,88 @@ def write_ass_pop_subtitle(
         margin_v = 0
         free_pos_tag = f"{{\\an5\\pos({fx},{fy})}}"
 
-    outline_w = 3.6 if is_landscape else 4.5
-    shadow_w = 2.0 if is_landscape else 2.5
+    # Konfigurasi nyata untuk 7 gaya subtitle
+    font_name = "Segoe UI"
+    bold_flag = -1
+    border_style = 1
+    outline_w = 3.2 if is_landscape else 4.0
+    shadow_w = 1.6 if is_landscape else 2.0
+    outline_ass = "&H00000000"
+    back_ass = "&H80000000"
+    spacing_val = 0.5
+    use_uppercase = False
+    pop_scale_start = 114
+    pop_scale_end = 104
 
+    if style_key == "bold":
+        font_name = "Arial Black"
+        outline_w = 3.6 if is_landscape else 4.4
+        shadow_w = 2.0 if is_landscape else 2.4
+        spacing_val = 0.8
+        use_uppercase = False
+    elif style_key == "highlight":
+        font_name = "Segoe UI"
+        border_style = 3
+        outline_w = 9.0 if is_landscape else 11.0
+        shadow_w = 0.0
+        outline_ass = "&H5518181B"
+        back_ass = "&H5518181B"
+        spacing_val = 0.4
+    elif style_key == "classic":
+        font_name = "Segoe UI"
+        bold_flag = -1
+        outline_w = 2.4 if is_landscape else 3.0
+        shadow_w = 1.4 if is_landscape else 1.8
+        pop_scale_start = 106
+        pop_scale_end = 100
+    elif style_key == "minimal":
+        font_name = "Segoe UI"
+        bold_flag = 0
+        scaled_font_size = max(24, int(scaled_font_size * 0.90))
+        outline_w = 1.8 if is_landscape else 2.2
+        shadow_w = 1.0
+        pop_scale_start = 104
+        pop_scale_end = 100
+    elif style_key == "neon":
+        font_name = "Segoe UI"
+        outline_w = 3.8 if is_landscape else 4.6
+        shadow_w = 2.8 if is_landscape else 3.4
+        outline_ass = "&H00381805"
+        back_ass = "&H66FF9900"
+        spacing_val = 1.0
+    elif style_key == "karaoke":
+        font_name = "Arial Black"
+        outline_w = 3.4 if is_landscape else 4.2
+        shadow_w = 2.0
+        use_uppercase = True
+        pop_scale_start = 116
+        pop_scale_end = 105
+    elif style_key == "box":
+        font_name = "Segoe UI"
+        border_style = 3
+        outline_w = 10.0 if is_landscape else 12.0
+        shadow_w = 0.0
+        outline_ass = "&H4509090B"
+        back_ass = "&H4509090B"
+        pop_scale_start = 106
+        pop_scale_end = 100
+
+    margin_lr = max(48, int(width * 0.065))
+
+    # WrapStyle: 2 memastikan pemotongan baris 100% mengikuti \N seimbang kita (tanpa kata yatim jatuh sendiri)
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {width}
 PlayResY: {height}
-WrapStyle: 0
+WrapStyle: 2
 ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: SmartNotice,Arial Black,{scaled_font_size},{primary_ass},{default_active_ass},&H00000000,&H80000000,-1,0,0,0,100,100,1.0,0,1,{outline_w},{shadow_w},{alignment},40,40,{margin_v},1
-Style: ThumbnailHook,Arial Black,{thumb_font_size},&H00FFFFFF,&H0000DDFF,&H00000000,&HB0000000,-1,0,0,0,100,100,1.5,0,1,6.0,3.5,5,50,50,0,1
-Style: TopHeader,Arial Black,{top_header_font_size},&H00FFFFFF,&H0000DDFF,&H00000000,&H90000000,-1,0,0,0,100,100,1.2,0,1,5.0,2.5,8,50,50,220,1
-Style: OutroCTA,Arial Black,38,&H0000DDFF,&H00FFFFFF,&H00000000,&HB0000000,-1,0,0,0,100,100,1.0,0,1,4.5,2.5,5,40,40,0,1
+Style: SmartNotice,{font_name},{scaled_font_size},{primary_ass},{default_active_ass},{outline_ass},{back_ass},{bold_flag},0,0,0,100,100,{spacing_val},0,{border_style},{outline_w},{shadow_w},{alignment},{margin_lr},{margin_lr},{margin_v},1
+Style: ThumbnailHook,Segoe UI,{thumb_font_size},&H00FFFFFF,&H0000DDFF,&H00000000,&HB0000000,-1,0,0,0,100,100,1.2,0,1,5.5,3.0,5,50,50,0,1
+Style: TopHeader,Segoe UI,{top_header_font_size},&H00FFFFFF,&H0000DDFF,&H00000000,&H90000000,-1,0,0,0,100,100,1.0,0,1,4.5,2.2,8,50,50,220,1
+Style: OutroCTA,Segoe UI,36,&H0000DDFF,&H00FFFFFF,&H00000000,&HB0000000,-1,0,0,0,100,100,0.8,0,1,4.0,2.0,5,40,40,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -3891,10 +4126,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     events: list[str] = []
     clip_dur = max(0.1, end - start)
     raw_hb_dur = float(hook_banner_duration if hook_banner_duration is not None else 0.0)
-    # 0 atau negatif = tampil selamanya (sepanjang durasi klip)
     hook_dur = (clip_dur if raw_hb_dur <= 0.0 else min(clip_dur, raw_hb_dur)) if hook_banner_enabled else 0.0
 
-    # Hitung koordinat penempatan Hook fleksibel (top, upper_mid, center, bottom_above_sub, free)
     hb_pos_mode = str(hook_banner_position or "top").strip().lower()
     if hb_pos_mode == "free":
         hb_cx = max(80, min(width - 80, int(width * float(hook_banner_x if hook_banner_x is not None else 0.5))))
@@ -3912,32 +4145,38 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         hb_cx = width // 2
         hb_cy = int(height * (0.11 if not is_landscape else 0.15))
 
-    # 1. RENDER HOOK BANNER FLEKSIBEL (9:16 MAUPUN 16:9, BISA SELAMANYA ATAU N DETIK PERTAMA)
+    # 1. RENDER HOOK BANNER HANYA JIKA DIAKTIFKAN OLEH PENGGUNA
     if hook_banner_enabled and hook_dur > 0 and hook_banner_text.strip():
         hdr_words = normalize_indonesian_transcript_text(hook_banner_text.strip()).split()
         colored_hdr_tokens: list[str] = []
+        plain_hdr_words: list[str] = []
         has_special_colored = False
         for idx_w, hw in enumerate(hdr_words):
+            hw_disp = hw.upper()
+            plain_hdr_words.append(hw_disp)
             _, w_ass, is_spec = detect_word_context_color(hw, hook_banner_text, "auto_context")
             if is_spec:
                 has_special_colored = True
-                colored_hdr_tokens.append(f"{{\\c{w_ass}}}{hw.upper()}{{\\c&H00FFFFFF}}")
+                colored_hdr_tokens.append(f"{{\\c{w_ass}}}{hw_disp}{{\\c&H00FFFFFF}}")
             elif not has_special_colored and idx_w >= len(hdr_words) - 2:
-                colored_hdr_tokens.append(f"{{\\c&H0000DDFF}}{hw.upper()}{{\\c&H00FFFFFF}}")
+                colored_hdr_tokens.append(f"{{\\c&H0000DDFF}}{hw_disp}{{\\c&H00FFFFFF}}")
             else:
-                colored_hdr_tokens.append(hw.upper())
-        mid_h = (len(colored_hdr_tokens) + 1) // 2
-        hdr_text = (
-            " ".join(colored_hdr_tokens[:mid_h]) + "\\N" + " ".join(colored_hdr_tokens[mid_h:])
-            if len(colored_hdr_tokens) > 3
-            else " ".join(colored_hdr_tokens)
+                colored_hdr_tokens.append(hw_disp)
+        hdr_text = _split_tokens_two_lines_balanced(
+            plain_hdr_words, colored_hdr_tokens, max_lines=2, line_sep="\\N", single_line_char_limit=18
         )
         style_name = "TopHeader" if not is_landscape else "ThumbnailHook"
         events.append(
-            f"Dialogue: 2,{ass_timestamp(0.0)},{ass_timestamp(hook_dur)},{style_name},,0,0,0,,{{\\an8\\pos({hb_cx},{hb_cy})\\fscx112\\fscy112\\t(0,180,\\fscx100\\fscy100)}}{hdr_text}"
+            f"Dialogue: 2,{ass_timestamp(0.0)},{ass_timestamp(hook_dur)},{style_name},,0,0,0,,{{\\an8\\pos({hb_cx},{hb_cy})\\fscx110\\fscy110\\t(0,160,\\fscx100\\fscy100)}}{hdr_text}"
         )
 
-    # 2. RENDER SUBTITLE PERCAKAPAN KONTEKSTUAL (DENGAN NORMALISASI TYPO ASR & TANPA EMOJI TOFU LIBASS)
+    if style_key == "none":
+        ass_path.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
+        return
+
+    # 2. RENDER SUBTITLE DENGAN PEMBAGIAN BARIS SEIMBANG (TANPA RUANG KOSONG JANGGAL)
+    single_char_lim = 26 if is_landscape else 18
+
     for item in transcript:
         seg_abs_start = float(item.get("start", 0.0))
         seg_abs_end = float(item.get("end", 0.0))
@@ -3985,7 +4224,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 we_t = nw["end"]
                 if i + 1 < len(norm_words):
                     nxt_s = norm_words[i + 1]["start"]
-                    if 0 <= (nxt_s - we_t) < 0.12:
+                    if 0 <= (nxt_s - we_t) < 0.18:
                         we_t = nxt_s
                     elif we_t > nxt_s:
                         we_t = max(ws_t + 0.06, nxt_s)
@@ -3995,8 +4234,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 if active_color_hex == "auto_context":
                     _, word_ass, _ = detect_word_context_color(nw["word"], item_text, active_color_hex)
                     act_ass = word_ass
-                raw_tok = nw["word"].upper()
-                cue_text = f"{free_pos_tag}{{\\c{act_ass}\\fscx122\\fscy122\\t(0,110,\\fscx106\\fscy106)}}{raw_tok}"
+                raw_tok = nw["word"].upper() if use_uppercase or style_key == "bold" else nw["word"]
+                cue_text = f"{free_pos_tag}{{\\c{act_ass}\\fscx{pop_scale_start}\\fscy{pop_scale_start}\\t(0,110,\\fscx{pop_scale_end}\\fscy{pop_scale_end})}}{raw_tok}"
                 trans_str = str(nw.get("translated_text") or item.get("translated_text", "")).strip()
                 if translate_lyrics and trans_str and trans_str != item_text:
                     if lyrics_display_mode == "dual":
@@ -4007,45 +4246,85 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 events.append(f"Dialogue: 0,{ass_timestamp(ws_t)},{ass_timestamp(we_t)},SmartNotice,,0,0,0,,{cue_text}")
             continue
 
-        chunk_size = 5 if (is_landscape and max_lines != 1) else (3 if max_lines == 1 else 4)
-        for chunk_idx in range(0, len(norm_words), chunk_size):
-            chunk = norm_words[chunk_idx : chunk_idx + chunk_size]
+        chunks_list = _group_words_balanced(norm_words, max_lines=max_lines, is_landscape=is_landscape)
+
+        if mode == "phrase":
+            for c_i, chunk in enumerate(chunks_list):
+                if not chunk:
+                    continue
+                ws_t = chunk[0]["start"]
+                we_t = chunk[-1]["end"]
+                if c_i + 1 < len(chunks_list) and chunks_list[c_i + 1]:
+                    next_s = chunks_list[c_i + 1][0]["start"]
+                    if 0 <= (next_s - we_t) < 0.25:
+                        we_t = next_s
+                    elif we_t > next_s:
+                        we_t = max(ws_t + 0.08, next_s)
+                if we_t <= ws_t:
+                    continue
+                plain_w = [
+                    (c["word"].upper() if use_uppercase else c["word"])
+                    for c in chunk
+                ]
+                cue_text = _split_tokens_two_lines_balanced(
+                    plain_w, plain_w, max_lines=max_lines, line_sep="\\N", single_line_char_limit=single_char_lim
+                )
+                trans_str = str(item.get("translated_text", "")).strip()
+                if translate_lyrics and trans_str and trans_str != item_text:
+                    if lyrics_display_mode == "dual":
+                        sub_fs = max(22, int(scaled_font_size * 0.72))
+                        cue_text = f"{cue_text}\\N{{\\fs{sub_fs}\\c&H00D0FFFF&\\fscx100\\fscy100}}{trans_str}"
+                    elif lyrics_display_mode == "translated_only":
+                        cue_text = trans_str
+                events.append(f"Dialogue: 0,{ass_timestamp(ws_t)},{ass_timestamp(we_t)},SmartNotice,,0,0,0,,{free_pos_tag}{{\\fad(60,40)}}{cue_text}")
+            continue
+
+        for c_i, chunk in enumerate(chunks_list):
             if not chunk:
                 continue
             chunk_sentence = " ".join(c["word"] for c in chunk)
+            plain_words = [
+                (c["word"].upper() if use_uppercase else c["word"])
+                for c in chunk
+            ]
             for active_i, nw in enumerate(chunk):
                 ws_t = nw["start"]
                 if active_i + 1 < len(chunk):
                     nxt_s = chunk[active_i + 1]["start"]
-                    we_t = nxt_s if (nxt_s - nw["end"]) < 0.45 else nw["end"]
+                    # Tutup jeda mikro antar-kata dalam satu frasa agar tidak berkedip
+                    we_t = nxt_s if (nxt_s - nw["end"]) < 0.85 else nw["end"]
                 else:
                     we_t = nw["end"]
-                    if chunk_idx + chunk_size < len(norm_words):
-                        next_chunk_s = norm_words[chunk_idx + chunk_size]["start"]
-                        if we_t > next_chunk_s:
+                    if c_i + 1 < len(chunks_list) and chunks_list[c_i + 1]:
+                        next_chunk_s = chunks_list[c_i + 1][0]["start"]
+                        if 0 <= (next_chunk_s - we_t) < 0.25:
+                            we_t = next_chunk_s
+                        elif we_t > next_chunk_s:
                             we_t = max(ws_t + 0.06, next_chunk_s)
                 if we_t <= ws_t:
                     continue
 
                 formatted_tokens: list[str] = []
                 for i, cw_obj in enumerate(chunk):
-                    raw_tok = cw_obj["word"].upper()
+                    raw_tok = plain_words[i]
                     if i == active_i:
                         act_ass = "&H0000DDFF" if active_color_hex in ("#FFDD00", "auto_context") else default_active_ass
                         if active_color_hex == "auto_context":
-                            _, word_ass, _ = detect_word_context_color(raw_tok, chunk_sentence, active_color_hex)
+                            _, word_ass, _ = detect_word_context_color(cw_obj["word"], chunk_sentence, active_color_hex)
                             act_ass = word_ass
                         formatted_tokens.append(
-                            f"{{\\c{act_ass}\\fscx122\\fscy122\\t(0,110,\\fscx106\\fscy106)}}{raw_tok}{{\\c{primary_ass}\\fscx100\\fscy100}}"
+                            f"{{\\c{act_ass}\\fscx{pop_scale_start}\\fscy{pop_scale_start}\\t(0,100,\\fscx{pop_scale_end}\\fscy{pop_scale_end})}}{raw_tok}{{\\c{primary_ass}\\fscx100\\fscy100}}"
                         )
                     else:
                         formatted_tokens.append(raw_tok)
 
-                if max_lines >= 2 and len(formatted_tokens) >= (5 if is_landscape else 4):
-                    mid = len(formatted_tokens) // 2
-                    cue_text = " ".join(formatted_tokens[:mid]) + "\\N" + " ".join(formatted_tokens[mid:])
-                else:
-                    cue_text = " ".join(formatted_tokens)
+                cue_text = _split_tokens_two_lines_balanced(
+                    plain_words,
+                    formatted_tokens,
+                    max_lines=max_lines,
+                    line_sep="\\N",
+                    single_line_char_limit=single_char_lim,
+                )
 
                 trans_str = str(item.get("translated_text", "")).strip()
                 if translate_lyrics and trans_str and trans_str != item_text:
@@ -4057,21 +4336,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
                 events.append(f"Dialogue: 0,{ass_timestamp(ws_t)},{ass_timestamp(we_t)},SmartNotice,,0,0,0,,{free_pos_tag}{cue_text}")
 
-    # 3. RENDER DYNAMIC OUTRO CTA (SAVE / SHARE) PADA 3.5 DETIK TERAKHIR UNTUK 9:16 (TANPA EMOJI UNICODE RUSAK)
-    if not is_landscape and clip_dur >= 8.0:
+    # 3. OUTRO CTA HANYA DIRENDER JIKA DIAKTIFKAN SECARA EKSPLISIT (BEBAS AI SLOP)
+    if outro_cta_enabled and not is_landscape and clip_dur >= 8.0:
         outro_start = max(2.5, clip_dur - 3.5)
-        insight_keywords = {
-            "alasan", "rahasia", "cara", "tips", "fakta", "bahaya", "sehat", "jantung",
-            "dokter", "uang", "bisnis", "kaya", "sukses", "hukum", "belajar", "penting",
-            "ilmu", "strategi", "solusi", "manfaat", "efek", "dampak", "biaya", "investasi",
-        }
-        lower_hb = (hook_banner_text or "").lower()
-        if any(k in lower_hb for k in insight_keywords):
-            cta_overlay_txt = "[ SIMPAN VIDEO INI BIAR GAK LUPA ]\\N{\\c&H00FFFFFF}PAS BUTUH NANTI!"
-        else:
-            cta_overlay_txt = "[ SHARE KE TEMEN KAMU ]\\N{\\c&H00FFFFFF}YANG RELATE SAMA INI!"
+        cta_overlay_txt = "Simpan & Bagikan Video Ini"
         events.append(
-            f"Dialogue: 2,{ass_timestamp(outro_start)},{ass_timestamp(clip_dur)},OutroCTA,,0,0,0,,{{\\an5\\pos({width // 2},1380)\\fad(250,0)}}{cta_overlay_txt}"
+            f"Dialogue: 2,{ass_timestamp(outro_start)},{ass_timestamp(clip_dur)},OutroCTA,,0,0,0,,{{\\an5\\pos({width // 2},{int(height * 0.72)})\\fad(250,0)}}{cta_overlay_txt}"
         )
 
     ass_path.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
@@ -4086,8 +4356,14 @@ def video_layout_filter(
     manual_crop_x: float = 0.5,
     manual_crop_y: float = 0.5,
     manual_zoom: float = 1.0,
+    source_video: Path | None = None,
+    framing_mode: str = "auto",
 ) -> str:
-    width, height = output_dimensions(aspect_ratio, quality)
+    width, height = output_dimensions(aspect_ratio, quality, source_video=source_video)
+
+    # Mode Tanpa Framing (Video Asli Utuh): pertahankan proporsi & tampilan murni tanpa bar/crop
+    if framing_mode == "none" or str(aspect_ratio).strip().lower() == "original" or framing == "original" or layout == "original":
+        return f"scale={width}:{height},setsar=1"
 
     if layout in ("podcast_split", "manual_split"):
         h1 = _make_even(height // 2)
@@ -4597,32 +4873,56 @@ def render_clip(
     censor_flag = bool(getattr(options, "censor_profanity", False))
 
     q_opt = getattr(options, "quality", "1080")
-    width, height = output_dimensions(options.aspect_ratio, q_opt)
+    framing_mode = getattr(options, "framing_mode", "auto")
+    effective_aspect = "original" if framing_mode == "none" else options.aspect_ratio
+    width, height = output_dimensions(effective_aspect, q_opt, source_video=video)
 
     layout_segments: list[dict[str, Any]] | None = None
-    framing_mode = getattr(options, "framing_mode", "auto")
     manual_crop_x = float(getattr(options, "manual_crop_x", 0.5))
     manual_crop_y = float(getattr(options, "manual_crop_y", 0.5))
     manual_zoom = float(getattr(options, "manual_zoom", 1.0))
     is_auto_ai_layout = (
-        framing_mode != "manual"
-        and options.aspect_ratio == "9:16"
-        and options.layout in ("auto_smart", "auto_single", "auto_split", "podcast_split", "auto", "smart")
+        framing_mode == "auto"
+        and effective_aspect == "9:16"
+        and options.layout in ("auto_universal", "auto_smart", "auto_single", "auto_split", "podcast_split", "auto", "smart")
     )
 
-    if options.layout == "facecam_top":
-        effective_face_crop = (
-            resolve_pixel_face_crop(video, options, clip.start, clip.end)
-        )
+    if framing_mode == "none" or options.layout == "original" or options.framing == "original":
         layout_filter = video_layout_filter(
-            options.aspect_ratio,
+            "original",
+            "original",
+            "original",
+            None,
+            quality=q_opt,
+            framing_mode="none",
+            source_video=video,
+        )
+    elif options.layout in ("facecam_top", "auto_gaming"):
+        effective_face_crop = resolve_pixel_face_crop(video, options, clip.start, clip.end)
+        layout_filter = video_layout_filter(
+            effective_aspect,
             options.framing,
-            options.layout,
+            "facecam_top",
             effective_face_crop,
             quality=q_opt,
             manual_crop_x=manual_crop_x,
             manual_crop_y=manual_crop_y,
             manual_zoom=manual_zoom,
+            framing_mode=framing_mode,
+            source_video=video,
+        )
+    elif options.layout == "auto_cinema":
+        layout_filter = video_layout_filter(
+            effective_aspect,
+            "ambient",
+            "standard",
+            None,
+            quality=q_opt,
+            manual_crop_x=0.5,
+            manual_crop_y=0.5,
+            manual_zoom=1.0,
+            framing_mode="auto",
+            source_video=video,
         )
     elif is_auto_ai_layout and video.is_file():
         layout_segments = analyze_smart_clip_segments(video, clip.start, clip.end, target_w=width, target_h=height, interval_sec=1.5)
@@ -4632,22 +4932,29 @@ def render_clip(
                     seg["crops"] = [seg["crops"][0]]
                     seg["face_count"] = 1
                     seg["layout_type"] = "single_center"
+        elif layout_segments and options.layout == "auto_universal":
+            for seg in layout_segments:
+                if seg.get("face_count", 0) == 0:
+                    seg["layout_type"] = "no_face_cinema"
+        auto_fallback_framing = "ambient" if options.layout in ("auto_universal", "auto_smart") else options.framing
         if layout_segments:
-            layout_filter = build_dynamic_segments_filter(layout_segments, width, height, framing=options.framing)
+            layout_filter = build_dynamic_segments_filter(layout_segments, width, height, framing=auto_fallback_framing)
         else:
             layout_filter = video_layout_filter(
-                options.aspect_ratio,
-                options.framing,
+                effective_aspect,
+                auto_fallback_framing,
                 "standard",
                 None,
                 quality=q_opt,
                 manual_crop_x=manual_crop_x,
                 manual_crop_y=manual_crop_y,
                 manual_zoom=manual_zoom,
+                framing_mode=framing_mode,
+                source_video=video,
             )
     else:
         layout_filter = video_layout_filter(
-            options.aspect_ratio,
+            effective_aspect,
             options.framing,
             options.layout,
             None,
@@ -4655,9 +4962,11 @@ def render_clip(
             manual_crop_x=manual_crop_x,
             manual_crop_y=manual_crop_y,
             manual_zoom=manual_zoom,
+            framing_mode=framing_mode,
+            source_video=video,
         )
 
-    emoji_flag = bool(getattr(options, "emoji_subtitles", True))
+    emoji_flag = bool(getattr(options, "emoji_subtitles", False))
 
     skip_if_existing = bool(getattr(options, "skip_if_has_subtitles", False))
     has_existing_subs = False
@@ -4683,18 +4992,19 @@ def render_clip(
         censor_profanity=censor_flag,
         emoji_subtitles=emoji_flag,
     )
-    hb_enabled = bool(getattr(options, "hook_banner_enabled", True))
+    hb_enabled = bool(getattr(options, "hook_banner_enabled", False))
     hb_dur = int(getattr(options, "hook_banner_duration", 0))
     hb_pos = str(getattr(options, "hook_banner_position", "top") or "top")
     hb_x = float(getattr(options, "hook_banner_x", 0.5))
     hb_y = float(getattr(options, "hook_banner_y", 0.11))
     hb_headline = build_thumbnail_hook_headline(clip.title, getattr(options, "hook_banner_text", "")) if hb_enabled else ""
+    outro_enabled = bool(getattr(options, "outro_cta_enabled", False))
     write_ass_pop_subtitle(
         sub_transcript,
         clip.start,
         clip.end,
         ass_subtitle_path,
-        aspect_ratio=options.aspect_ratio,
+        aspect_ratio=effective_aspect,
         layout=options.layout,
         position=options.subtitle_position,
         font_size=font_size,
@@ -4719,6 +5029,10 @@ def render_clip(
         lyrics_position=getattr(options, "lyrics_position", "auto"),
         lyrics_pos_x=getattr(options, "lyrics_pos_x", 0.15),
         lyrics_pos_y=getattr(options, "lyrics_pos_y", 0.78),
+        subtitle_style=options.subtitle_style,
+        outro_cta_enabled=outro_enabled,
+        explicit_width=width,
+        explicit_height=height,
     )
 
     if getattr(options, "mirror_video", False):
@@ -4726,7 +5040,7 @@ def render_clip(
     if getattr(options, "color_boost", False):
         layout_filter = f"{layout_filter},eq=contrast=1.06:saturation=1.12:brightness=0.01"
 
-    if getattr(options, "dynamic_micro_zoom", True):
+    if getattr(options, "dynamic_micro_zoom", False):
         zoom_intervals = calculate_dynamic_zoom_intervals(transcript, clip.start, clip.end)
         if zoom_intervals:
             zoom_flt = build_micro_zoom_filter(zoom_intervals, width, height, zoom_factor=1.08)
@@ -4747,7 +5061,7 @@ def render_clip(
                 f"[pre_broll_{b_idx}][broll_{b_idx}]overlay=0:0:enable='between(t,{b_s:.2f},{b_e:.2f})':eof_action=pass"
             )
 
-    if hb_enabled and hb_dur > 0 and hb_headline and options.aspect_ratio != "9:16":
+    if hb_enabled and hb_dur > 0 and hb_headline and effective_aspect != "9:16":
         box_y = int(height * 0.26)
         box_h = int(height * 0.44)
         layout_filter = (
@@ -4756,25 +5070,14 @@ def render_clip(
         )
 
     if has_existing_subs:
-        if hb_enabled and hb_dur > 0 and hb_headline:
+        if (hb_enabled and hb_dur > 0 and hb_headline) or outro_enabled:
             video_filter = f"{layout_filter},ass=subtitle.ass"
         else:
             video_filter = layout_filter
-    elif options.subtitle_style == "none" and not (hb_enabled and hb_dur > 0):
+    elif options.subtitle_style == "none" and not (hb_enabled and hb_dur > 0) and not outro_enabled and not getattr(options, "translate_lyrics", False):
         video_filter = layout_filter
-    elif getattr(options, "translate_lyrics", False) or hb_enabled or sub_mode in ("active_highlight", "single_word") or active_col == "auto_context" or options.layout == "podcast_split" or options.subtitle_position in ("center", "free"):
-        video_filter = f"{layout_filter},ass=subtitle.ass"
     else:
-        subtitle_style = subtitle_style_with_position(
-            options.subtitle_style,
-            options.subtitle_position,
-            options.subtitle_color,
-            options.subtitle_x,
-            options.subtitle_y,
-            options.aspect_ratio,
-            font_size=font_size,
-        )
-        video_filter = f"{layout_filter},subtitles=subtitle.srt:force_style='{subtitle_style}'"
+        video_filter = f"{layout_filter},ass=subtitle.ass"
 
     wm_text = getattr(options, "watermark_text", "").strip()
     wm_pos = getattr(options, "watermark_position", "top_right")
@@ -4999,7 +5302,11 @@ def render_profile(options: CreateJobRequest) -> dict[str, str]:
         "subtitle_y": f"{options.subtitle_y:.3f}",
         "aspect_ratio": options.aspect_ratio,
         "framing": options.framing,
+        "framing_mode": getattr(options, "framing_mode", "auto"),
         "layout": options.layout,
+        "manual_crop_x": f"{getattr(options, 'manual_crop_x', 0.5):.3f}",
+        "manual_crop_y": f"{getattr(options, 'manual_crop_y', 0.5):.3f}",
+        "manual_zoom": f"{getattr(options, 'manual_zoom', 1.0):.3f}",
         "facecam_crop": json.dumps(getattr(options, "facecam_crop", None)),
         "bgm_path": getattr(options, "bgm_path", ""),
         "bgm_volume": f"{getattr(options, 'bgm_volume', 0.18):.2f}",
@@ -5007,6 +5314,7 @@ def render_profile(options: CreateJobRequest) -> dict[str, str]:
         "bgm_autoduck": str(getattr(options, "bgm_autoduck", True)),
         "audio_loudnorm": str(getattr(options, "audio_loudnorm", False)),
         "censor_profanity": str(getattr(options, "censor_profanity", False)),
+        "emoji_subtitles": str(getattr(options, "emoji_subtitles", False)),
         "watermark_text": getattr(options, "watermark_text", ""),
         "watermark_image_path": getattr(options, "watermark_image_path", ""),
         "watermark_position": getattr(options, "watermark_position", "top_right"),
@@ -5016,9 +5324,15 @@ def render_profile(options: CreateJobRequest) -> dict[str, str]:
         "hook_banner_enabled": str(getattr(options, "hook_banner_enabled", False)),
         "hook_banner_text": getattr(options, "hook_banner_text", ""),
         "hook_banner_duration": str(getattr(options, "hook_banner_duration", 4)),
+        "outro_cta_enabled": str(getattr(options, "outro_cta_enabled", False)),
         "mirror_video": str(getattr(options, "mirror_video", False)),
         "speed_shift": str(getattr(options, "speed_shift", False)),
         "color_boost": str(getattr(options, "color_boost", False)),
+        "translate_lyrics": str(getattr(options, "translate_lyrics", False)),
+        "lyrics_display_mode": getattr(options, "lyrics_display_mode", "dual"),
+        "lyrics_position": getattr(options, "lyrics_position", "auto"),
+        "lyrics_pos_x": f"{getattr(options, 'lyrics_pos_x', 0.15):.3f}",
+        "lyrics_pos_y": f"{getattr(options, 'lyrics_pos_y', 0.78):.3f}",
     }
 
 
@@ -5127,9 +5441,81 @@ def process_job(job_id: str, options: CreateJobRequest, source_path: str | None 
             or (options.clip_mode == "smart" and options.clip_profile == "manual")
         )
         audio = job_dir / "audio.wav"
-        if is_manual_clip_mode and options.subtitle_style == "none":
-            vid_dur = media_duration(video, 60.0)
-            transcript = [{"start": 0.0, "end": max(1.0, vid_dur), "text": ""}]
+        vid_dur_est = media_duration(video, 60.0)
+        raw_manual_segs = getattr(options, "manual_segments", None) or []
+        if is_manual_clip_mode and options.subtitle_style == "none" and not getattr(options, "translate_lyrics", False):
+            transcript = [{"start": 0.0, "end": max(1.0, vid_dur_est), "text": ""}]
+        elif is_manual_clip_mode and raw_manual_segs and vid_dur_est > 45.0:
+            merged_windows: list[list[float]] = []
+            valid_raw: list[tuple[float, float]] = []
+            for seg_m in raw_manual_segs:
+                try:
+                    ws = max(0.0, float(seg_m.get("start", 0.0)) - 1.0)
+                    we = min(vid_dur_est, float(seg_m.get("end", 0.0)) + 1.0)
+                    if we > ws:
+                        valid_raw.append((ws, we))
+                except (ValueError, TypeError):
+                    pass
+            valid_raw.sort(key=lambda x: x[0])
+            for ws, we in valid_raw:
+                if merged_windows and ws <= merged_windows[-1][1] + 5.0:
+                    merged_windows[-1][1] = max(merged_windows[-1][1], we)
+                else:
+                    merged_windows.append([ws, we])
+            covered_sec = sum(w[1] - w[0] for w in merged_windows)
+            selected_audio_model = getattr(options, "whisper_model", MODEL_NAME)
+            if merged_windows and covered_sec < vid_dur_est * 0.72:
+                transcript = []
+                total_w = len(merged_windows)
+                for w_idx, (ws, we) in enumerate(merged_windows, start=1):
+                    if job_id in CANCELED_JOBS:
+                        raise RuntimeError("Proses dibatalkan oleh pengguna.")
+                    seg_wav = job_dir / f"audio_seg_{w_idx:02d}.wav"
+                    update_job(
+                        job_id,
+                        progress=22 + int((w_idx - 1) / max(1, total_w) * 14),
+                        message=f"Mengekstrak audio segmen manual {w_idx}/{total_w}...",
+                    )
+                    run_command(
+                        ffmpeg_command()
+                        + [
+                            "-y",
+                            "-ss", f"{ws:.3f}",
+                            "-to", f"{we:.3f}",
+                            "-i", str(video),
+                            "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le",
+                            str(seg_wav),
+                        ]
+                    )
+                    update_job(
+                        job_id,
+                        progress=36 + int((w_idx - 1) / max(1, total_w) * 14),
+                        message=f"Transkripsi segmen manual {w_idx}/{total_w}...",
+                    )
+                    part_tx = transcribe(seg_wav, options.language, selected_audio_model, job_id=job_id)
+                    for item_tx in part_tx:
+                        shifted = dict(item_tx)
+                        shifted["start"] = round(float(item_tx.get("start", 0.0)) + ws, 3)
+                        shifted["end"] = round(float(item_tx.get("end", 0.0)) + ws, 3)
+                        if item_tx.get("words"):
+                            shifted_words = []
+                            for wd in item_tx["words"]:
+                                wd_copy = dict(wd)
+                                wd_copy["start"] = round(float(wd.get("start", 0.0)) + ws, 3)
+                                wd_copy["end"] = round(float(wd.get("end", 0.0)) + ws, 3)
+                                shifted_words.append(wd_copy)
+                            shifted["words"] = shifted_words
+                        transcript.append(shifted)
+            else:
+                update_job(job_id, progress=25, message="Mengambil audio untuk transkripsi...")
+                extract_audio(video, audio)
+                if job_id in CANCELED_JOBS:
+                    raise RuntimeError("Proses dibatalkan oleh pengguna.")
+                if selected_audio_model == "gemini":
+                    update_job(job_id, progress=38, message="Transkripsi audio dengan Gemini Cloud...")
+                else:
+                    update_job(job_id, progress=38, message=f"Transkripsi audio dengan Whisper ({selected_audio_model})...")
+                transcript = transcribe(audio, options.language, selected_audio_model, job_id=job_id)
         else:
             update_job(job_id, progress=25, message="Mengambil audio untuk transkripsi...")
             extract_audio(video, audio)
@@ -5137,12 +5523,12 @@ def process_job(job_id: str, options: CreateJobRequest, source_path: str | None 
                 raise RuntimeError("Proses dibatalkan oleh pengguna.")
             selected_audio_model = getattr(options, "whisper_model", MODEL_NAME)
             if selected_audio_model == "gemini":
-                update_job(job_id, progress=38, message="Mentranskrip audio via Gemini API...")
+                update_job(job_id, progress=38, message="Transkripsi audio dengan Gemini Cloud...")
             else:
-                update_job(job_id, progress=38, message=f"Transkripsi dengan Whisper {selected_audio_model}...")
+                update_job(job_id, progress=38, message=f"Transkripsi audio dengan Whisper ({selected_audio_model})...")
             transcript = transcribe(audio, options.language, selected_audio_model, job_id=job_id)
         if getattr(options, "translate_lyrics", False) and transcript:
-            update_job(job_id, progress=50, message="Menerjemahkan lirik lagu / subtitle...")
+            update_job(job_id, progress=50, message="Menerjemahkan lirik lagu & menyelaraskan waktu...")
             transcript = translate_lyrics_transcript(
                 transcript,
                 target_lang=getattr(options, "lyrics_target_lang", "id"),
@@ -5158,25 +5544,25 @@ def process_job(job_id: str, options: CreateJobRequest, source_path: str | None 
             transcript=transcript,
             duration=vid_total_dur,
             progress=62,
-            message="Menyiapkan potongan klip manual..." if is_manual_clip_mode else "Mencari momen terbaik...",
+            message="Menyiapkan daftar segmen manual..." if is_manual_clip_mode else "Menganalisis momen terbaik dengan AI...",
         )
         energy_map = (
             compute_audio_energy_map(audio)
             if (not is_manual_clip_mode and getattr(options, "use_audio_energy", True) and audio.exists())
             else None
         )
-        flavor = getattr(options, "clip_flavor", "spicy_drama")
+        flavor = getattr(options, "clip_flavor", "universal")
 
         if is_manual_clip_mode:
             selected = []
-            for idx_m, seg_m in enumerate(getattr(options, "manual_segments", None) or [], start=1):
+            for idx_m, seg_m in enumerate(raw_manual_segs, start=1):
                 try:
                     m_start = max(0.0, float(seg_m.get("start", 0.0)))
                     m_end = float(seg_m.get("end", 0.0))
                     if vid_total_dur > 0:
                         m_end = min(vid_total_dur, m_end)
                     if m_end > m_start:
-                        m_title = str(seg_m.get("title") or f"Klip Manual #{idx_m:02d}").strip()
+                        m_title = str(seg_m.get("title") or f"Segmen Manual #{idx_m:02d}").strip()
                         selected.append({
                             "start": round(m_start, 2),
                             "end": round(m_end, 2),
@@ -5246,7 +5632,7 @@ def process_job(job_id: str, options: CreateJobRequest, source_path: str | None 
                 media_duration(video, transcript[-1]["end"]),
             )
         if not selected and not is_manual_clip_mode:
-            raise RuntimeError("Tidak menemukan kandidat clip. Coba durasi yang lebih pendek.")
+            raise RuntimeError("Tidak menemukan kandidat klip yang pas. Coba rentang durasi yang lebih fleksibel.")
         if options.clip_mode == "smart" and not is_manual_clip_mode and selected:
             smart_min = options.smart_fixed_duration if options.smart_duration_mode == "fixed" else options.min_duration
             smart_max = options.smart_fixed_duration if options.smart_duration_mode == "fixed" else options.max_duration
@@ -5275,46 +5661,67 @@ def process_job(job_id: str, options: CreateJobRequest, source_path: str | None 
                 hook_title=h_title,
             )
             clips.append(clip)
-        update_job(
-            job_id,
-            progress=62,
-            sub_progress=40,
-            message="Mencari momen terbaik dengan AI...",
-            sub_message=f"Model {options.local_model.upper()} menganalisis transkrip ({flavor})...",
-        )
-        update_job(
-            job_id,
-            clips=clips,
-            progress=68,
-            sub_progress=75,
-            message="Membuat metadata (Judul, Caption, Hashtag)...",
-            sub_message="AI mengoptimalkan hook dan copywriting klip...",
-        )
-        generate_clip_metadata(
-            transcript,
-            clips,
-            options.local_model,
-            flavor=flavor,
-            spicy_hook=getattr(options, "spicy_headline_hook", True),
-        )
-        update_job(job_id, progress=69, message="Merender clip AI sebelum review...")
-        render_selected_clips(
-            job_id,
-            video,
-            transcript,
-            clips,
-            job_dir,
-            options,
-            progress_start=69,
-            progress_end=70,
-        )
+        if is_manual_clip_mode:
+            update_job(
+                job_id,
+                clips=clips,
+                progress=67,
+                sub_progress=65,
+                message=f"Menyiapkan {len(clips)} segmen manual...",
+                sub_message="Menyusun judul & informasi segmen manual...",
+            )
+        else:
+            update_job(
+                job_id,
+                progress=64,
+                sub_progress=45,
+                message="Menyeleksi momen terbaik dengan AI...",
+                sub_message=f"Model {options.local_model.upper()} menilai momen ({flavor})...",
+            )
+            update_job(
+                job_id,
+                clips=clips,
+                progress=68,
+                sub_progress=75,
+                message="Menyusun judul, caption, dan hashtag...",
+                sub_message="AI merapikan judul dan deskripsi klip...",
+            )
+        if clips:
+            generate_clip_metadata(
+                transcript,
+                clips,
+                options.local_model,
+                flavor=flavor,
+                spicy_hook=getattr(options, "spicy_headline_hook", False) if is_manual_clip_mode else getattr(options, "spicy_headline_hook", True),
+            )
+            update_job(
+                job_id,
+                progress=69,
+                message="Merender pratinjau segmen manual..." if is_manual_clip_mode else "Merender pratinjau klip AI...",
+            )
+            render_selected_clips(
+                job_id,
+                video,
+                transcript,
+                clips,
+                job_dir,
+                options,
+                progress_start=69,
+                progress_end=70,
+            )
         update_job(
             job_id,
             clips=clips,
             render_profile=render_profile(options),
             status="awaiting_render",
             progress=70,
-            message="Clip AI siap. Tonton video penuh atau tambahkan clip manual sebelum render final.",
+            message=(
+                f"{len(clips)} segmen manual siap ditinjau sebelum ekspor final."
+                if is_manual_clip_mode and clips
+                else "Timeline siap. Pilih segmen di Review atau tambahkan potongan manual sebelum ekspor."
+                if is_manual_clip_mode
+                else f"{len(clips)} klip AI siap ditinjau di Review & Trim."
+            ),
         )
     except Exception as exc:
         if job_id in CANCELED_JOBS or "dibatalkan" in str(exc).lower():

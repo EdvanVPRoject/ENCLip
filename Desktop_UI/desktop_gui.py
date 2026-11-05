@@ -30,6 +30,7 @@ from PyQt6.QtCore import (
     QThread,
     QTimer,
     QUrl,
+    QVariantAnimation,
     pyqtSignal,
 )
 from PyQt6.QtGui import QBrush, QColor, QDesktopServices, QFont, QIcon, QImage, QLinearGradient, QPainter, QPen, QPixmap, QPolygon
@@ -250,20 +251,48 @@ class ToggleSwitch(QCheckBox):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setFixedSize(44, 24)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._progress: float = 1.0 if self.isChecked() else 0.0
+        self._anim = QVariantAnimation(self)
+        self._anim.setDuration(170)
+        self._anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._anim.valueChanged.connect(self._on_anim_val)
+
+    def _on_anim_val(self, val: Any) -> None:
+        self._progress = float(val)
+        self.update()
+
+    def nextCheckState(self) -> None:
+        new_state = not self.isChecked()
+        super().setChecked(new_state)
+        self._anim.stop()
+        self._anim.setStartValue(self._progress)
+        self._anim.setEndValue(1.0 if new_state else 0.0)
+        self._anim.start()
+
+    def setChecked(self, checked: bool) -> None:  # type: ignore[override]
+        self._anim.stop()
+        super().setChecked(checked)
+        self._progress = 1.0 if checked else 0.0
+        self.update()
 
     def paintEvent(self, event: Any) -> None:
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        rect = self.rect()
-        checked = self.isChecked()
-        track_color = QColor("#2563EB") if checked else QColor("#334155")
-        p.setBrush(track_color)
+        rect = self.rect().adjusted(1, 1, -1, -1)
+        t = max(0.0, min(1.0, self._progress if self._anim.state() == QAbstractAnimation.State.Running else (1.0 if self.isChecked() else 0.0)))
+        r = int(24 * (1 - t) + 37 * t)
+        g = int(24 * (1 - t) + 99 * t)
+        b = int(31 * (1 - t) + 235 * t)
+        p.setBrush(QColor(r, g, b))
+        border_c = QColor("#3B82F6") if t > 0.5 else QColor("#2E2E3A")
+        p.setPen(QPen(border_c, 1))
+        p.drawRoundedRect(rect, 11, 11)
+        thumb_x = 3.0 + (self.width() - 21.0) * t
         p.setPen(Qt.PenStyle.NoPen)
-        p.drawRoundedRect(rect, 12, 12)
-        thumb_x = rect.width() - 21 if checked else 3
-        p.setBrush(QColor("#FFFFFF"))
-        p.drawEllipse(thumb_x, 3, 18, 18)
+        p.setBrush(QColor("#FFFFFF") if t > 0.3 else QColor("#A1A1AA"))
+        p.drawEllipse(QRectF(thumb_x, 3.0, 18.0, 18.0))
 
 
 class DropZoneWidget(QFrame):
@@ -275,42 +304,43 @@ class DropZoneWidget(QFrame):
         self.setAcceptDrops(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setObjectName("dropZone")
-        self.setMinimumHeight(220)
+        self.setMinimumHeight(210)
         self.is_drag_over = False
 
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.setSpacing(10)
+        layout.setSpacing(8)
 
-        icon_box = QLabel("⬆")
-        icon_box.setStyleSheet("font-size: 36px; color: #3B82F6; background: transparent; font-weight: bold;")
+        icon_box = QLabel()
+        icon_box.setPixmap(make_vector_icon("folder", "#3B82F6", 42).pixmap(42, 42))
         icon_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_box.setStyleSheet("background: transparent; border: none;")
         layout.addWidget(icon_box)
 
-        self.text_label = QLabel("Drag & drop video Anda di sini atau cari berkas lokal")
-        self.text_label.setStyleSheet("font-size: 14px; font-weight: 600; color: #F1F5F9; background: transparent;")
+        self.text_label = QLabel("Tarik & lepas video ke sini, atau klik untuk memilih file")
+        self.text_label.setStyleSheet("font-size: 14px; font-weight: 700; color: #FAFAFA; background: transparent; border: none;")
         self.text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.text_label)
 
-        self.sub_label = QLabel("Mendukung MP4, MOV, AVI, dll.")
-        self.sub_label.setStyleSheet("font-size: 12px; color: #64748B; background: transparent;")
+        self.sub_label = QLabel("Mendukung MP4, MOV, MKV, WEBM, AVI · Tanpa kompresi awal")
+        self.sub_label.setStyleSheet("font-size: 12px; color: #71717A; background: transparent; border: none;")
         self.sub_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.sub_label)
 
         self.update_style()
 
     def update_style(self) -> None:
-        border_color = "#3B82F6" if self.is_drag_over else "#334155"
-        bg_color = "#151F32" if self.is_drag_over else "#0D121C"
+        border_color = "#3B82F6" if self.is_drag_over else "#24242E"
+        bg_color = "#0E1628" if self.is_drag_over else "#09090D"
         self.setStyleSheet(f"""
             QFrame#dropZone {{
                 background-color: {bg_color};
-                border: 2px dashed {border_color};
-                border-radius: 12px;
+                border: 1.5px dashed {border_color};
+                border-radius: 14px;
             }}
             QFrame#dropZone:hover {{
                 border-color: #3B82F6;
-                background-color: #111724;
+                background-color: #0F0F16;
             }}
         """)
 
@@ -349,8 +379,26 @@ class DropZoneWidget(QFrame):
 class WaveformScrubber(QSlider):
     def __init__(self, orientation: Qt.Orientation = Qt.Orientation.Horizontal, parent: QWidget | None = None) -> None:
         super().__init__(orientation, parent)
-        self.setFixedHeight(34)
+        self.setFixedHeight(38)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.segments: list[dict[str, Any]] = []
+
+    def set_segments(self, segments: list[dict[str, Any]]) -> None:
+        self.segments = list(segments or [])
+        self.update()
+
+    def wheelEvent(self, event: Any) -> None:
+        event.ignore()
+
+    def mousePressEvent(self, event: Any) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self.maximum() > self.minimum():
+            ratio = max(0.0, min(1.0, event.position().x() / max(1.0, float(self.width()))))
+            val = int(self.minimum() + ratio * (self.maximum() - self.minimum()))
+            self.setValue(val)
+            self.sliderMoved.emit(val)
+            event.accept()
+            return
+        super().mousePressEvent(event)
 
     def paintEvent(self, event: Any) -> None:
         p = QPainter(self)
@@ -358,37 +406,61 @@ class WaveformScrubber(QSlider):
         w = self.width()
         h = self.height()
 
-        p.setBrush(QColor("#0F1420"))
-        p.setPen(QPen(QColor("#1E293B"), 1))
-        p.drawRoundedRect(0, 3, w, h - 6, 4, 4)
+        p.setBrush(QColor("#09090D"))
+        p.setPen(QPen(QColor("#1F1F28"), 1))
+        p.drawRoundedRect(0, 3, w, h - 6, 7, 7)
 
-        bar_count = max(10, w // 4)
-        p.setPen(Qt.PenStyle.NoPen)
         import math
         span = max(1, self.maximum() - self.minimum())
         val_ratio = (self.value() - self.minimum()) / span if self.maximum() > self.minimum() else 0.0
         active_x = int(w * val_ratio)
 
+        # Draw multi-segment manual clip blocks live on timeline
+        if self.segments and self.maximum() > 0:
+            dur_sec = max(1.0, self.maximum() / 1000.0)
+            palette = [
+                (QColor(245, 158, 11, 68), QColor("#F59E0B")),
+                (QColor(34, 211, 238, 68), QColor("#22D3EE")),
+                (QColor(168, 85, 247, 68), QColor("#A855F7")),
+                (QColor(16, 185, 129, 68), QColor("#10B981")),
+            ]
+            for idx_s, seg in enumerate(self.segments):
+                try:
+                    s_sec = max(0.0, float(seg.get("start", 0.0)))
+                    e_sec = min(dur_sec, float(seg.get("end", 0.0)))
+                    if e_sec > s_sec:
+                        sx = int((s_sec / dur_sec) * w)
+                        ex = max(sx + 6, int((e_sec / dur_sec) * w))
+                        fill_c, line_c = palette[idx_s % len(palette)]
+                        p.setBrush(fill_c)
+                        p.setPen(QPen(line_c, 1.2))
+                        p.drawRoundedRect(sx, 4, ex - sx, h - 8, 5, 5)
+                        if (ex - sx) >= 24:
+                            p.setFont(QFont("Cascadia Mono", 7, QFont.Weight.Bold))
+                            p.setPen(line_c)
+                            p.drawText(QRect(sx + 4, 4, ex - sx - 6, 12), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, f"#{idx_s + 1:02d}")
+                except Exception:
+                    pass
+
+        bar_count = max(10, w // 4)
+        p.setPen(Qt.PenStyle.NoPen)
         for i in range(bar_count):
             bx = i * 4 + 2
-            amp = math.sin(i * 0.28) * math.cos(i * 0.14) * 0.7 + 0.3
-            bh = max(3, int((h - 14) * abs(amp)))
+            amp = math.sin(i * 0.28) * math.cos(i * 0.14) * 0.68 + 0.28
+            bh = max(3, int((h - 16) * abs(amp)))
             by = (h - bh) // 2
             if bx <= active_x:
-                p.setBrush(QColor("#38BDF8" if bx % 8 == 0 else "#2563EB"))
+                p.setBrush(QColor("#38BDF8" if bx % 8 == 0 else "#3B82F6"))
             else:
-                p.setBrush(QColor("#334155"))
+                p.setBrush(QColor("#272732"))
             p.drawRoundedRect(bx, by, 2, bh, 1, 1)
 
-        p.setBrush(QColor("#06B6D4"))
-        p.drawRoundedRect(2, 3, 4, h - 6, 2, 2)
-        p.drawRoundedRect(w - 6, 3, 4, h - 6, 2, 2)
-
         if self.maximum() > self.minimum():
-            hx = min(w - 6, max(4, active_x))
+            hx = min(w - 5, max(4, active_x))
+            p.setBrush(QColor("#FAFAFA"))
+            p.drawRoundedRect(hx - 1, 2, 3, h - 4, 1.5, 1.5)
             p.setBrush(QColor("#3B82F6"))
-            p.drawRoundedRect(hx - 2, 2, 4, h - 4, 2, 2)
-            poly = QPolygon([QPoint(hx - 5, 2), QPoint(hx + 5, 2), QPoint(hx, 7)])
+            poly = QPolygon([QPoint(hx - 5, 2), QPoint(hx + 5, 2), QPoint(hx, 8)])
             p.drawPolygon(poly)
 
 
@@ -683,7 +755,7 @@ class VideoCardWidget(QFrame):
         self.thumb_label = QLabel()
         self.thumb_label.setScaledContents(True)
         self.thumb_label.setFixedHeight(120)
-        self.thumb_label.setStyleSheet("border-radius: 8px; background: #0F1420;")
+        self.thumb_label.setStyleSheet("border-radius: 8px; background: #050508;")
 
         pix = make_decorated_thumbnail(entry_data.get("thumb_path"), float(entry_data.get("duration", 0.0)))
         self.thumb_label.setPixmap(pix)
@@ -695,16 +767,17 @@ class VideoCardWidget(QFrame):
         self.update_style()
 
     def update_style(self) -> None:
-        border = "#3B82F6" if self.is_selected else "#233148"
-        bg = "#162030" if self.is_selected else "#111724"
+        border = "#3B82F6" if self.is_selected else "#1C1C26"
+        bg = "#0E1626" if self.is_selected else "#09090E"
         self.setStyleSheet(f"""
             QFrame#videoCard {{
                 background: {bg};
-                border: 2px solid {border};
-                border-radius: 10px;
+                border: 1.5px solid {border};
+                border-radius: 11px;
             }}
             QFrame#videoCard:hover {{
                 border-color: #3B82F6;
+                background: #0D0F18;
             }}
         """)
 
@@ -738,7 +811,7 @@ class ReviewClipCardWidget(QFrame):
         self.thumb_label = QLabel()
         self.thumb_label.setFixedSize(105, 68)
         self.thumb_label.setScaledContents(True)
-        self.thumb_label.setStyleSheet("border-radius: 6px; background: #0B0E14;")
+        self.thumb_label.setStyleSheet("border-radius: 7px; background: #050508;")
 
         start_sec = float(clip_data.get("start", 0.0))
         end_sec = float(clip_data.get("end", 0.0))
@@ -811,21 +884,21 @@ class ReviewClipCardWidget(QFrame):
         if self.is_selected:
             self.setStyleSheet("""
                 QFrame#reviewClipCard {
-                    background: #1C283C;
-                    border: 2px solid #3B82F6;
-                    border-radius: 8px;
+                    background: #0F172A;
+                    border: 1.5px solid #3B82F6;
+                    border-radius: 10px;
                 }
             """)
         else:
             self.setStyleSheet("""
                 QFrame#reviewClipCard {
-                    background: #131926;
-                    border: 1px solid #233148;
-                    border-radius: 8px;
+                    background: #09090E;
+                    border: 1px solid #1C1C26;
+                    border-radius: 10px;
                 }
                 QFrame#reviewClipCard:hover {
                     border-color: #3B82F6;
-                    background: #162030;
+                    background: #0D0F18;
                 }
             """)
 
@@ -844,12 +917,13 @@ class ResultClipCardWidget(QFrame):
         self.setObjectName("resultCard")
         self.setStyleSheet("""
             QFrame#resultCard {
-                background: #131926;
-                border: 1px solid #233148;
-                border-radius: 10px;
+                background: #09090E;
+                border: 1px solid #1C1C26;
+                border-radius: 12px;
             }
             QFrame#resultCard:hover {
                 border-color: #3B82F6;
+                background: #0D0F18;
             }
         """)
 
@@ -864,7 +938,7 @@ class ResultClipCardWidget(QFrame):
         self.thumb_label = QLabel()
         self.thumb_label.setFixedHeight(125)
         self.thumb_label.setScaledContents(True)
-        self.thumb_label.setStyleSheet("border-radius: 8px; background: #0B0E14;")
+        self.thumb_label.setStyleSheet("border-radius: 8px; background: #050508;")
 
         thumb_file = get_video_thumbnail_path(str(clip_path), 0.5) if clip_path.is_file() else None
         pix = make_decorated_thumbnail(thumb_file, dur_sec)
@@ -905,11 +979,11 @@ class ResultClipCardWidget(QFrame):
         play_btn.setMinimumHeight(32)
         play_btn.setStyleSheet("""
             QPushButton {
-                background: #182234;
-                border: 1px solid #2C3C56;
-                border-radius: 6px;
+                background: #111118;
+                border: 1px solid #242432;
+                border-radius: 7px;
                 color: #60A5FA;
-                font-weight: 600;
+                font-weight: 700;
                 font-size: 12px;
                 padding: 4px 10px;
             }
@@ -927,15 +1001,16 @@ class ResultClipCardWidget(QFrame):
         folder_btn.setToolTip("Buka folder berkas ini")
         folder_btn.setStyleSheet("""
             QPushButton {
-                background: #182234;
-                border: 1px solid #2C3C56;
-                border-radius: 6px;
-                color: #94A3B8;
+                background: #111118;
+                border: 1px solid #242432;
+                border-radius: 7px;
+                color: #A1A1AA;
                 font-size: 13px;
             }
             QPushButton:hover {
-                background: #202D44;
+                background: #1A1A26;
                 color: #FFFFFF;
+                border-color: #3B82F6;
             }
         """)
         folder_btn.clicked.connect(self.open_folder)
@@ -943,20 +1018,20 @@ class ResultClipCardWidget(QFrame):
 
         copy_btn = QPushButton("Salin Caption")
         copy_btn.setMinimumHeight(32)
-        copy_btn.setIcon(make_vector_icon("copy", "#94A3B8", 16))
+        copy_btn.setIcon(make_vector_icon("copy", "#A1A1AA", 16))
         copy_btn.setToolTip("Salin judul, caption, dan hashtag AI ke clipboard")
         copy_btn.setStyleSheet("""
             QPushButton {
-                background: #182234;
-                border: 1px solid #2C3C56;
-                border-radius: 6px;
-                color: #94A3B8;
+                background: #111118;
+                border: 1px solid #242432;
+                border-radius: 7px;
+                color: #D4D4D8;
                 font-weight: 600;
                 font-size: 11px;
                 padding: 4px 8px;
             }
             QPushButton:hover {
-                background: #202D44;
+                background: #1A1A26;
                 border-color: #38BDF8;
                 color: #FFFFFF;
             }
@@ -1197,13 +1272,768 @@ class DraggableSubtitleLabel(QLabel):
 
 
 class ClickOnlyComboBox(QComboBox):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
     def wheelEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         event.ignore()
+
+    def paintEvent(self, event: Any) -> None:
+        super().paintEvent(event)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        cx = self.width() - 18
+        cy = self.height() // 2
+        pen = QPen(QColor("#A1A1AA" if self.isEnabled() else "#52525B"), 1.7)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        p.drawLine(QPointF(cx - 4.5, cy - 2.0), QPointF(cx, cy + 2.5))
+        p.drawLine(QPointF(cx, cy + 2.5), QPointF(cx + 4.5, cy - 2.0))
 
 
 class FocusOnlySpinBox(QSpinBox):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
+        self.setCursor(Qt.CursorShape.IBeamCursor)
+        self._hover_zone: str | None = None
+        self.setMouseTracking(True)
+
     def wheelEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         event.ignore()
+
+    def _btn_rects(self) -> tuple[QRectF, QRectF]:
+        w, h = float(self.width()), float(self.height())
+        bw = 24.0
+        minus_r = QRectF(w - bw * 2 - 4, 4.0, bw, h - 8.0)
+        plus_r = QRectF(w - bw - 3, 4.0, bw, h - 8.0)
+        return minus_r, plus_r
+
+    def mouseMoveEvent(self, event: Any) -> None:
+        pos = event.position()
+        minus_r, plus_r = self._btn_rects()
+        new_zone = "minus" if minus_r.contains(pos) else ("plus" if plus_r.contains(pos) else None)
+        if new_zone != self._hover_zone:
+            self._hover_zone = new_zone
+            self.setCursor(Qt.CursorShape.PointingHandCursor if new_zone else Qt.CursorShape.IBeamCursor)
+            self.update()
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event: Any) -> None:
+        self._hover_zone = None
+        self.update()
+        super().leaveEvent(event)
+
+    def mousePressEvent(self, event: Any) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self.isEnabled():
+            pos = event.position()
+            minus_r, plus_r = self._btn_rects()
+            if minus_r.contains(pos):
+                self.stepDown()
+                event.accept()
+                return
+            if plus_r.contains(pos):
+                self.stepUp()
+                event.accept()
+                return
+        super().mousePressEvent(event)
+
+    def paintEvent(self, event: Any) -> None:
+        super().paintEvent(event)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        minus_r, plus_r = self._btn_rects()
+        for zone_name, rect, sym in (("minus", minus_r, "−"), ("plus", plus_r, "+")):
+            hovered = self._hover_zone == zone_name and self.isEnabled()
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor("#2563EB") if hovered else QColor("#181822"))
+            p.drawRoundedRect(rect, 5.0, 5.0)
+            p.setPen(QColor("#FFFFFF") if hovered else QColor("#A1A1AA" if self.isEnabled() else "#52525B"))
+            p.setFont(QFont("Segoe UI Variable Display", 10, QFont.Weight.Bold))
+            p.drawText(rect, Qt.AlignmentFlag.AlignCenter, sym)
+
+
+class NoWheelSlider(QSlider):
+    def __init__(self, orientation: Qt.Orientation = Qt.Orientation.Horizontal, parent: QWidget | None = None) -> None:
+        super().__init__(orientation, parent)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def wheelEvent(self, event: Any) -> None:
+        event.ignore()
+
+    def mousePressEvent(self, event: Any) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self.orientation() == Qt.Orientation.Horizontal and self.maximum() > self.minimum():
+            ratio = max(0.0, min(1.0, event.position().x() / max(1.0, float(self.width()))))
+            val = int(round(self.minimum() + ratio * (self.maximum() - self.minimum())))
+            self.setValue(val)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+
+def draw_preset_wireframe(p: QPainter, rect: QRectF, kind: str, color: QColor) -> None:
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    pen = QPen(color, 1.6)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    cx, cy = rect.center().x(), rect.center().y()
+    w, h = rect.width(), rect.height()
+
+    if kind == "ai_spark":
+        pts = [
+            QPointF(cx, cy - h * 0.42),
+            QPointF(cx + w * 0.13, cy - h * 0.13),
+            QPointF(cx + w * 0.42, cy),
+            QPointF(cx + w * 0.13, cy + h * 0.13),
+            QPointF(cx, cy + h * 0.42),
+            QPointF(cx - w * 0.13, cy + h * 0.13),
+            QPointF(cx - w * 0.42, cy),
+            QPointF(cx - w * 0.13, cy - h * 0.13),
+        ]
+        p.setBrush(QColor(color.red(), color.green(), color.blue(), 45))
+        p.drawPolygon([QPoint(int(pt.x()), int(pt.y())) for pt in pts])
+    elif kind == "scissors":
+        p.drawEllipse(QRectF(cx - 8, cy + 2, 6, 6))
+        p.drawEllipse(QRectF(cx + 2, cy + 2, 6, 6))
+        p.drawLine(QPointF(cx - 3, cy + 3), QPointF(cx + 6, cy - 8))
+        p.drawLine(QPointF(cx + 3, cy + 3), QPointF(cx - 6, cy - 8))
+    elif kind in ("frame_none", "ratio_orig"):
+        r = QRectF(cx - 10, cy - 7, 20, 14)
+        p.drawRoundedRect(r, 3, 3)
+        p.drawLine(QPointF(r.left() + 4, r.top() + 4), QPointF(r.left() + 8, r.top() + 4))
+        p.drawLine(QPointF(r.left() + 4, r.top() + 4), QPointF(r.left() + 4, r.top() + 8))
+        p.drawLine(QPointF(r.right() - 4, r.bottom() - 4), QPointF(r.right() - 8, r.bottom() - 4))
+        p.drawLine(QPointF(r.right() - 4, r.bottom() - 4), QPointF(r.right() - 4, r.bottom() - 8))
+    elif kind in ("frame_auto", "cam_adapt", "universal"):
+        r = QRectF(cx - 7, cy - 10, 14, 20)
+        p.drawRoundedRect(r, 3, 3)
+        p.setBrush(QColor(color.red(), color.green(), color.blue(), 65))
+        p.drawEllipse(QRectF(cx - 3, cy - 4, 6, 6))
+    elif kind == "frame_manual":
+        r = QRectF(cx - 8, cy - 8, 16, 16)
+        p.drawRoundedRect(r, 3, 3)
+        p.drawLine(QPointF(cx, cy - 5), QPointF(cx, cy + 5))
+        p.drawLine(QPointF(cx - 5, cy), QPointF(cx + 5, cy))
+    elif kind in ("cam_split", "podcast"):
+        r = QRectF(cx - 7, cy - 10, 14, 20)
+        p.drawRoundedRect(r, 3, 3)
+        p.drawLine(QPointF(r.left(), cy), QPointF(r.right(), cy))
+    elif kind == "cam_focus":
+        r = QRectF(cx - 7, cy - 10, 14, 20)
+        p.drawRoundedRect(r, 3, 3)
+        p.drawEllipse(QRectF(cx - 3.5, cy - 5, 7, 7))
+    elif kind in ("cam_game", "gaming"):
+        r = QRectF(cx - 7, cy - 10, 14, 20)
+        p.drawRoundedRect(r, 3, 3)
+        p.drawLine(QPointF(r.left(), cy - 3), QPointF(r.right(), cy - 3))
+        p.setBrush(QColor(color.red(), color.green(), color.blue(), 55))
+        p.drawRect(QRectF(r.left() + 2, r.top() + 2, 10, 4))
+    elif kind in ("cam_cinema", "cinema"):
+        r = QRectF(cx - 7, cy - 10, 14, 20)
+        p.drawRoundedRect(r, 3, 3)
+        p.setBrush(QColor(color.red(), color.green(), color.blue(), 65))
+        p.drawRect(QRectF(r.left() + 1, cy - 4, 12, 8))
+    elif kind == "edu":
+        p.drawRoundedRect(QRectF(cx - 9, cy - 7, 18, 13), 2.5, 2.5)
+        p.drawLine(QPointF(cx - 5, cy - 2), QPointF(cx + 5, cy - 2))
+        p.drawLine(QPointF(cx - 5, cy + 2), QPointF(cx + 2, cy + 2))
+    elif kind == "music":
+        p.drawLine(QPointF(cx - 3, cy + 5), QPointF(cx - 3, cy - 7))
+        p.drawLine(QPointF(cx + 5, cy + 3), QPointF(cx + 5, cy - 9))
+        p.drawLine(QPointF(cx - 3, cy - 7), QPointF(cx + 5, cy - 9))
+        p.setBrush(color)
+        p.drawEllipse(QRectF(cx - 7, cy + 3, 4.5, 4))
+        p.drawEllipse(QRectF(cx + 1, cy + 1, 4.5, 4))
+    elif kind == "ratio_9_16":
+        p.drawRoundedRect(QRectF(cx - 6, cy - 10, 12, 20), 2.5, 2.5)
+    elif kind == "ratio_16_9":
+        p.drawRoundedRect(QRectF(cx - 10, cy - 6, 20, 12), 2.5, 2.5)
+    elif kind == "ratio_1_1":
+        p.drawRoundedRect(QRectF(cx - 8, cy - 8, 16, 16), 2.5, 2.5)
+    elif kind == "ratio_4_5":
+        p.drawRoundedRect(QRectF(cx - 7, cy - 9, 14, 18), 2.5, 2.5)
+    elif kind == "ratio_custom":
+        pen.setStyle(Qt.PenStyle.DashLine)
+        p.setPen(pen)
+        p.drawRoundedRect(QRectF(cx - 9, cy - 8, 18, 16), 2.5, 2.5)
+    elif kind == "sub_bold":
+        f = QFont("Arial Black", 9, QFont.Weight.Black)
+        p.setFont(f)
+        p.drawText(rect, Qt.AlignmentFlag.AlignCenter, "AB")
+    elif kind == "sub_highlight":
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#FACC15"))
+        p.drawRoundedRect(QRectF(cx - 11, cy - 7, 22, 14), 3.5, 3.5)
+        p.setPen(QColor("#09090D"))
+        p.setFont(QFont("Segoe UI Variable Display", 8, QFont.Weight.ExtraBold))
+        p.drawText(rect, Qt.AlignmentFlag.AlignCenter, "Aa")
+    elif kind == "sub_karaoke":
+        p.setFont(QFont("Impact", 9, QFont.Weight.Bold))
+        p.setPen(QColor("#38BDF8"))
+        p.drawText(QRectF(cx - 11, cy - 9, 12, 18), Qt.AlignmentFlag.AlignCenter, "A")
+        p.setPen(color)
+        p.drawText(QRectF(cx + 1, cy - 9, 11, 18), Qt.AlignmentFlag.AlignCenter, "a")
+    elif kind == "sub_neon":
+        p.setPen(QPen(QColor(34, 211, 238, 110), 3.2))
+        p.drawRoundedRect(QRectF(cx - 10, cy - 7, 20, 14), 4, 4)
+        p.setPen(QColor("#67E8F9"))
+        p.setFont(QFont("Segoe UI Variable Display", 8, QFont.Weight.Bold))
+        p.drawText(rect, Qt.AlignmentFlag.AlignCenter, "Aa")
+    elif kind == "sub_box":
+        p.setPen(QPen(QColor("#52525B"), 1.0))
+        p.setBrush(QColor("#050508"))
+        p.drawRoundedRect(QRectF(cx - 11, cy - 7, 22, 14), 3, 3)
+        p.setPen(QColor("#FAFAFA"))
+        p.setFont(QFont("Segoe UI Variable Text", 8, QFont.Weight.Bold))
+        p.drawText(rect, Qt.AlignmentFlag.AlignCenter, "Aa")
+    elif kind == "sub_minimal":
+        p.setFont(QFont("Segoe UI Variable Text", 9, QFont.Weight.Medium))
+        p.drawText(rect, Qt.AlignmentFlag.AlignCenter, "aa")
+    elif kind == "sub_classic":
+        f = QFont("Georgia", 9, QFont.Weight.Bold)
+        f.setItalic(True)
+        p.setFont(f)
+        p.drawText(rect, Qt.AlignmentFlag.AlignCenter, "Aa")
+    else:
+        p.setFont(QFont("Segoe UI Variable Display", 9, QFont.Weight.ExtraBold))
+        p.drawText(rect, Qt.AlignmentFlag.AlignCenter, "Aa")
+    p.restore()
+
+
+class VisualCardOption(QFrame):
+    clicked = pyqtSignal(str)
+
+    def __init__(
+        self,
+        key: str,
+        title: str,
+        subtitle: str = "",
+        icon_kind: str = "universal",
+        accent: str = "#3B82F6",
+        compact: bool = False,
+        badge: str = "",
+        card_height: int | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.key = key
+        self.title_text = title
+        self.subtitle_text = subtitle
+        self.icon_kind = icon_kind
+        self.accent = accent
+        self.compact = compact
+        self.badge_text = badge
+        self._selected = False
+        self._hovered = False
+        self._pressed = False
+        self._spring_scale: float = 1.0
+        self._select_progress: float = 0.0
+        self._hover_progress: float = 0.0
+        self._spring_anim: QVariantAnimation | None = None
+        self._select_anim: QVariantAnimation | None = None
+        self._hover_anim: QVariantAnimation | None = None
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        min_h = card_height if card_height else (48 if compact else (64 if subtitle else 48))
+        self.setMinimumHeight(min_h)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+    def _animate_spring(
+        self,
+        target: float,
+        start_val: float | None = None,
+        duration: int = 260,
+        curve: QEasingCurve.Type = QEasingCurve.Type.OutBack,
+    ) -> None:
+        if self._spring_anim and self._spring_anim.state() == QAbstractAnimation.State.Running:
+            self._spring_anim.stop()
+        anim = QVariantAnimation(self)
+        anim.setDuration(duration)
+        s_val = float(self._spring_scale) if start_val is None else float(start_val)
+        anim.setStartValue(s_val)
+        anim.setEndValue(float(target))
+        anim.setEasingCurve(curve)
+
+        def _on_sval(v: Any) -> None:
+            self._spring_scale = float(v)
+            self.update()
+
+        anim.valueChanged.connect(_on_sval)
+        self._spring_anim = anim
+        anim.start()
+
+    def _animate_select(self, target: float) -> None:
+        if self._select_anim and self._select_anim.state() == QAbstractAnimation.State.Running:
+            self._select_anim.stop()
+        anim = QVariantAnimation(self)
+        anim.setDuration(190)
+        anim.setStartValue(float(self._select_progress))
+        anim.setEndValue(float(target))
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+        def _on_sel_val(v: Any) -> None:
+            self._select_progress = float(v)
+            self.update()
+
+        anim.valueChanged.connect(_on_sel_val)
+        self._select_anim = anim
+        anim.start()
+
+    def _animate_hover(self, target: float) -> None:
+        if self._hover_anim and self._hover_anim.state() == QAbstractAnimation.State.Running:
+            self._hover_anim.stop()
+        anim = QVariantAnimation(self)
+        anim.setDuration(150)
+        anim.setStartValue(float(self._hover_progress))
+        anim.setEndValue(float(target))
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+        def _on_hov_val(v: Any) -> None:
+            self._hover_progress = float(v)
+            self.update()
+
+        anim.valueChanged.connect(_on_hov_val)
+        self._hover_anim = anim
+        anim.start()
+
+    def set_selected(self, selected: bool, animated: bool = True) -> None:
+        if self._selected != selected:
+            self._selected = selected
+            if animated:
+                self._animate_select(1.0 if selected else 0.0)
+                if selected:
+                    # Bouncy elastic pop (kenyal) on selection
+                    self._animate_spring(1.0, start_val=0.94, duration=280, curve=QEasingCurve.Type.OutBack)
+                else:
+                    self._animate_spring(1.0, duration=160, curve=QEasingCurve.Type.OutCubic)
+            else:
+                self._select_progress = 1.0 if selected else 0.0
+                self._spring_scale = 1.0
+                self.update()
+
+    def enterEvent(self, event: Any) -> None:
+        self._hovered = True
+        self._animate_hover(1.0)
+        if not self._selected and not self._pressed:
+            self._animate_spring(1.02, duration=160, curve=QEasingCurve.Type.OutCubic)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event: Any) -> None:
+        self._hovered = False
+        self._pressed = False
+        self._animate_hover(0.0)
+        if not self._selected:
+            self._animate_spring(1.0, duration=160, curve=QEasingCurve.Type.OutCubic)
+        super().leaveEvent(event)
+
+    def mousePressEvent(self, event: Any) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self.isEnabled():
+            self._pressed = True
+            # Tactile squish / press compression (kenyal)
+            self._animate_spring(0.95, duration=80, curve=QEasingCurve.Type.OutQuad)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event: Any) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self.isEnabled():
+            is_inside = self.rect().contains(event.pos())
+            self._pressed = False
+            if is_inside:
+                # Bouncy spring rebound
+                self._animate_spring(1.0, duration=260, curve=QEasingCurve.Type.OutBack)
+                self.clicked.emit(self.key)
+            else:
+                self._animate_spring(1.0, duration=150, curve=QEasingCurve.Type.OutCubic)
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def _title_font(self) -> QFont:
+        if self.icon_kind == "sub_bold":
+            return QFont("Arial Black", 9, QFont.Weight.Black)
+        if self.icon_kind == "sub_karaoke":
+            return QFont("Impact", 10, QFont.Weight.Bold)
+        if self.icon_kind == "sub_classic":
+            f = QFont("Georgia", 9, QFont.Weight.Bold)
+            f.setItalic(True)
+            return f
+        if self.icon_kind == "sub_minimal":
+            return QFont("Segoe UI Variable Text", 9, QFont.Weight.DemiBold)
+        if self.icon_kind == "sub_neon":
+            return QFont("Trebuchet MS", 9, QFont.Weight.Bold)
+        return QFont("Segoe UI Variable Display", 9, QFont.Weight.Bold)
+
+    def paintEvent(self, event: Any) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        r = QRectF(self.rect()).adjusted(1.5, 1.5, -1.5, -1.5)
+        acc = QColor(self.accent)
+
+        # Apply bouncy spring scale centered (kenyal)
+        if abs(self._spring_scale - 1.0) > 0.001:
+            cx = r.center().x()
+            cy = r.center().y()
+            p.translate(cx, cy)
+            p.scale(self._spring_scale, self._spring_scale)
+            p.translate(-cx, -cy)
+
+        sp = self._select_progress
+        hp = self._hover_progress
+
+        # Smooth interpolated background
+        bg_r = int(11 * (1.0 - sp) + (acc.red() * 0.18 + 11 * 0.82) * sp)
+        bg_g = int(11 * (1.0 - sp) + (acc.green() * 0.18 + 11 * 0.82) * sp)
+        bg_b = int(16 * (1.0 - sp) + (acc.blue() * 0.18 + 16 * 0.82) * sp)
+        if hp > 0.01 and sp < 0.99:
+            bg_r = int(bg_r * (1.0 - hp * 0.4) + (acc.red() * 0.1 + 11 * 0.9) * hp * 0.4)
+            bg_g = int(bg_g * (1.0 - hp * 0.4) + (acc.green() * 0.1 + 11 * 0.9) * hp * 0.4)
+            bg_b = int(bg_b * (1.0 - hp * 0.4) + (acc.blue() * 0.1 + 16 * 0.9) * hp * 0.4)
+        bg = QColor(bg_r, bg_g, bg_b)
+
+        # Smooth border interpolation
+        bw = 1.0 + sp * 0.7
+        b_r = int(31 * (1.0 - sp) + acc.red() * sp)
+        b_g = int(31 * (1.0 - sp) + acc.green() * sp)
+        b_b = int(43 * (1.0 - sp) + acc.blue() * sp)
+        if hp > 0.01 and sp < 0.99:
+            b_r = int(b_r * (1.0 - hp) + (acc.red() * 0.55 + 31 * 0.45) * hp)
+            b_g = int(b_g * (1.0 - hp) + (acc.green() * 0.55 + 31 * 0.45) * hp)
+            b_b = int(b_b * (1.0 - hp) + (acc.blue() * 0.55 + 43 * 0.45) * hp)
+        border = QPen(QColor(b_r, b_g, b_b), bw)
+
+        p.setBrush(bg)
+        p.setPen(border)
+        p.drawRoundedRect(r, 10.0, 10.0)
+
+        # Icon box
+        icon_box = QRectF(r.left() + 9, r.center().y() - 13, 26, 26)
+        p.setPen(Qt.PenStyle.NoPen)
+        box_alpha = int(18 * (1.0 - sp) + 48 * sp + hp * 12 * (1.0 - sp))
+        p.setBrush(QColor(acc.red(), acc.green(), acc.blue(), box_alpha))
+        p.drawRoundedRect(icon_box, 7.0, 7.0)
+
+        icon_col = acc if (sp > 0.2 or hp > 0.3) else QColor("#A1A1AA")
+        draw_preset_wireframe(p, icon_box, self.icon_kind, icon_col)
+
+        # Title & Subtitle text
+        text_left = int(icon_box.right() + 9)
+        right_pad = 18 if sp > 0.2 else 8
+        text_right = int(r.right() - right_pad)
+        text_w = max(24, text_right - text_left)
+
+        t_font = self._title_font()
+        p.setFont(t_font)
+        title_px_w = p.fontMetrics().horizontalAdvance(self.title_text)
+
+        badge_drawn_left = text_right
+        if self.badge_text and not self.compact:
+            b_font = QFont("Segoe UI Variable Display", 7, QFont.Weight.ExtraBold)
+            b_font.setPixelSize(8)
+            p.setFont(b_font)
+            bw = p.fontMetrics().horizontalAdvance(self.badge_text) + 8
+            bh = 13
+            bx = int(r.right() - bw - (18 if sp > 0.2 else 7))
+            by = int(r.top() + 6)
+            if bx > text_left + title_px_w + 6:
+                badge_drawn_left = bx - 4
+                p.setPen(Qt.PenStyle.NoPen)
+                badge_alpha = int(35 * (1.0 - sp) + 65 * sp)
+                p.setBrush(QColor(acc.red(), acc.green(), acc.blue(), badge_alpha))
+                p.drawRoundedRect(QRectF(bx, by, bw, bh), 4.0, 4.0)
+                p.setPen(acc.lighter(135) if sp > 0.2 else acc.lighter(115))
+                p.drawText(QRect(bx, by, bw, bh), Qt.AlignmentFlag.AlignCenter, self.badge_text)
+
+        title_avail_w = max(24, badge_drawn_left - text_left)
+        if self.subtitle_text:
+            title_r = QRect(text_left, int(r.top() + 6), title_avail_w, 17)
+            sub_r = QRect(text_left, int(r.top() + 23), text_w, int(r.height() - 26))
+            p.setFont(t_font)
+            if self.icon_kind == "sub_neon" and sp > 0.3:
+                p.setPen(QColor("#67E8F9"))
+            elif self.icon_kind == "sub_highlight" and sp > 0.3:
+                p.setPen(QColor("#FDE047"))
+            else:
+                p.setPen(QColor("#FFFFFF") if sp > 0.3 else QColor("#F4F4F5"))
+            p.drawText(title_r, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.title_text)
+
+            sub_font = QFont("Segoe UI Variable Text", 8, QFont.Weight.Normal)
+            sub_font.setPixelSize(10)
+            p.setFont(sub_font)
+            p.setPen(QColor("#E2E8F0") if sp > 0.3 else QColor("#94A3B8"))
+            p.drawText(sub_r, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap, self.subtitle_text)
+        else:
+            title_r = QRect(text_left, int(r.top()), title_avail_w, int(r.height()))
+            p.setFont(t_font)
+            p.setPen(QColor("#FFFFFF") if sp > 0.3 else QColor("#E4E4E7"))
+            p.drawText(title_r, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.title_text)
+
+        # Active dot indicator with smooth pop-in
+        if sp > 0.05:
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(acc)
+            dot_rad = 3.0 * min(1.0, sp * 1.2)
+            p.drawEllipse(QRectF(r.right() - 13 - dot_rad, r.top() + 8 - dot_rad + 3.0, dot_rad * 2, dot_rad * 2))
+
+
+class VisualCardSelector(QWidget):
+    valueChanged = pyqtSignal(str)
+
+    def __init__(
+        self,
+        items: list[tuple[Any, ...]],
+        columns: int = 2,
+        accent: str = "#3B82F6",
+        compact: bool = False,
+        cols: int | None = None,
+        card_height: int | None = None,
+        show_preview: bool = True,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        _ = show_preview
+        eff_cols = max(1, int(cols if cols is not None else columns))
+        self._cards: dict[str, VisualCardOption] = {}
+        self._value: str = str(items[0][0]) if items else ""
+        self._bound_combo: QComboBox | None = None
+        grid = QGridLayout(self)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(8)
+        for idx, entry in enumerate(items):
+            key = str(entry[0])
+            title = str(entry[1]) if len(entry) > 1 else key
+            subtitle = str(entry[2]) if len(entry) > 2 else ""
+            icon_kind = str(entry[3]) if len(entry) > 3 else "universal"
+            badge = str(entry[4]) if len(entry) > 4 else ""
+            item_accent = str(entry[5]) if len(entry) > 5 and entry[5] else accent
+            card = VisualCardOption(
+                key,
+                title,
+                subtitle,
+                icon_kind=icon_kind,
+                accent=item_accent,
+                compact=compact,
+                badge=badge,
+                card_height=card_height,
+                parent=self,
+            )
+            card.clicked.connect(self._on_card_clicked)
+            self._cards[key] = card
+            grid.addWidget(card, idx // eff_cols, idx % eff_cols)
+        for c in range(eff_cols):
+            grid.setColumnStretch(c, 1)
+        if self._value:
+            self.set_value(self._value, emit=False, animated=False)
+
+    def _on_card_clicked(self, key: str) -> None:
+        self.set_value(key, emit=True, animated=True)
+
+    def value(self) -> str:
+        return self._value
+
+    def set_value(self, key: str, emit: bool = False, animated: bool = True) -> None:
+        if key not in self._cards:
+            return
+        self._value = key
+        for k, card in self._cards.items():
+            card.set_selected(k == key, animated=animated)
+        if self._bound_combo is not None:
+            idx = self._bound_combo.findData(key)
+            if idx >= 0 and self._bound_combo.currentIndex() != idx:
+                self._bound_combo.setCurrentIndex(idx)
+        if emit:
+            self.valueChanged.emit(key)
+
+    def bind_combo(self, combo: QComboBox) -> None:
+        self._bound_combo = combo
+        cur = str(combo.currentData() or "")
+        if cur in self._cards:
+            self.set_value(cur, emit=False, animated=False)
+        combo.currentIndexChanged.connect(self._on_combo_changed)
+
+    def _on_combo_changed(self, _idx: int) -> None:
+        if self._bound_combo is None:
+            return
+        cur = str(self._bound_combo.currentData() or "")
+        if cur in self._cards and cur != self._value:
+            self.set_value(cur, emit=False, animated=True)
+        if cur in self._cards and cur != self._value:
+            self.set_value(cur, emit=False)
+
+
+class SegmentedPillBar(QFrame):
+    valueChanged = pyqtSignal(object)
+
+    def __init__(
+        self,
+        items: list[tuple[str, Any]],
+        accent: str = "#3B82F6",
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._items = items
+        self._accent = accent
+        self._current_idx = 0
+        self._pill_x = 0.0
+        self._pill_w = 0.0
+        self._buttons: list[QPushButton] = []
+        self._bound_combo: QComboBox | None = None
+        self.setFixedHeight(36)
+        self.setStyleSheet("background: transparent; border: none;")
+
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(3, 3, 3, 3)
+        lay.setSpacing(3)
+        for i, (label, _val) in enumerate(items):
+            btn = QPushButton(label, self)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            btn.clicked.connect(lambda _checked=False, idx=i: self.set_index(idx, emit=True))
+            self._buttons.append(btn)
+            lay.addWidget(btn)
+
+        self._anim = QVariantAnimation(self)
+        self._anim.setDuration(180)
+        self._anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._anim.valueChanged.connect(self._on_anim)
+        self._refresh_button_styles()
+
+    def _on_anim(self, val: Any) -> None:
+        self._pill_x = float(val)
+        self.update()
+
+    def _refresh_button_styles(self) -> None:
+        for i, btn in enumerate(self._buttons):
+            active = i == self._current_idx
+            col = "#FFFFFF" if active else "#8E95A5"
+            wt = "700" if active else "600"
+            btn.setStyleSheet(
+                f"QPushButton {{ background: transparent; border: none; color: {col}; font-size: 11.5px; font-weight: {wt}; padding: 0 6px; }}"
+                f"QPushButton:hover {{ color: #FAFAFA; background: transparent; }}"
+            )
+
+    def resizeEvent(self, event: Any) -> None:
+        super().resizeEvent(event)
+        if 0 <= self._current_idx < len(self._buttons):
+            b = self._buttons[self._current_idx]
+            self._pill_x = float(b.x())
+            self._pill_w = float(b.width())
+
+    def set_index(self, idx: int, emit: bool = False) -> None:
+        if not (0 <= idx < len(self._items)):
+            return
+        self._current_idx = idx
+        self._refresh_button_styles()
+        target_btn = self._buttons[idx]
+        self._pill_w = float(target_btn.width())
+        if emit and self.isVisible() and target_btn.width() > 0:
+            self._anim.stop()
+            self._anim.setStartValue(self._pill_x)
+            self._anim.setEndValue(float(target_btn.x()))
+            self._anim.start()
+        else:
+            self._anim.stop()
+            self._pill_x = float(target_btn.x())
+            self.update()
+        val = self._items[idx][1]
+        if self._bound_combo is not None:
+            c_idx = self._bound_combo.findData(val)
+            if c_idx >= 0 and self._bound_combo.currentIndex() != c_idx:
+                self._bound_combo.setCurrentIndex(c_idx)
+        if emit:
+            self.valueChanged.emit(val)
+
+    def bind_combo(self, combo: QComboBox) -> None:
+        self._bound_combo = combo
+        cur = combo.currentData()
+        for i, (_lbl, v) in enumerate(self._items):
+            if v == cur:
+                self.set_index(i, emit=False)
+                break
+        combo.currentIndexChanged.connect(self._on_combo_changed)
+
+    def _on_combo_changed(self, _idx: int) -> None:
+        if self._bound_combo is None:
+            return
+        cur = self._bound_combo.currentData()
+        for i, (_lbl, v) in enumerate(self._items):
+            if v == cur and i != self._current_idx:
+                self.set_index(i, emit=False)
+                break
+
+    def paintEvent(self, event: Any) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        r = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        p.setBrush(QColor("#0B0B10"))
+        p.setPen(QPen(QColor("#20202A"), 1))
+        p.drawRoundedRect(r, 9.0, 9.0)
+        if 0 <= self._current_idx < len(self._buttons):
+            b = self._buttons[self._current_idx]
+            pw = float(b.width()) if b.width() > 0 else (self.width() - 6) / max(1, len(self._buttons))
+            px = self._pill_x if self._anim.state() == QAbstractAnimation.State.Running else float(b.x())
+            acc = QColor(self._accent)
+            pill_r = QRectF(px, 3.0, pw, float(self.height() - 6))
+            p.setBrush(QColor(acc.red(), acc.green(), acc.blue(), 215))
+            p.setPen(QPen(acc.lighter(115), 1))
+            p.drawRoundedRect(pill_r, 7.0, 7.0)
+
+
+class SettingToggleRow(QFrame):
+    def __init__(
+        self,
+        title: str,
+        subtitle: str = "",
+        checked: bool = False,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("settingToggleRow")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setStyleSheet("""
+            QFrame#settingToggleRow {
+                background-color: #0B0B10;
+                border: 1px solid #1E1E28;
+                border-radius: 10px;
+            }
+            QFrame#settingToggleRow:hover {
+                background-color: #12121A;
+                border-color: #2E2E3E;
+            }
+        """)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(12, 9, 12, 9)
+        lay.setSpacing(10)
+
+        txt_col = QVBoxLayout()
+        txt_col.setContentsMargins(0, 0, 0, 0)
+        txt_col.setSpacing(2)
+        self.title_lbl = QLabel(title)
+        self.title_lbl.setWordWrap(True)
+        self.title_lbl.setStyleSheet("color: #F4F4F5; font-size: 12px; font-weight: 600; background: transparent; border: none;")
+        txt_col.addWidget(self.title_lbl)
+        if subtitle:
+            self.sub_lbl = QLabel(subtitle)
+            self.sub_lbl.setWordWrap(True)
+            self.sub_lbl.setStyleSheet("color: #71717A; font-size: 10.5px; background: transparent; border: none;")
+            txt_col.addWidget(self.sub_lbl)
+        lay.addLayout(txt_col, 1)
+
+        self.switch = ToggleSwitch(self)
+        self.switch.setChecked(checked)
+        lay.addWidget(self.switch, 0, Qt.AlignmentFlag.AlignVCenter)
+
+    def mousePressEvent(self, event: Any) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self.switch.isEnabled():
+            if not self.switch.geometry().contains(event.position().toPoint()):
+                self.switch.setChecked(not self.switch.isChecked())
+                event.accept()
+                return
+        super().mousePressEvent(event)
 
 
 class VideoSurfaceWidget(QWidget):
@@ -1218,26 +2048,28 @@ class VideoSurfaceWidget(QWidget):
         self.sink.videoFrameChanged.connect(self.on_frame_changed)
         self.aspect_ratio_mode = Qt.AspectRatioMode.KeepAspectRatio
         self.video_rect = QRect()
-        self.preview_mode: str = "auto_podcast_9_16"
+        self.preview_mode: str = "auto_universal_9_16"
         self.manual_crop_x: float = 0.5
         self.manual_crop_y: float = 0.5
         self.manual_zoom: float = 1.0
+        self.mirror_horizontal: bool = False
+        self.color_boost_enabled: bool = False
         self.is_dragging_video: bool = False
         self._drag_start_pos: QPoint | None = None
         self._drag_start_crop_x: float = 0.5
         self._drag_start_crop_y: float = 0.5
-        self.show_face_boxes: bool = True
+        self.show_face_boxes: bool = False
         self.smoothed_faces: list[tuple[float, float, float, float]] = []
         self._last_detect_ts: float = 0.0
         self._last_face_count: int = -1
         self.setMouseTracking(True)
 
     def is_manual_framing(self) -> bool:
-        return self.preview_mode in ("manual_crop", "manual_fit", "manual_ambient", "standard_16_9", "ambient_9_16") or str(self.preview_mode).startswith("manual_")
+        return self.preview_mode in ("manual_crop", "manual_fit", "manual_ambient") or str(self.preview_mode).startswith("manual_")
 
     def set_preview_mode(self, mode: str) -> None:
         self.preview_mode = mode
-        if self.is_manual_framing():
+        if self.is_manual_framing() and self.preview_mode != "manual_split":
             self.setCursor(Qt.CursorShape.OpenHandCursor)
         else:
             self.setCursor(Qt.CursorShape.ArrowCursor)
@@ -1262,7 +2094,7 @@ class VideoSurfaceWidget(QWidget):
         self.update()
 
     def mousePressEvent(self, event: Any) -> None:
-        if self.is_manual_framing() and event.button() == Qt.MouseButton.LeftButton:
+        if self.is_manual_framing() and self.preview_mode != "manual_split" and event.button() == Qt.MouseButton.LeftButton:
             self.is_dragging_video = True
             self._drag_start_pos = event.position().toPoint()
             self._drag_start_crop_x = self.manual_crop_x
@@ -1273,7 +2105,7 @@ class VideoSurfaceWidget(QWidget):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: Any) -> None:
-        if self.is_manual_framing():
+        if self.is_manual_framing() and self.preview_mode != "manual_split":
             if self.is_dragging_video and self._drag_start_pos:
                 delta = event.position().toPoint() - self._drag_start_pos
                 w = max(20, self.width())
@@ -1300,7 +2132,7 @@ class VideoSurfaceWidget(QWidget):
         super().mouseReleaseEvent(event)
 
     def wheelEvent(self, event: Any) -> None:
-        if self.is_manual_framing():
+        if self.is_manual_framing() and self.preview_mode != "manual_split":
             step = 0.05 if event.angleDelta().y() > 0 else -0.05
             self.manual_zoom = max(0.20, min(3.00, round(self.manual_zoom + step, 2)))
             self.manualCropChanged.emit(self.manual_crop_x, self.manual_crop_y, self.manual_zoom)
@@ -1350,7 +2182,6 @@ class VideoSurfaceWidget(QWidget):
             ]
 
             if not norm_faces:
-                # Tahan posisi sebelumnya sebentar agar tidak berkedip saat pembicara menoleh
                 if getattr(self, "_empty_streak", 0) < 3 and self.smoothed_faces:
                     self._empty_streak = getattr(self, "_empty_streak", 0) + 1
                 else:
@@ -1376,11 +2207,11 @@ class VideoSurfaceWidget(QWidget):
             if f_count != self._last_face_count:
                 self._last_face_count = f_count
                 if f_count == 0:
-                    msg = "✨ Real-Time AI: 0 Wajah → Mode Cinema Utuh (Anti-Potong)"
+                    msg = "AI Kamera: 0 Wajah · Mode Sinematik Utuh"
                 elif f_count == 1:
-                    msg = "🎯 Real-Time AI: 1 Pembicara Terdeteksi → Fokus Tengah Otomatis"
+                    msg = "AI Kamera: 1 Subjek · Fokus Tengah Otomatis"
                 else:
-                    msg = f"👥 Real-Time AI: {f_count} Pembicara Terdeteksi → Split Atas-Bawah Otomatis"
+                    msg = f"AI Kamera: {f_count} Subjek · Split Atas-Bawah"
                 self.facesDetected.emit(f_count, msg)
         except Exception:
             pass
@@ -1389,7 +2220,7 @@ class VideoSurfaceWidget(QWidget):
         if frame.isValid():
             self.current_frame = frame.toImage()
             if self.current_frame and not self.current_frame.isNull():
-                if self.preview_mode in ("auto_podcast_9_16", "split_2_9_16", "crop_9_16") or self.show_face_boxes:
+                if self.preview_mode in ("auto_universal_9_16", "auto_podcast_9_16", "split_2_9_16", "crop_9_16") or self.show_face_boxes:
                     self._run_realtime_face_tracker(self.current_frame)
             self.update()
 
@@ -1400,6 +2231,7 @@ class VideoSurfaceWidget(QWidget):
         face_norm: tuple[float, float, float, float],
         dest_rect: QRect,
         label_text: str = "",
+        has_real_face: bool = True,
     ) -> None:
         iw, ih = img.width(), img.height()
         fx, fy, fw, fh = face_norm
@@ -1407,7 +2239,6 @@ class VideoSurfaceWidget(QWidget):
         cy = (fy + fh * 0.5) * ih
         dest_ar = dest_rect.width() / max(1.0, float(dest_rect.height()))
 
-        # Chest-up safe framing agar wajah & bahu tidak pernah terpotong
         if dest_ar < 0.8:
             crop_h = ih
             crop_w = min(iw, int(crop_h * dest_ar))
@@ -1432,37 +2263,34 @@ class VideoSurfaceWidget(QWidget):
         oy = max(0, (scaled.height() - dest_rect.height()) // 2)
         p.drawImage(dest_rect.topLeft(), scaled, QRect(ox, oy, dest_rect.width(), dest_rect.height()))
 
-        if self.show_face_boxes and label_text:
-            # Hitung posisi kotak wajah relatif terhadap panel
+        if self.show_face_boxes and has_real_face and label_text:
             rel_fx = ((fx * iw - sx) / max(1.0, float(crop_w))) * dest_rect.width() + dest_rect.x()
             rel_fy = ((fy * ih - sy) / max(1.0, float(crop_h))) * dest_rect.height() + dest_rect.y()
             rel_fw = (fw * iw / max(1.0, float(crop_w))) * dest_rect.width()
             rel_fh = (fh * ih / max(1.0, float(crop_h))) * dest_rect.height()
             box_rect = QRect(int(rel_fx), int(rel_fy), int(rel_fw), int(rel_fh)).intersected(dest_rect.adjusted(4, 4, -4, -4))
             if box_rect.width() > 14 and box_rect.height() > 14:
-                p.setPen(QPen(QColor(16, 185, 129, 210), 1.8, Qt.PenStyle.DashLine))
+                p.setPen(QPen(QColor(16, 185, 129, 210), 1.6, Qt.PenStyle.DashLine))
                 p.setBrush(Qt.BrushStyle.NoBrush)
                 p.drawRoundedRect(box_rect, 6, 6)
 
-            badge_w = min(dest_rect.width() - 16, 155)
+            badge_w = min(dest_rect.width() - 16, 150)
             badge_rect = QRect(dest_rect.x() + 8, dest_rect.y() + 8, badge_w, 20)
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QColor(9, 13, 22, 195))
+            p.setBrush(QColor(5, 5, 8, 205))
             p.drawRoundedRect(badge_rect, 5, 5)
             p.setPen(QColor("#34D399"))
-            p.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+            p.setFont(QFont("Segoe UI Variable Text", 8, QFont.Weight.Bold))
             p.drawText(badge_rect.adjusted(6, 0, -6, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, label_text)
 
     def _draw_ambient_cinema(self, p: QPainter, img: QImage, w: int, h: int) -> None:
-        # 1. Background blur penuh 9:16
         tiny = img.scaled(36, 64, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.FastTransformation)
         bg = tiny.scaled(w, h, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
         bx = max(0, (bg.width() - w) // 2)
         by = max(0, (bg.height() - h) // 2)
         p.drawImage(0, 0, bg, bx, by, w, h)
-        p.fillRect(0, 0, w, h, QColor(6, 10, 18, 125))
+        p.fillRect(0, 0, w, h, QColor(0, 0, 0, 135))
 
-        # 2. Video utama utuh di tengah (sedikit di-zoom 1.06x agar pembicara besar & jelas tanpa terpotong)
         fg_w = int(w * 1.0)
         fg_h = max(40, int(fg_w * (img.height() / max(1.0, float(img.width())))))
         fg = img.scaled(fg_w, fg_h, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
@@ -1474,34 +2302,54 @@ class VideoSurfaceWidget(QWidget):
             self.videoRectChanged.emit(new_rect)
         p.drawImage(fx, fy, fg)
 
-        # Garis tipis sinematik atas & bawah
-        p.setPen(QPen(QColor(255, 255, 255, 35), 1))
+        p.setPen(QPen(QColor(255, 255, 255, 30), 1))
         p.drawLine(0, fy, w, fy)
         p.drawLine(0, fy + fg.height(), w, fy + fg.height())
 
         if self.show_face_boxes and self.smoothed_faces:
-            for idx_f, (nfx, nfy, nfw, nfh) in enumerate(self.smoothed_faces):
+            for (nfx, nfy, nfw, nfh) in self.smoothed_faces:
                 rx = fx + int(nfx * fg.width())
                 ry = fy + int(nfy * fg.height())
                 rw = int(nfw * fg.width())
                 rh = int(nfh * fg.height())
-                p.setPen(QPen(QColor(56, 189, 248, 220), 1.6, Qt.PenStyle.DashLine))
+                p.setPen(QPen(QColor(56, 189, 248, 210), 1.5, Qt.PenStyle.DashLine))
                 p.setBrush(Qt.BrushStyle.NoBrush)
                 p.drawRoundedRect(rx, ry, rw, rh, 5, 5)
+
+    def _apply_color_boost_overlay(self, p: QPainter, rect: QRect) -> None:
+        if not self.color_boost_enabled:
+            return
+        p.save()
+        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SoftLight)
+        p.fillRect(rect, QColor(245, 195, 145, 36))
+        p.restore()
 
     def paintEvent(self, event: Any) -> None:
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
-        p.fillRect(self.rect(), QColor("#05070B"))
+        p.fillRect(self.rect(), QColor("#000000"))
         if not self.current_frame or self.current_frame.isNull() or w < 20 or h < 20:
             return
 
-        img = self.current_frame
+        img = self.current_frame.mirrored(True, False) if self.mirror_horizontal else self.current_frame
         is_portrait_canvas = h > w
+
+        if self.preview_mode == "original_native":
+            scaled = img.scaled(self.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            x = max(0, (w - scaled.width()) // 2)
+            y = max(0, (h - scaled.height()) // 2)
+            new_rect = QRect(x, y, min(w, scaled.width()), min(h, scaled.height()))
+            if new_rect != self.video_rect:
+                self.video_rect = new_rect
+                self.videoRectChanged.emit(new_rect)
+            p.drawImage(x, y, scaled)
+            self._apply_color_boost_overlay(p, new_rect)
+            return
 
         if is_portrait_canvas and self.preview_mode in ("ambient_9_16", "manual_ambient"):
             self._draw_ambient_cinema(p, img, w, h)
+            self._apply_color_boost_overlay(p, self.rect())
             return
 
         if is_portrait_canvas and self.preview_mode == "manual_split":
@@ -1513,41 +2361,40 @@ class VideoSurfaceWidget(QWidget):
             left_img = img.copy(max(0, int(iw * 0.04)), 0, min(iw - int(iw * 0.04), sub_w), ih)
             right_img = img.copy(max(0, int(iw * 0.44)), 0, min(iw - int(iw * 0.44), sub_w), ih)
             for src_sub, dst_r, lbl_txt in (
-                (left_img, top_rect, "✋ Panel Atas (Sisi Kiri Statis)"),
-                (right_img, bot_rect, "✋ Panel Bawah (Sisi Kanan Statis)"),
+                (left_img, top_rect, "Panel Atas (Sisi Kiri)"),
+                (right_img, bot_rect, "Panel Bawah (Sisi Kanan)"),
             ):
                 sc = src_sub.scaled(dst_r.size(), Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
                 ox = max(0, (sc.width() - dst_r.width()) // 2)
                 oy = max(0, (sc.height() - dst_r.height()) // 2)
                 p.drawImage(dst_r.topLeft(), sc, QRect(ox, oy, dst_r.width(), dst_r.height()))
-                badge_r = QRect(dst_r.x() + 8, dst_r.y() + 8, min(dst_r.width() - 16, 175), 20)
+                badge_r = QRect(dst_r.x() + 8, dst_r.y() + 8, min(dst_r.width() - 16, 155), 20)
                 p.setPen(Qt.PenStyle.NoPen)
-                p.setBrush(QColor(9, 13, 22, 195))
+                p.setBrush(QColor(5, 5, 8, 200))
                 p.drawRoundedRect(badge_r, 5, 5)
                 p.setPen(QColor("#FBBF24"))
-                p.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+                p.setFont(QFont("Segoe UI Variable Text", 8, QFont.Weight.Bold))
                 p.drawText(badge_r.adjusted(6, 0, -6, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, lbl_txt)
-            p.fillRect(0, half_h - 2, w, 4, QColor(9, 13, 22, 240))
+            p.fillRect(0, half_h - 1, w, 3, QColor(0, 0, 0, 240))
             p.setPen(QPen(QColor(245, 158, 11, 170), 1))
             p.drawLine(0, half_h, w, half_h)
+            self._apply_color_boost_overlay(p, self.rect())
             self.video_rect = QRect(0, 0, w, h)
             return
 
         if self.preview_mode in ("manual_crop", "manual_fit", "manual_ambient") or (
-            self.is_manual_framing() and self.preview_mode not in ("auto_podcast_9_16", "split_2_9_16", "crop_9_16", "facecam_9_16", "manual_split")
+            self.is_manual_framing() and self.preview_mode not in ("auto_universal_9_16", "auto_podcast_9_16", "split_2_9_16", "crop_9_16", "facecam_9_16", "manual_split")
         ):
-            # 1. Background
             if self.preview_mode in ("manual_ambient", "ambient_9_16"):
                 tiny = img.scaled(36, 64, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.FastTransformation)
                 bg = tiny.scaled(w, h, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
                 bx = max(0, (bg.width() - w) // 2)
                 by = max(0, (bg.height() - h) // 2)
                 p.drawImage(0, 0, bg, bx, by, w, h)
-                p.fillRect(0, 0, w, h, QColor(6, 10, 18, 125))
+                p.fillRect(0, 0, w, h, QColor(0, 0, 0, 135))
             else:
                 p.fillRect(0, 0, w, h, QColor(0, 0, 0))
 
-            # 2. Scaling
             if self.preview_mode == "manual_crop":
                 base_scale = max(float(w) / max(1, img.width()), float(h) / max(1, img.height()))
             else:
@@ -1558,56 +2405,60 @@ class VideoSurfaceWidget(QWidget):
             vh = max(10, int(round(img.height() * base_scale * z)))
             scaled = img.scaled(vw, vh, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
 
-            # 3. Position matching FFmpeg formula
             travel_x = max(abs(w - vw), int(w * 0.8))
             travel_y = max(abs(h - vh), int(h * 0.8))
             fx = int((w - vw) * 0.5 + (self.manual_crop_x - 0.5) * travel_x)
             fy = int((h - vh) * 0.5 + (self.manual_crop_y - 0.5) * travel_y)
 
             p.drawImage(fx, fy, scaled)
+            self._apply_color_boost_overlay(p, QRect(fx, fy, vw, vh))
 
-            # Subtle frame boundary
-            p.setPen(QPen(QColor(56, 189, 248, 110), 1, Qt.PenStyle.DashLine))
+            p.setPen(QPen(QColor(56, 189, 248, 100), 1, Qt.PenStyle.DashLine))
             p.drawRect(fx, fy, vw, vh)
 
-            badge_r = QRect(8, 8, min(w - 16, 310), 22)
+            badge_r = QRect(8, 8, min(w - 16, 265), 22)
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QColor(9, 13, 22, 215))
+            p.setBrush(QColor(5, 5, 8, 210))
             p.drawRoundedRect(badge_r, 6, 6)
             p.setPen(QColor("#FBBF24"))
-            p.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+            p.setFont(QFont("Cascadia Mono", 8, QFont.Weight.Bold))
             p.drawText(
                 badge_r.adjusted(8, 0, -8, 0),
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                f"✋ Bebas: X {int(self.manual_crop_x * 100)}% | Y {int(self.manual_crop_y * 100)}% | {z:.2f}x",
+                f"X {int(self.manual_crop_x * 100)}% · Y {int(self.manual_crop_y * 100)}% · {z:.2f}x",
             )
             self.video_rect = QRect(fx, fy, vw, vh)
             return
 
-        if is_portrait_canvas and self.preview_mode in ("auto_podcast_9_16", "split_2_9_16", "crop_9_16"):
+        if is_portrait_canvas and self.preview_mode in ("auto_universal_9_16", "auto_podcast_9_16", "split_2_9_16", "crop_9_16"):
             faces = self.smoothed_faces
-            if self.preview_mode == "split_2_9_16" or (self.preview_mode == "auto_podcast_9_16" and len(faces) >= 2):
+            if len(faces) >= 2 and self.preview_mode in ("split_2_9_16", "auto_podcast_9_16", "auto_universal_9_16"):
                 half_h = h // 2
                 top_rect = QRect(0, 0, w, half_h)
                 bot_rect = QRect(0, half_h, w, h - half_h)
-                f1 = faces[0] if len(faces) >= 1 else (0.18, 0.18, 0.22, 0.32)
-                f2 = faces[1] if len(faces) >= 2 else (0.60, 0.18, 0.22, 0.32)
-                self._draw_speaker_crop(p, img, f1, top_rect, "🎯 Pembicara 1 (Kiri)")
-                self._draw_speaker_crop(p, img, f2, bot_rect, "🎯 Pembicara 2 (Kanan)")
-                p.fillRect(0, half_h - 2, w, 4, QColor(9, 13, 22, 240))
+                self._draw_speaker_crop(p, img, faces[0], top_rect, "Subjek 1", has_real_face=True)
+                self._draw_speaker_crop(p, img, faces[1], bot_rect, "Subjek 2", has_real_face=True)
+                p.fillRect(0, half_h - 1, w, 3, QColor(0, 0, 0, 240))
                 p.setPen(QPen(QColor(59, 130, 246, 160), 1))
                 p.drawLine(0, half_h, w, half_h)
+                self._apply_color_boost_overlay(p, self.rect())
                 self.video_rect = QRect(0, 0, w, h)
                 return
-            elif self.preview_mode == "crop_9_16" or (self.preview_mode == "auto_podcast_9_16" and len(faces) == 1):
-                f1 = faces[0] if faces else (0.38, 0.18, 0.24, 0.35)
+            elif len(faces) == 1:
                 full_rect = QRect(0, 0, w, h)
-                self._draw_speaker_crop(p, img, f1, full_rect, "🎯 Fokus Pembicara Aktif")
+                self._draw_speaker_crop(p, img, faces[0], full_rect, "Fokus Subjek", has_real_face=True)
+                self._apply_color_boost_overlay(p, full_rect)
+                self.video_rect = full_rect
+                return
+            elif self.preview_mode == "crop_9_16":
+                full_rect = QRect(0, 0, w, h)
+                self._draw_speaker_crop(p, img, (0.38, 0.18, 0.24, 0.35), full_rect, "", has_real_face=False)
+                self._apply_color_boost_overlay(p, full_rect)
                 self.video_rect = full_rect
                 return
             else:
-                # 0 Wajah terdeteksi pada Auto-Podcast -> otomatis gunakan Cinema Utuh Anti-Potong
                 self._draw_ambient_cinema(p, img, w, h)
+                self._apply_color_boost_overlay(p, self.rect())
                 return
 
         target_size = self.size()
@@ -1623,6 +2474,7 @@ class VideoSurfaceWidget(QWidget):
             self.video_rect = new_rect
             self.videoRectChanged.emit(new_rect)
         p.drawImage(x, y, scaled)
+        self._apply_color_boost_overlay(p, new_rect)
 
 
 class SafeZoneOverlayWidget(QWidget):
@@ -1639,42 +2491,35 @@ class SafeZoneOverlayWidget(QWidget):
         if w < 40 or h < 40:
             return
 
-        top_h = int(h * 0.12)
-        bot_h = int(h * 0.18)
-        right_w = int(w * 0.16)
+        top_h = int(h * 0.11)
+        bot_h = int(h * 0.17)
+        right_w = int(w * 0.15)
 
-        # Soft dark tint for outer non-safe areas (simulates real phone UI obstruction cleanly)
-        painter.fillRect(0, 0, w, top_h, QColor(0, 0, 0, 75))
-        painter.fillRect(0, h - bot_h, w, bot_h, QColor(0, 0, 0, 85))
-        painter.fillRect(w - right_w, top_h, right_w, h - top_h - bot_h, QColor(0, 0, 0, 65))
+        painter.fillRect(0, 0, w, top_h, QColor(0, 0, 0, 110))
+        painter.fillRect(0, h - bot_h, w, bot_h, QColor(0, 0, 0, 120))
+        painter.fillRect(w - right_w, top_h, right_w, h - top_h - bot_h, QColor(0, 0, 0, 95))
 
-        # Clean dashed safe zone boundary
         safe_x = int(w * 0.05)
-        safe_y = top_h + 3
-        safe_w = max(10, (w - right_w) - safe_x - 3)
-        safe_h = max(10, (h - bot_h) - safe_y - 3)
+        safe_y = top_h + 2
+        safe_w = max(10, (w - right_w) - safe_x - 2)
+        safe_h = max(10, (h - bot_h) - safe_y - 2)
 
-        pen_safe = QPen(QColor(56, 189, 248, 160), 1.2, Qt.PenStyle.DashLine)
-        painter.setPen(pen_safe)
-        painter.drawRoundedRect(safe_x, safe_y, safe_w, safe_h, 6, 6)
+        painter.setPen(QPen(QColor(34, 211, 238, 165), 1.2, Qt.PenStyle.DashLine))
+        painter.drawRoundedRect(safe_x, safe_y, safe_w, safe_h, 8, 8)
 
-        # Subtle, clean labels
-        painter.setFont(QFont("Segoe UI", 8, QFont.Weight.DemiBold))
+        painter.setFont(QFont("Segoe UI Variable Text", 7, QFont.Weight.DemiBold))
+        painter.setPen(QColor(161, 161, 170, 195))
+        painter.drawText(QRect(safe_x, 2, safe_w, top_h - 4), Qt.AlignmentFlag.AlignCenter, "Area Header Aplikasi")
+        painter.drawText(QRect(safe_x, h - bot_h + 4, safe_w, bot_h - 8), Qt.AlignmentFlag.AlignCenter, "Area Caption & Musik")
 
-        # Top area label
-        painter.setPen(QColor(203, 213, 225, 175))
-        painter.drawText(QRect(safe_x, 2, safe_w, top_h - 4), Qt.AlignmentFlag.AlignCenter, "📱 UI Atas (Nama Akun / Search)")
+        for idx_c, cy_off in enumerate((22, 50, 78)):
+            if top_h + cy_off + 16 < h - bot_h:
+                painter.setPen(QPen(QColor(161, 161, 170, 130), 1))
+                painter.setBrush(QColor(24, 24, 30, 160))
+                painter.drawEllipse(w - right_w + (right_w - 18) // 2, top_h + cy_off, 18, 18)
 
-        # Bottom area label
-        painter.drawText(QRect(safe_x, h - bot_h + 4, safe_w, bot_h - 8), Qt.AlignmentFlag.AlignCenter, "💬 Area Caption & Sound HP")
-
-        # Right sidebar icons
-        painter.setPen(QColor(245, 158, 11, 200))
-        painter.drawText(QRect(w - right_w, top_h + 8, right_w - 4, 60), Qt.AlignmentFlag.AlignCenter, "❤️\n💬\n↗️")
-
-        # Safe area tag
-        painter.setPen(QColor(56, 189, 248, 210))
-        painter.drawText(QRect(safe_x + 6, safe_y + 4, safe_w - 12, 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "✓ Area Aman Konten")
+        painter.setPen(QColor(34, 211, 238, 220))
+        painter.drawText(QRect(safe_x + 8, safe_y + 4, safe_w - 16, 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "Area Aman Teks")
 
 
 class SmartLayoutOverlayWidget(QWidget):
@@ -1697,82 +2542,39 @@ class SmartLayoutOverlayWidget(QWidget):
             if w < 40 or h < 40:
                 return
 
-            # Latar studio modern (Dark Glass Smartphone Canvas) saat video belum diputar
-            bg_grad = QLinearGradient(0.0, 0.0, 0.0, float(h))
-            bg_grad.setColorAt(0.0, QColor(13, 21, 38, 245))
-            bg_grad.setColorAt(0.5, QColor(9, 14, 26, 245))
-            bg_grad.setColorAt(1.0, QColor(6, 10, 19, 250))
-            painter.fillRect(0, 0, w, h, bg_grad)
-
-            # Garis grid komposisi tipis modern
-            grid_pen = QPen(QColor(51, 65, 85, 45), 1, Qt.PenStyle.SolidLine)
+            painter.fillRect(0, 0, w, h, QColor("#060609"))
+            grid_pen = QPen(QColor(39, 39, 48, 90), 1, Qt.PenStyle.SolidLine)
             painter.setPen(grid_pen)
             painter.drawLine(w // 3, 0, w // 3, h)
             painter.drawLine((2 * w) // 3, 0, (2 * w) // 3, h)
 
-            def draw_pill(y_pos: int, text: str, bg_col: QColor, border_col: QColor, txt_col: QColor) -> None:
-                painter.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
-                pill_w = min(w - 16, max(120, int(w * 0.88)))
-                pill_x = (w - pill_w) // 2
-                rect = QRect(pill_x, y_pos, pill_w, 22)
-                painter.setBrush(bg_col)
-                painter.setPen(QPen(border_col, 1))
-                painter.drawRoundedRect(rect, 11, 11)
-                painter.setPen(txt_col)
-                painter.drawText(rect.adjusted(6, 0, -6, 0), Qt.AlignmentFlag.AlignCenter, text)
-
-            if self.face_mode in ("0", "1"):
-                badge_txt = (
-                    "✨ 9:16 Cinema Utuh · Tanpa Potong"
-                    if self.face_mode == "0"
-                    else "🎯 9:16 Auto-Focus · 1 Pembicara"
-                )
-                draw_pill(8, badge_txt, QColor(15, 23, 42, 220), QColor(56, 189, 248, 120), QColor(186, 230, 253))
-                draw_pill(h - 32, "💬 Area Subtitle Otomatis", QColor(15, 23, 42, 200), QColor(51, 65, 85, 140), QColor(148, 163, 184))
-
-            elif self.face_mode == "3_equal":
-                y1 = h // 3
-                y2 = (2 * h) // 3
-                pen_div = QPen(QColor(56, 189, 248, 180), 1.5, Qt.PenStyle.DashLine)
-                painter.setPen(pen_div)
-                painter.drawLine(8, y1, w - 8, y1)
-                painter.drawLine(8, y2, w - 8, y2)
-                draw_pill(8, "👥 Panel 1 · Pembicara Kiri", QColor(15, 23, 42, 210), QColor(59, 130, 246, 120), QColor(147, 197, 253))
-                draw_pill(y1 + 8, "👥 Panel 2 · Pembicara Tengah", QColor(15, 23, 42, 210), QColor(59, 130, 246, 120), QColor(147, 197, 253))
-                draw_pill(y2 + 8, "👥 Panel 3 · Pembicara Kanan", QColor(15, 23, 42, 210), QColor(59, 130, 246, 120), QColor(147, 197, 253))
-
-            else:
+            if self.face_mode == "2":
                 half_y = h // 2
-                painter.fillRect(0, half_y - 1, w, 3, QColor(15, 23, 42, 230))
-                pen_div = QPen(QColor(56, 189, 248, 190), 1.5, Qt.PenStyle.DashLine)
-                painter.setPen(pen_div)
-                painter.drawLine(6, half_y, w - 6, half_y)
-                draw_pill(8, "👤 Panel Atas · Pembicara 1", QColor(15, 23, 42, 215), QColor(59, 130, 246, 120), QColor(147, 197, 253))
-                draw_pill(half_y + 8, "👤 Panel Bawah · Pembicara 2", QColor(15, 23, 42, 215), QColor(59, 130, 246, 120), QColor(147, 197, 253))
+                painter.setPen(QPen(QColor(59, 130, 246, 140), 1.2, Qt.PenStyle.DashLine))
+                painter.drawLine(8, half_y, w - 8, half_y)
 
-            # Kartu status tengah yang rapi & tidak pernah terpotong
-            card_w = min(w - 24, 230)
-            card_h = 68
+            card_w = min(w - 28, 220)
+            card_h = 64
             card_x = (w - card_w) // 2
-            card_y = max(38, (h - card_h) // 2 - 12)
+            card_y = (h - card_h) // 2
             card_rect = QRect(card_x, card_y, card_w, card_h)
-            painter.setBrush(QColor(15, 23, 42, 215))
-            painter.setPen(QPen(QColor(51, 65, 85, 160), 1))
+            painter.setBrush(QColor(14, 14, 20, 230))
+            painter.setPen(QPen(QColor(39, 39, 50, 200), 1))
             painter.drawRoundedRect(card_rect, 12, 12)
 
-            painter.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
-            painter.setPen(QColor(248, 250, 252))
+            painter.setFont(QFont("Segoe UI Variable Display", 9, QFont.Weight.Bold))
+            painter.setPen(QColor("#FAFAFA"))
             painter.drawText(
-                QRect(card_x + 8, card_y + 8, card_w - 16, 20),
+                QRect(card_x + 8, card_y + 10, card_w - 16, 18),
                 Qt.AlignmentFlag.AlignCenter,
-                "🎬 Kanvas Pratinjau 9:16",
+                "Pratinjau Studio",
             )
-            painter.setFont(QFont("Segoe UI", 8, QFont.Weight.Normal))
-            painter.setPen(QColor(148, 163, 184))
+            painter.setFont(QFont("Segoe UI Variable Text", 8, QFont.Weight.Normal))
+            painter.setPen(QColor("#71717A"))
             painter.drawText(
-                QRect(card_x + 10, card_y + 28, card_w - 20, 34),
+                QRect(card_x + 10, card_y + 30, card_w - 20, 26),
                 Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
-                "Pilih atau putar video untuk melihat kamera AI real-time",
+                "Pilih video untuk pratinjau langsung",
             )
         except Exception:
             pass
@@ -2382,12 +3184,12 @@ class DependencyInstallWorker(QThread):
 class HermesDesktop(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("ENCLip - Video AI Clipper")
+        self.setWindowTitle("ENCLip Studio")
         icon = get_app_icon()
         if icon:
             self.setWindowIcon(icon)
-        self.resize(1240, 760)
-        self.setMinimumSize(960, 560)
+        self.resize(1280, 780)
+        self.setMinimumSize(980, 580)
         self.current_job_id: str | None = None
         self.current_options: core.CreateJobRequest | None = None
         self.worker: JobWorker | None = None
@@ -2415,6 +3217,7 @@ class HermesDesktop(QMainWindow):
         self.lyrics_free_y = 0.78
         self.watermark_free_x = 0.85
         self.watermark_free_y = 0.08
+        self.review_is_unlocked = False
 
         self.tabs = QTabWidget()
         self.setup_tab = self.build_setup_tab()
@@ -2424,14 +3227,14 @@ class HermesDesktop(QMainWindow):
         self.results_tab = self.build_results_tab()
         self.models_tab = self.build_models_tab()
         self.tutorial_tab = self.build_tutorial_tab()
-        self.tabs.addTab(self.setup_tab, "Setup")
-        self.tabs.addTab(self.video_tab, "Video")
-        self.tabs.addTab(self.create_tab, "Buat clip")
-        self.tabs.addTab(self.review_tab, "Review & manual")
-        self.tabs.addTab(self.results_tab, "Hasil")
-        self.tabs.addTab(self.models_tab, "Model AI Lokal")
-        self.tabs.addTab(self.tutorial_tab, "Informasi & Panduan")
-        self.tabs.setTabEnabled(3, False)
+        self.tabs.addTab(self.setup_tab, "Sistem")
+        self.tabs.addTab(self.video_tab, "Pilih Video")
+        self.tabs.addTab(self.create_tab, "Studio Klip")
+        self.tabs.addTab(self.review_tab, "Review && Trim")
+        self.tabs.addTab(self.results_tab, "Hasil Ekspor")
+        self.tabs.addTab(self.models_tab, "Model AI")
+        self.tabs.addTab(self.tutorial_tab, "Panduan")
+        self.tabs.setTabEnabled(3, True)
         self.tabs.setTabEnabled(4, False)
         self.tabs.tabBar().hide()
         self.nav_buttons: dict[int, QPushButton] = {}
@@ -2455,7 +3258,7 @@ class HermesDesktop(QMainWindow):
 
         brand_widget = QWidget()
         brand_layout = QHBoxLayout(brand_widget)
-        brand_layout.setContentsMargins(4, 0, 8, 0)
+        brand_layout.setContentsMargins(6, 0, 10, 0)
         brand_layout.setSpacing(8)
 
         app_icon = get_app_icon()
@@ -2466,17 +3269,17 @@ class HermesDesktop(QMainWindow):
             brand_layout.addWidget(brand_icon_lbl)
 
         brand = QLabel(
-            "<span style='color:#FFFFFF; font-weight:900; font-size:17px; letter-spacing:-0.3px;'>ENC</span>"
-            "<span style='color:#38BDF8; font-weight:900; font-size:17px; letter-spacing:-0.3px;'>Lip</span>"
+            "<span style='color:#FFFFFF; font-weight:800; font-size:17px; letter-spacing:-0.4px;'>ENC</span>"
+            "<span style='color:#3B82F6; font-weight:800; font-size:17px; letter-spacing:-0.4px;'>Lip</span>"
         )
         brand.setObjectName("brand")
         brand_layout.addWidget(brand)
 
-        meta = QLabel("AI STUDIO")
+        meta = QLabel("STUDIO")
         meta.setObjectName("brandMeta")
         meta.setStyleSheet(
-            "color: #38BDF8; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.28); "
-            "border-radius: 5px; font-size: 9px; font-weight: 800; padding: 2px 6px; letter-spacing: 0.6px;"
+            "color: #A1A1AA; background: #111116; border: 1px solid #24242F; "
+            "border-radius: 5px; font-size: 9px; font-weight: 800; padding: 2px 6px; letter-spacing: 0.9px;"
         )
         brand_layout.addWidget(meta)
         toolbar.addWidget(brand_widget)
@@ -2491,12 +3294,10 @@ class HermesDesktop(QMainWindow):
         nav_layout.setContentsMargins(4, 3, 4, 3)
         nav_layout.setSpacing(4)
         for index, label in (
-            (0, "1. Setup"),
-            (1, "2. Pilih Video"),
-            (2, "3. Buat Klip"),
-            (3, "4. Review"),
-            (4, "5. Hasil Klip"),
-            (5, "Model AI"),
+            (1, "1 · Pilih Video"),
+            (2, "2 · Studio Klip"),
+            (3, "3 · Review && Trim"),
+            (4, "4 · Hasil Ekspor"),
         ):
             button = QPushButton(label)
             button.setObjectName("navButton")
@@ -2513,42 +3314,57 @@ class HermesDesktop(QMainWindow):
 
         right_tools = QWidget()
         right_layout = QHBoxLayout(right_tools)
-        right_layout.setContentsMargins(0, 0, 4, 0)
-        right_layout.setSpacing(6)
+        right_layout.setContentsMargins(0, 0, 6, 0)
+        right_layout.setSpacing(5)
 
-        self.hud_btn = QPushButton("🖥️ HUD")
-        self.hud_btn.setObjectName("navButton")
+        sys_btn = QPushButton("● Sistem")
+        sys_btn.setObjectName("navUtilButton")
+        sys_btn.setCheckable(True)
+        sys_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        sys_btn.setToolTip("Status Lingkungan Sistem, FFmpeg & Folder Kerja")
+        sys_btn.clicked.connect(lambda checked=False: self.switch_tab(0))
+        self.nav_buttons[0] = sys_btn
+        right_layout.addWidget(sys_btn)
+
+        models_btn = QPushButton("Model AI")
+        models_btn.setObjectName("navUtilButton")
+        models_btn.setCheckable(True)
+        models_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        models_btn.setToolTip("Kelola Model Whisper & LLM Offline")
+        models_btn.clicked.connect(lambda checked=False: self.switch_tab(5))
+        self.nav_buttons[5] = models_btn
+        right_layout.addWidget(models_btn)
+
+        self.hud_btn = QPushButton("HUD")
+        self.hud_btn.setObjectName("navUtilButton")
         self.hud_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.hud_btn.setToolTip("Buka Layar HUD Pemantau Editing & Render Real-time")
+        self.hud_btn.setToolTip("Buka Jendela Pemantau Render Real-Time")
         self.hud_btn.clicked.connect(self.open_live_hud)
         right_layout.addWidget(self.hud_btn)
 
-        self.terminal_toggle_btn = QPushButton("⌨️ Log")
-        self.terminal_toggle_btn.setObjectName("navButton")
+        self.terminal_toggle_btn = QPushButton("Log")
+        self.terminal_toggle_btn.setObjectName("navUtilButton")
         self.terminal_toggle_btn.setCheckable(True)
         self.terminal_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.terminal_toggle_btn.setToolTip("Buka / Tutup Terminal Log Konsol")
+        self.terminal_toggle_btn.setToolTip("Tampilkan / Sembunyikan Log Proses")
         self.terminal_toggle_btn.clicked.connect(self.toggle_terminal_drawer)
         right_layout.addWidget(self.terminal_toggle_btn)
 
-        guide_button = QPushButton("📖 Panduan")
-        guide_button.setObjectName("navButton")
+        guide_button = QPushButton("Panduan")
+        guide_button.setObjectName("navUtilButton")
         guide_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        guide_button.setToolTip("Buka Pusat Informasi, Panduan Lengkap & Dokumentasi")
+        guide_button.setToolTip("Panduan Penggunaan ENCLip Studio")
         guide_button.setCheckable(True)
         guide_button.clicked.connect(lambda checked=False: self.switch_tab(6))
         self.nav_buttons[6] = guide_button
         right_layout.addWidget(guide_button)
 
-        self.theme_label = QLabel("Gelap")
-        self.theme_label.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: 600; background: transparent;")
-        right_layout.addWidget(self.theme_label)
-
+        self.theme_label = QLabel("")
+        self.theme_label.setVisible(False)
         self.theme_toggle = ToggleSwitch()
         self.theme_toggle.setChecked(True)
+        self.theme_toggle.setVisible(False)
         self.theme_toggle.toggled.connect(self.toggle_theme)
-        right_layout.addWidget(self.theme_toggle)
-
         self.theme_button = QPushButton()
         self.theme_button.setVisible(False)
 
@@ -2557,12 +3373,12 @@ class HermesDesktop(QMainWindow):
 
         self.poll_timer = QTimer(self)
         self.poll_timer.timeout.connect(self.refresh_job)
-        saved_theme = (
-            QSettings("ENCLip", "ENCLip").value("theme")
-            or QSettings("VanClipper", "VanClipper").value("theme", "dark")
-        )
-        self.apply_theme(str(saved_theme) == "light")
-        self.switch_tab(0)
+        self.apply_theme(False)
+        env_items = getattr(self, "_initial_env_items", None) or self.check_system_environment()
+        core_ready = all(it.get("is_ok", True) for it in env_items if it.get("key") in ("python", "ffmpeg", "directories"))
+        if 0 in self.nav_buttons:
+            self.nav_buttons[0].setText("● Sistem" if core_ready else "▲ Sistem")
+        self.switch_tab(1 if core_ready else 0)
 
     def check_system_environment(self) -> list[dict[str, Any]]:
         items = []
@@ -2704,39 +3520,37 @@ class HermesDesktop(QMainWindow):
     def create_setup_card(self, item: dict[str, Any]) -> QFrame:
         card = QFrame()
         card.setObjectName("setupCard")
-        is_dark = getattr(self, "current_theme", "dark") == "dark"
-        bg = "#111827" if is_dark else "#ffffff"
-        border = "#1f2937" if is_dark else "#e2e8f0"
-        text_color = "#f8fafc" if is_dark else "#0f172a"
-        subtext = "#94a3b8" if is_dark else "#64748b"
-
-        card.setStyleSheet(f"""
-            QFrame#setupCard {{
-                background: {bg};
-                border: 1px solid {border};
-                border-radius: 10px;
-                padding: 12px 16px;
-            }}
+        card.setStyleSheet("""
+            QFrame#setupCard {
+                background: #0A0A0F;
+                border: 1px solid #1E1E28;
+                border-radius: 12px;
+            }
+            QFrame#setupCard:hover {
+                border-color: #2E2E3E;
+                background: #0F0F16;
+            }
         """)
         c_layout = QVBoxLayout(card)
-        c_layout.setContentsMargins(14, 12, 14, 12)
+        c_layout.setContentsMargins(16, 14, 16, 14)
         c_layout.setSpacing(6)
 
         top_row = QHBoxLayout()
         top_row.setContentsMargins(0, 0, 0, 0)
 
         title_lbl = QLabel(item["name"])
-        title_lbl.setStyleSheet(f"font-size: 14px; font-weight: 700; color: {text_color}; background: transparent;")
+        title_lbl.setStyleSheet("font-size: 13.5px; font-weight: 700; color: #FAFAFA; background: transparent; border: none;")
         top_row.addWidget(title_lbl, 1)
 
         badge_lbl = QLabel(item["badge"])
         badge_lbl.setStyleSheet(f"""
-            background: {item['color']};
-            color: #ffffff;
-            font-size: 11px;
-            font-weight: 700;
-            padding: 3px 10px;
-            border-radius: 10px;
+            background: rgba(16, 185, 129, 0.14);
+            border: 1px solid {item['color']};
+            color: {item['color']};
+            font-size: 10px;
+            font-weight: 800;
+            padding: 3px 9px;
+            border-radius: 9px;
         """)
         top_row.addWidget(badge_lbl, 0)
         c_layout.addLayout(top_row)
@@ -2744,14 +3558,14 @@ class HermesDesktop(QMainWindow):
         detail_lbl = QLabel(item["details"])
         detail_lbl.setWordWrap(True)
         detail_lbl.setStyleSheet(
-            f"font-size: 12px; font-weight: 500; color: {subtext}; "
-            f"font-family: 'Consolas', 'Segoe UI', monospace; background: transparent;"
+            "font-size: 11px; font-weight: 500; color: #A1A1AA; "
+            "font-family: 'Cascadia Mono', 'Consolas', monospace; background: transparent; border: none;"
         )
         c_layout.addWidget(detail_lbl)
 
         desc_lbl = QLabel(item["desc"])
         desc_lbl.setWordWrap(True)
-        desc_lbl.setStyleSheet(f"font-size: 11px; color: {'#64748b' if is_dark else '#94a3b8'}; background: transparent;")
+        desc_lbl.setStyleSheet("font-size: 11px; color: #71717A; background: transparent; border: none;")
         c_layout.addWidget(desc_lbl)
 
         card.item_key = item["key"]
@@ -2763,6 +3577,7 @@ class HermesDesktop(QMainWindow):
 
     def refresh_setup_status(self) -> None:
         items = self.check_system_environment()
+        self._initial_env_items = items
         item_map = {it["key"]: it for it in items}
 
         all_ok = True
@@ -2772,26 +3587,30 @@ class HermesDesktop(QMainWindow):
                 it = item_map[k]
                 card.badge_lbl.setText(it["badge"])
                 card.badge_lbl.setStyleSheet(f"""
-                    background: {it['color']};
-                    color: #ffffff;
-                    font-size: 11px;
-                    font-weight: 700;
-                    padding: 3px 10px;
-                    border-radius: 10px;
+                    background: rgba(16, 185, 129, 0.14);
+                    border: 1px solid {it['color']};
+                    color: {it['color']};
+                    font-size: 10px;
+                    font-weight: 800;
+                    padding: 3px 9px;
+                    border-radius: 9px;
                 """)
                 card.detail_lbl.setText(it["details"])
                 if not it.get("is_ok", True):
                     all_ok = False
 
+        if hasattr(self, "nav_buttons") and 0 in self.nav_buttons:
+            self.nav_buttons[0].setText("● Sistem" if all_ok else "▲ Sistem")
+
         if hasattr(self, "setup_summary_lbl"):
             if all_ok:
-                self.setup_summary_lbl.setText("Semua komponen sistem & dependensi telah terverifikasi dan siap digunakan!")
-                self.setup_summary_lbl.setStyleSheet("color: #10B981; font-size: 13px; font-weight: 600;")
+                self.setup_summary_lbl.setText("Seluruh komponen sistem, FFmpeg, dan folder penyimpanan siap digunakan.")
+                self.setup_summary_lbl.setStyleSheet("color: #10B981; font-size: 12.5px; font-weight: 600; background: transparent; border: none;")
             else:
                 self.setup_summary_lbl.setText(
-                    "Perhatian: Beberapa dependensi belum lengkap atau belum terdeteksi. Silakan klik tombol 'Pasang / Update Dependensi'."
+                    "Beberapa komponen belum terdeteksi. Klik 'Perbarui Dependensi' di bawah untuk memasangnya otomatis."
                 )
-                self.setup_summary_lbl.setStyleSheet("color: #F59E0B; font-size: 13px; font-weight: 600;")
+                self.setup_summary_lbl.setStyleSheet("color: #F59E0B; font-size: 12.5px; font-weight: 600; background: transparent; border: none;")
 
     def install_dependencies_in_background(self) -> None:
         if hasattr(self, "dep_worker") and self.dep_worker is not None and self.dep_worker.isRunning():
@@ -2804,7 +3623,7 @@ class HermesDesktop(QMainWindow):
         self.log_terminal("Memulai instalasi dependensi di background...")
         if hasattr(self, "btn_setup_install"):
             self.btn_setup_install.setEnabled(False)
-            self.btn_setup_install.setText("Sedang Memasang...")
+            self.btn_setup_install.setText("Memasang...")
 
         self.dep_worker = DependencyInstallWorker()
         self.dep_worker.output_line.connect(self.log_terminal)
@@ -2814,15 +3633,15 @@ class HermesDesktop(QMainWindow):
     def on_dep_install_finished(self, success: bool, msg: str) -> None:
         if hasattr(self, "btn_setup_install"):
             self.btn_setup_install.setEnabled(True)
-            self.btn_setup_install.setText("Pasang / Update Dependensi Otomatis")
+            self.btn_setup_install.setText("Perbarui Dependensi Otomatis")
 
         self.refresh_setup_status()
         if success:
             self.log_terminal(f"SUCCESS: {msg}")
-            QMessageBox.information(self, "Setup Selesai", f"Setup environment berhasil:\n{msg}")
+            QMessageBox.information(self, "Sistem Siap", msg)
         else:
             self.log_terminal(f"FAILED: {msg}")
-            QMessageBox.warning(self, "Setup Dependensi", f"Instalasi selesai dengan catatan:\n{msg}")
+            QMessageBox.warning(self, "Pemeriksaan Sistem", msg)
 
     def build_setup_tab(self) -> QWidget:
         scroll = QScrollArea()
@@ -2833,68 +3652,43 @@ class HermesDesktop(QMainWindow):
         page = QWidget()
         page.setObjectName("pageContent")
         page.setMinimumWidth(860)
-        page.setMaximumWidth(1100)
+        page.setMaximumWidth(1160)
 
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(28, 24, 28, 28)
-        layout.setSpacing(18)
+        layout.setContentsMargins(28, 22, 28, 24)
+        layout.setSpacing(16)
 
         header_row = QHBoxLayout()
         header_text = QVBoxLayout()
         header_text.setSpacing(4)
 
-        eyebrow = QLabel("TAHAP 01: SETUP ENVIRONMENT & DEPENDENSI")
+        eyebrow = QLabel("STATUS SISTEM & MODUL")
         eyebrow.setObjectName("eyebrow")
         header_text.addWidget(eyebrow)
 
-        title = QLabel("Pemeriksaan Lingkungan Sistem & AI")
+        title = QLabel("Kesiapan Sistem & Mesin Render")
         title.setObjectName("title")
         header_text.addWidget(title)
 
-        subtitle = QLabel("Verifikasi kesiapan Python, FFmpeg, Whisper, yt-dlp, dan folder kerja sebelum memulai klip.")
-        subtitle.setStyleSheet("color: #94A3B8; font-size: 13px;")
+        subtitle = QLabel("Status Python, FFmpeg, modul transkripsi, pengunduh video, dan lokasi folder kerja aktif.")
+        subtitle.setStyleSheet("color: #71717A; font-size: 12.5px;")
         header_text.addWidget(subtitle)
         header_row.addLayout(header_text, 1)
 
         top_btn_row = QHBoxLayout()
-        top_btn_row.setSpacing(10)
+        top_btn_row.setSpacing(8)
 
         btn_refresh_top = QPushButton("Periksa Ulang")
+        btn_refresh_top.setObjectName("secondary")
         btn_refresh_top.setFixedHeight(36)
-        btn_refresh_top.setStyleSheet("""
-            QPushButton {
-                background: #1e293b;
-                border: 1px solid #334155;
-                color: #e2e8f0;
-                border-radius: 8px;
-                padding: 6px 14px;
-                font-weight: 600;
-                font-size: 12px;
-            }
-            QPushButton:hover {
-                background: #334155;
-                color: #ffffff;
-            }
-        """)
+        btn_refresh_top.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_refresh_top.clicked.connect(self.refresh_setup_status)
         top_btn_row.addWidget(btn_refresh_top)
 
-        btn_next_top = QPushButton("Lanjut ke Video")
+        btn_next_top = QPushButton("Buka Pilih Video →")
+        btn_next_top.setObjectName("primary")
         btn_next_top.setFixedHeight(36)
-        btn_next_top.setStyleSheet("""
-            QPushButton {
-                background: #0084FF;
-                border: 1px solid #0084FF;
-                color: #ffffff;
-                border-radius: 8px;
-                padding: 6px 18px;
-                font-weight: 700;
-                font-size: 12px;
-            }
-            QPushButton:hover {
-                background: #0073e6;
-            }
-        """)
+        btn_next_top.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_next_top.clicked.connect(lambda: self.switch_tab(1))
         top_btn_row.addWidget(btn_next_top)
 
@@ -2903,122 +3697,67 @@ class HermesDesktop(QMainWindow):
 
         self.setup_cards: list[QFrame] = []
         items = self.check_system_environment()
-        for it in items:
+        self._initial_env_items = items
+        cards_grid = QGridLayout()
+        cards_grid.setContentsMargins(0, 0, 0, 0)
+        cards_grid.setHorizontalSpacing(12)
+        cards_grid.setVerticalSpacing(12)
+        for idx_c, it in enumerate(items):
             card = self.create_setup_card(it)
             self.setup_cards.append(card)
-            layout.addWidget(card)
+            cards_grid.addWidget(card, idx_c // 2, idx_c % 2)
+        cards_grid.setColumnStretch(0, 1)
+        cards_grid.setColumnStretch(1, 1)
+        layout.addLayout(cards_grid)
 
         bottom_box = QFrame()
         bottom_box.setStyleSheet("""
             QFrame {
-                background: #0d1527;
-                border: 1px solid #1e293b;
+                background: #0A0A0F;
+                border: 1px solid #1E1E28;
                 border-radius: 12px;
-                padding: 16px;
             }
         """)
-        bottom_layout = QVBoxLayout(bottom_box)
+        bottom_layout = QHBoxLayout(bottom_box)
+        bottom_layout.setContentsMargins(16, 14, 16, 14)
         bottom_layout.setSpacing(12)
 
-        self.setup_summary_lbl = QLabel("Semua komponen sistem & dependensi telah terverifikasi dan siap digunakan!")
-        self.setup_summary_lbl.setStyleSheet("color: #10B981; font-size: 13px; font-weight: 600;")
-        bottom_layout.addWidget(self.setup_summary_lbl)
+        self.setup_summary_lbl = QLabel("Seluruh komponen sistem, FFmpeg, dan folder penyimpanan siap digunakan.")
+        self.setup_summary_lbl.setStyleSheet("color: #10B981; font-size: 12.5px; font-weight: 600; background: transparent; border: none;")
+        bottom_layout.addWidget(self.setup_summary_lbl, 1)
 
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(12)
-
-        self.btn_setup_install = QPushButton("Pasang / Update Dependensi Otomatis")
-        self.btn_setup_install.setFixedHeight(40)
-        self.btn_setup_install.setStyleSheet("""
-            QPushButton {
-                background: #1e293b;
-                border: 1px solid #3b82f6;
-                color: #60a5fa;
-                border-radius: 8px;
-                padding: 8px 18px;
-                font-weight: 700;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background: #2563eb;
-                color: #ffffff;
-            }
-        """)
+        self.btn_setup_install = QPushButton("Perbarui Dependensi Otomatis")
+        self.btn_setup_install.setObjectName("secondary")
+        self.btn_setup_install.setFixedHeight(36)
+        self.btn_setup_install.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_setup_install.clicked.connect(self.install_dependencies_in_background)
-        btn_row.addWidget(self.btn_setup_install)
+        bottom_layout.addWidget(self.btn_setup_install)
 
-        btn_models = QPushButton("Model AI Offline")
-        btn_models.setFixedHeight(40)
-        btn_models.setStyleSheet("""
-            QPushButton {
-                background: #1e293b;
-                border: 1px solid #334155;
-                color: #e2e8f0;
-                border-radius: 8px;
-                padding: 8px 16px;
-                font-weight: 600;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background: #334155;
-                color: #ffffff;
-            }
-        """)
+        btn_models = QPushButton("Kelola Model AI")
+        btn_models.setObjectName("secondary")
+        btn_models.setFixedHeight(36)
+        btn_models.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_models.clicked.connect(lambda: self.switch_tab(5))
-        btn_row.addWidget(btn_models)
+        bottom_layout.addWidget(btn_models)
 
-        btn_next_bottom = QPushButton("Lanjut ke Pilih Video")
-        btn_next_bottom.setFixedHeight(40)
-        btn_next_bottom.setStyleSheet("""
-            QPushButton {
-                background: #0084FF;
-                border: 1px solid #0084FF;
-                color: #ffffff;
-                border-radius: 8px;
-                padding: 8px 24px;
-                font-weight: 700;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background: #0073e6;
-            }
-        """)
-        btn_next_bottom.clicked.connect(lambda: self.switch_tab(1))
-        btn_row.addWidget(btn_next_bottom)
-
-        btn_row.addStretch(1)
-        bottom_layout.addLayout(btn_row)
         layout.addWidget(bottom_box)
-
         layout.addStretch(1)
         scroll.setWidget(page)
         return scroll
 
 
     def set_framing_mode(self, mode: str) -> None:
-        self.framing_mode_state = "manual" if mode == "manual" else "auto"
-        is_auto = self.framing_mode_state == "auto"
-        if hasattr(self, "btn_mode_auto") and hasattr(self, "btn_mode_manual"):
-            self.btn_mode_auto.setStyleSheet(
-                "QPushButton { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1D4ED8, stop:1 #2563EB); "
-                "border: 1.5px solid #60A5FA; border-radius: 9px; color: #FFFFFF; font-size: 12px; font-weight: 800; padding: 8px 10px; }"
-                if is_auto
-                else "QPushButton { background: #0B1120; border: 1px solid #1E293B; border-radius: 9px; "
-                "color: #94A3B8; font-size: 12px; font-weight: 700; padding: 8px 10px; } "
-                "QPushButton:hover { border-color: #3B82F6; color: #E2E8F0; }"
-            )
-            self.btn_mode_manual.setStyleSheet(
-                "QPushButton { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #B45309, stop:1 #D97706); "
-                "border: 1.5px solid #FBBF24; border-radius: 9px; color: #FFFFFF; font-size: 12px; font-weight: 800; padding: 8px 10px; }"
-                if not is_auto
-                else "QPushButton { background: #0B1120; border: 1px solid #1E293B; border-radius: 9px; "
-                "color: #94A3B8; font-size: 12px; font-weight: 700; padding: 8px 10px; } "
-                "QPushButton:hover { border-color: #F59E0B; color: #E2E8F0; }"
-            )
+        if mode not in ("none", "auto", "manual"):
+            mode = "auto"
+        self.framing_mode_state = mode
+        if hasattr(self, "framing_mode_cards") and self.framing_mode_cards.value() != mode:
+            self.framing_mode_cards.set_value(mode, emit=False)
+        if hasattr(self, "none_framing_container"):
+            self.none_framing_container.setVisible(mode == "none")
         if hasattr(self, "auto_framing_container"):
-            self.auto_framing_container.setVisible(is_auto)
+            self.auto_framing_container.setVisible(mode == "auto")
         if hasattr(self, "manual_framing_container"):
-            self.manual_framing_container.setVisible(not is_auto)
+            self.manual_framing_container.setVisible(mode == "manual")
         self.on_unified_format_changed()
 
     def on_manual_crop_x_changed(self, value: int) -> None:
@@ -3026,11 +3765,11 @@ class HermesDesktop(QMainWindow):
         if hasattr(self, "manual_crop_x_val_lbl"):
             pos_txt = f"{value}%"
             if value < 45:
-                pos_txt += " (Kiri)"
+                pos_txt += " · Kiri"
             elif value > 55:
-                pos_txt += " (Kanan)"
+                pos_txt += " · Kanan"
             else:
-                pos_txt += " (Tengah)"
+                pos_txt += " · Tengah"
             self.manual_crop_x_val_lbl.setText(pos_txt)
         if hasattr(self, "create_preview_video"):
             self.create_preview_video.set_manual_crop_x(ratio)
@@ -3043,11 +3782,11 @@ class HermesDesktop(QMainWindow):
         if hasattr(self, "manual_crop_y_val_lbl"):
             pos_txt = f"{value}%"
             if value < 45:
-                pos_txt += " (Atas)"
+                pos_txt += " · Atas"
             elif value > 55:
-                pos_txt += " (Bawah)"
+                pos_txt += " · Bawah"
             else:
-                pos_txt += " (Tengah)"
+                pos_txt += " · Tengah"
             self.manual_crop_y_val_lbl.setText(pos_txt)
         if hasattr(self, "create_preview_video"):
             self.create_preview_video.set_manual_crop_y(ratio)
@@ -3082,13 +3821,13 @@ class HermesDesktop(QMainWindow):
             self.manual_crop_x_slider.setValue(vx)
             self.manual_crop_x_slider.blockSignals(False)
             if hasattr(self, "manual_crop_x_val_lbl"):
-                self.manual_crop_x_val_lbl.setText(f"{vx}% ({'Kiri' if vx < 45 else 'Kanan' if vx > 55 else 'Tengah'})")
+                self.manual_crop_x_val_lbl.setText(f"{vx}% · {'Kiri' if vx < 45 else 'Kanan' if vx > 55 else 'Tengah'}")
         if hasattr(self, "manual_crop_y_slider"):
             self.manual_crop_y_slider.blockSignals(True)
             self.manual_crop_y_slider.setValue(vy)
             self.manual_crop_y_slider.blockSignals(False)
             if hasattr(self, "manual_crop_y_val_lbl"):
-                self.manual_crop_y_val_lbl.setText(f"{vy}% ({'Atas' if vy < 45 else 'Bawah' if vy > 55 else 'Tengah'})")
+                self.manual_crop_y_val_lbl.setText(f"{vy}% · {'Atas' if vy < 45 else 'Bawah' if vy > 55 else 'Tengah'}")
         if hasattr(self, "manual_zoom_slider"):
             self.manual_zoom_slider.blockSignals(True)
             self.manual_zoom_slider.setValue(vz)
@@ -3111,15 +3850,79 @@ class HermesDesktop(QMainWindow):
             w = self.custom_aspect_w.value()
             h = self.custom_aspect_h.value()
             if hasattr(self, "custom_ratio_desc_lbl"):
-                self.custom_ratio_desc_lbl.setText(f"= {w}:{h}")
+                self.custom_ratio_desc_lbl.setText(f"{w}:{h}")
             self.on_unified_format_changed()
+
+    def choose_broll_folder(self) -> None:
+        folder = QFileDialog.getExistingDirectory(self, "Pilih Folder Video Ilustrasi (B-Roll)", str(Path.home()))
+        if folder and hasattr(self, "broll_folder_edit"):
+            self.broll_folder_edit.setText(folder)
+
+    def clear_watermark_image(self) -> None:
+        if hasattr(self, "watermark_image_edit"):
+            self.watermark_image_edit.setText("")
+        self.update_create_preview()
+
+    def on_pre_manual_item_clicked(self, item: QListWidgetItem) -> None:
+        row = self.pre_manual_list.row(item) if hasattr(self, "pre_manual_list") else -1
+        segs = getattr(self, "pre_manual_segments", [])
+        if 0 <= row < len(segs):
+            seg = segs[row]
+            s_sec = float(seg.get("start", 0.0))
+            e_sec = float(seg.get("end", 0.0))
+            if hasattr(self, "pre_manual_start_edit"):
+                self.pre_manual_start_edit.setText(format_time(s_sec))
+            if hasattr(self, "pre_manual_end_edit"):
+                self.pre_manual_end_edit.setText(format_time(e_sec))
+            if hasattr(self, "pre_manual_title_edit"):
+                self.pre_manual_title_edit.setText(str(seg.get("title") or ""))
+            self.seek_create_preview(int(s_sec * 1000))
+
+    def update_selected_pre_manual_segment(self) -> None:
+        if not hasattr(self, "pre_manual_list"):
+            return
+        row = self.pre_manual_list.currentRow()
+        if not (0 <= row < len(self.pre_manual_segments)):
+            self.add_pre_manual_segment()
+            return
+        start_val = parse_time(self.pre_manual_start_edit.text().strip())
+        end_val = parse_time(self.pre_manual_end_edit.text().strip())
+        if start_val is None or end_val is None or end_val <= start_val:
+            QMessageBox.warning(self, "Rentang Waktu", "Pastikan waktu selesai lebih besar dari waktu mulai (contoh 00:15 sampai 01:05).")
+            return
+        title_txt = self.pre_manual_title_edit.text().strip() or f"Segmen Manual #{row + 1:02d}"
+        self.pre_manual_segments[row] = {
+            "start": round(start_val, 2),
+            "end": round(end_val, 2),
+            "title": title_txt,
+        }
+        self.refresh_pre_manual_list_ui()
+        self.pre_manual_list.setCurrentRow(row)
+        self.update_segment_estimate()
 
     def on_unified_format_changed(self) -> None:
         if not hasattr(self, "unified_format_combo"):
             return
         mode = getattr(self, "framing_mode_state", "auto")
 
-        if mode == "manual" and hasattr(self, "manual_style_combo") and hasattr(self, "manual_aspect_combo"):
+        if mode == "none":
+            if hasattr(self, "custom_ratio_widget"):
+                self.custom_ratio_widget.setVisible(False)
+            if hasattr(self, "manual_crop_pan_widget"):
+                self.manual_crop_pan_widget.setVisible(False)
+            if hasattr(self, "facecam_guide_box"):
+                self.facecam_guide_box.setVisible(False)
+            aspect_val = "original"
+            framing_val = "original"
+            layout_val = "original"
+            sim_val = "0"
+            prev_mode = "original_native"
+            if hasattr(self, "format_mode_hint"):
+                self.format_mode_hint.setText(
+                    "<b>Tanpa Framing (Video Asli):</b> Rasio dan resolusi asli video dipertahankan utuh 1:1 tanpa pemotongan, "
+                    "tanpa bar hitam tambahan, dan tanpa perpindahan kamera otomatis."
+                )
+        elif mode == "manual" and hasattr(self, "manual_style_combo") and hasattr(self, "manual_aspect_combo"):
             raw_aspect = str(self.manual_aspect_combo.currentData() or "9:16")
             is_custom = raw_aspect == "custom"
             if hasattr(self, "custom_ratio_widget"):
@@ -3147,23 +3950,22 @@ class HermesDesktop(QMainWindow):
 
             manual_desc_map = {
                 "manual_fit": (
-                    "✋ <b>Mode Manual · Fit Standar (Latar Hitam):</b> Menampilkan seluruh frame video utuh dengan latar hitam bersih tanpa pemotongan. "
-                    "Posisi dan ukuran video bebas digeser & diubah dengan mouse drag/wheel atau slider di bawah."
+                    "<b>Fit Utuh (Latar Hitam):</b> Seluruh frame video tampil utuh di atas kanvas hitam bersih. "
+                    "Tarik langsung video di kanvas kanan atau gunakan slider untuk mengatur posisi & skala."
                 ),
                 "manual_ambient": (
-                    "✋ <b>Mode Manual · Cinema Blur:</b> Video ditampilkan dengan latar belakang blur sinematik dinamis tanpa AI auto-switching. "
-                    "Posisi dan ukuran video bebas digeser & diubah dengan mouse drag/wheel atau slider di bawah."
+                    "<b>Sinema Blur:</b> Video utuh dipadukan dengan latar belakang blur halus. "
+                    "Posisi dan ukuran video dapat digeser bebas secara langsung."
                 ),
                 "manual_crop": (
-                    "✋ <b>Mode Manual · Crop Penuh:</b> Video mengisi frame penuh sesuai rasio pilihan. "
-                    "Posisi dan ukuran video bebas digeser & diubah dengan mouse drag/wheel atau slider di bawah."
+                    "<b>Crop Penuh:</b> Video mengisi seluruh bidang rasio yang dipilih. "
+                    "Geser posisi X/Y atau scroll mouse di kanvas untuk menentukan area fokus."
                 ),
                 "manual_split": (
-                    "✋ <b>Mode Manual · Split 2 Panel Statis:</b> Membagi sisi kiri video ke panel atas dan sisi kanan ke panel bawah "
-                    "secara statis tanpa perpindahan kamera AI."
+                    "<b>Split 2 Panel Statis:</b> Membagi sisi kiri video ke panel atas dan sisi kanan ke panel bawah secara tetap."
                 ),
                 "manual_facecam": (
-                    "✋ <b>Mode Manual · Streamer Facecam:</b> Menempatkan kotak kamera wajah di bagian atas dan layar utama/game di bawah."
+                    "<b>Facecam Atas:</b> Menempatkan kotak kamera wajah di bagian atas dan layar utama di bawah."
                 ),
             }
             if hasattr(self, "format_mode_hint"):
@@ -3171,17 +3973,18 @@ class HermesDesktop(QMainWindow):
         else:
             if hasattr(self, "custom_ratio_widget"):
                 self.custom_ratio_widget.setVisible(False)
-            preset = str(self.unified_format_combo.currentData() or "auto_podcast_9_16")
+            preset = str(self.unified_format_combo.currentData() or "auto_universal_9_16")
             mapping = {
+                "auto_universal_9_16": ("9:16", "ambient", "auto_universal", "1", "auto_universal_9_16"),
                 "auto_podcast_9_16": ("9:16", "crop", "auto_smart", "1", "auto_podcast_9_16"),
                 "crop_9_16": ("9:16", "crop", "auto_single", "1", "crop_9_16"),
                 "split_2_9_16": ("9:16", "crop", "auto_split", "2", "split_2_9_16"),
-                "ambient_9_16": ("9:16", "ambient", "standard", "0", "ambient_9_16"),
+                "ambient_9_16": ("9:16", "ambient", "auto_cinema", "0", "ambient_9_16"),
                 "facecam_9_16": ("9:16", "fit", "facecam_top", "1", "facecam_9_16"),
                 "standard_16_9": ("16:9", "fit", "standard", "0", "standard_16_9"),
             }
             aspect_val, framing_val, layout_val, sim_val, prev_mode = mapping.get(
-                preset, ("9:16", "crop", "auto_smart", "1", "auto_podcast_9_16")
+                preset, ("9:16", "ambient", "auto_universal", "1", "auto_universal_9_16")
             )
             if hasattr(self, "manual_crop_pan_widget"):
                 self.manual_crop_pan_widget.setVisible(False)
@@ -3189,24 +3992,34 @@ class HermesDesktop(QMainWindow):
                 self.facecam_guide_box.setVisible(preset == "facecam_9_16")
 
             desc_map = {
+                "auto_universal_9_16": (
+                    "<b>Adaptif Universal:</b> Cocok untuk semua jenis konten. Subjek manusia dilacak otomatis, "
+                    "sedangkan layar tutorial, game, atau lanskap sinematik otomatis dijaga tetap utuh."
+                ),
                 "auto_podcast_9_16": (
-                    "🤖 <b>Mode Otomatis · AI Podcast Director:</b> AI mendeteksi jumlah pembicara otomatis di setiap pergantian kamera "
-                    "(1 orang = Fokus Tengah, 2 orang = Split Atas-Bawah, 0 wajah = Cinema Blur anti-potong)."
+                    "<b>Podcast & Dialog AI:</b> Otomatis beralih antara fokus 1 pembicara di tengah, "
+                    "split 2 pembicara atas-bawah, atau tampilan utuh saat tidak ada wajah."
                 ),
                 "crop_9_16": (
-                    "🤖 <b>Mode Otomatis · AI Fokus 1 Pembicara:</b> Kamera AI secara otomatis melacak dan mengunci 1 pembicara utama di tengah layar 9:16."
+                    "<b>Fokus 1 Subjek:</b> Kamera AI melacak dan mengunci satu subjek utama secara halus di tengah layar vertikal."
                 ),
                 "split_2_9_16": (
-                    "🤖 <b>Mode Otomatis · AI Split 2 Pembicara:</b> AI mendeteksi posisi 2 pembicara dan menguncinya di panel atas & bawah dengan batas dada aman."
+                    "<b>Split 2 Subjek:</b> Menempatkan dua pembicara di panel atas dan bawah secara proporsional."
+                ),
+                "facecam_9_16": (
+                    "<b>Gaming & Stream:</b> Kamera reaksi/wajah di bagian atas dan tangkapan layar utama di bagian bawah."
+                ),
+                "ambient_9_16": (
+                    "<b>Sinematik Utuh:</b> Menampilkan seluruh lebar video tanpa memotong sisi kiri-kanan dengan latar blur lembut."
                 ),
             }
             if hasattr(self, "format_mode_hint"):
-                self.format_mode_hint.setText(desc_map.get(preset, desc_map["auto_podcast_9_16"]))
+                self.format_mode_hint.setText(desc_map.get(preset, desc_map["auto_universal_9_16"]))
 
         if hasattr(self, "aspect_combo"):
             idx_asp = self.aspect_combo.findData(aspect_val)
             if idx_asp < 0:
-                self.aspect_combo.addItem(f"{aspect_val} (Kustom)", aspect_val)
+                self.aspect_combo.addItem(f"{aspect_val}", aspect_val)
                 idx_asp = self.aspect_combo.findData(aspect_val)
             self.aspect_combo.blockSignals(True)
             self.aspect_combo.setCurrentIndex(idx_asp)
@@ -3217,8 +4030,11 @@ class HermesDesktop(QMainWindow):
             (self.layout_combo, layout_val),
             (self.smart_preview_sim_combo, sim_val),
         ):
-            combo_w.blockSignals(True)
             idx = combo_w.findData(val)
+            if idx < 0:
+                combo_w.addItem(str(val), val)
+                idx = combo_w.findData(val)
+            combo_w.blockSignals(True)
             if idx >= 0:
                 combo_w.setCurrentIndex(idx)
             combo_w.blockSignals(False)
@@ -3241,7 +4057,7 @@ class HermesDesktop(QMainWindow):
         from_idx = self.create_subtabs.currentIndex()
         if target_idx == from_idx or target_idx < 0:
             return
-        self.animate_tab_transition(self.create_subtabs, from_idx, target_idx, duration_ms=190)
+        self.animate_tab_transition(self.create_subtabs, from_idx, target_idx, duration_ms=150)
 
     def on_subtab_changed(self, idx: int) -> None:
         if not hasattr(self, "create_subtabs"):
@@ -3260,7 +4076,7 @@ class HermesDesktop(QMainWindow):
         page.setObjectName("pageContent")
 
         page_layout = QVBoxLayout(page)
-        page_layout.setContentsMargins(18, 10, 18, 12)
+        page_layout.setContentsMargins(16, 8, 16, 12)
         page_layout.setSpacing(0)
 
         self.create_splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -3270,265 +4086,295 @@ class HermesDesktop(QMainWindow):
         page_layout.addWidget(self.create_splitter)
 
         left_column_container = QWidget()
-        left_column_container.setMinimumWidth(320)
+        left_column_container.setMinimumWidth(360)
+        left_column_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         left_column_container.setStyleSheet("background: transparent;")
         left_outer_layout = QVBoxLayout(left_column_container)
         left_outer_layout.setContentsMargins(0, 0, 8, 0)
-        left_outer_layout.setSpacing(10)
+        left_outer_layout.setSpacing(8)
 
-        header_banner = QFrame()
-        header_banner.setStyleSheet(
-            "QFrame { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0F172A, stop:1 #172554); "
-            "border: 1px solid #2563EB; border-radius: 12px; }"
+        # PROMINENT TOP MENU: MODE OTOMATIS AI vs CLIPPING MANUAL MULTI-SEGMEN
+        top_mode_card = QFrame()
+        top_mode_card.setObjectName("topModeMenuCard")
+        top_mode_card.setStyleSheet(
+            "QFrame#topModeMenuCard { background: #09090D; border: 1px solid #1E1E28; border-radius: 12px; }"
         )
-        hb_lay = QHBoxLayout(header_banner)
-        hb_lay.setContentsMargins(14, 10, 14, 10)
-        hb_lay.setSpacing(10)
+        tm_lay = QVBoxLayout(top_mode_card)
+        tm_lay.setContentsMargins(12, 10, 12, 10)
+        tm_lay.setSpacing(7)
 
-        hb_text_col = QVBoxLayout()
-        hb_text_col.setSpacing(2)
-        step2_title = QLabel("STUDIO EDITOR · ATUR GAYA KLIP & PRATINJAU LIVE")
-        step2_title.setWordWrap(True)
-        step2_title.setStyleSheet("font-size: 13px; font-weight: 800; color: #F8FAFC; letter-spacing: 0.3px; border: 0; background: transparent; padding: 0;")
-        hb_text_col.addWidget(step2_title)
-        step2_sub = QLabel("Semua perubahan langsung tampil real-time di kanvas video kanan →")
-        step2_sub.setWordWrap(True)
-        step2_sub.setStyleSheet("font-size: 11px; font-weight: 500; color: #93C5FD; border: 0; background: transparent; padding: 0;")
-        hb_text_col.addWidget(step2_sub)
-        hb_lay.addLayout(hb_text_col, 1)
-
-        live_pill = QLabel("● LIVE POV")
+        tm_hdr = QHBoxLayout()
+        tm_hdr.setSpacing(8)
+        tm_title = QLabel("PILIH METODE PEMBUATAN KLIP")
+        tm_title.setStyleSheet("font-size: 10.5px; font-weight: 800; color: #A1A1AA; letter-spacing: 0.9px; background: transparent; border: none;")
+        tm_hdr.addWidget(tm_title)
+        tm_hdr.addStretch()
+        live_pill = QLabel("● PRATINJAU LANGSUNG")
         live_pill.setStyleSheet(
-            "color: #34D399; background: rgba(16, 185, 129, 0.14); border: 1px solid rgba(16, 185, 129, 0.35); "
-            "border-radius: 6px; padding: 4px 10px; font-size: 10px; font-weight: 800;"
+            "color: #34D399; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.32); "
+            "border-radius: 6px; padding: 2px 8px; font-size: 9.5px; font-weight: 800;"
         )
-        hb_lay.addWidget(live_pill)
-        left_outer_layout.addWidget(header_banner)
+        tm_hdr.addWidget(live_pill)
+        tm_lay.addLayout(tm_hdr)
+
+        self.top_clip_mode_cards = VisualCardSelector(
+            [
+                ("auto", "Mode Otomatis", "Pilih Momen AI, Bagi Jumlah, atau Bagi Durasi", "ai_spark", "3 METODE", "#3B82F6"),
+                ("manual", "Mode Manual", "Potong bebas multi-segmen langsung dari video", "scissors", "MULTI-SEGMEN", "#F59E0B"),
+            ],
+            columns=2,
+            accent="#3B82F6",
+            card_height=58,
+        )
+        self.top_clip_mode_cards.valueChanged.connect(self.set_clipping_mode_quick)
+        tm_lay.addWidget(self.top_clip_mode_cards)
+
+        self.top_clip_mode_desc = QLabel(
+            "<b>Mode Otomatis:</b> Tersedia 3 cara otomatis: <b>Otomatis AI (Momen Terbaik)</b>, "
+            "<b>Bagi Rata Jumlah Klip</b>, atau <b>Bagi Berdasarkan Durasi Detik</b>."
+        )
+        self.top_clip_mode_desc.setWordWrap(True)
+        self.top_clip_mode_desc.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.top_clip_mode_desc.setMinimumWidth(100)
+        self.top_clip_mode_desc.setStyleSheet(
+            "color: #D4D4D8; font-size: 11px; background: #07070C; border: 1px solid #1E293B; border-radius: 8px; padding: 6px 10px;"
+        )
+        tm_lay.addWidget(self.top_clip_mode_desc)
+        left_outer_layout.addWidget(top_mode_card)
 
         # Hidden backing combos for full compatibility with build_options() & backend
         self.aspect_combo = self.combo([
-            ("9:16 · Shorts / Reels / TikTok", "9:16"),
-            ("16:9 · Landscape YouTube", "16:9"),
-            ("1:1 · Square Instagram", "1:1"),
-            ("4:3 · Classic", "4:3"),
-        ], selected=0)
+            ("Asli", "original"),
+            ("9:16", "9:16"),
+            ("16:9", "16:9"),
+            ("1:1", "1:1"),
+            ("4:5", "4:5"),
+            ("4:3", "4:3"),
+            ("21:9", "21:9"),
+        ], selected=1)
         self.framing_combo = self.combo([
-            ("Ambient Blur Cinema", "ambient"),
-            ("Full video utuh · Fit di tengah", "fit"),
-            ("Crop tengah memenuhi frame", "crop"),
-        ], selected=2)
+            ("Asli", "original"),
+            ("Sinema Blur", "ambient"),
+            ("Fit Utuh", "fit"),
+            ("Crop Penuh", "crop"),
+        ], selected=1)
         self.layout_combo = self.combo([
-            ("Otomatis Framing Wajah AI", "auto_smart"),
-            ("AI Fokus 1 Pembicara", "auto_single"),
-            ("AI Split 2 Pembicara", "auto_split"),
-            ("Podcast Split 2 Panel", "podcast_split"),
-            ("Manual Split 2 Panel", "manual_split"),
-            ("Standard (Framing Bersih & Cepat)", "standard"),
-            ("Facecam di atas (Streamer)", "facecam_top"),
-        ], selected=0)
+            ("Asli", "original"),
+            ("Adaptif Universal", "auto_universal"),
+            ("Podcast AI", "auto_smart"),
+            ("Fokus 1 Subjek", "auto_single"),
+            ("Split 2 Subjek", "auto_split"),
+            ("Sinematik Utuh", "auto_cinema"),
+            ("Podcast Split", "podcast_split"),
+            ("Manual Split", "manual_split"),
+            ("Standar", "standard"),
+            ("Facecam Atas", "facecam_top"),
+        ], selected=1)
         self.smart_preview_sim_combo = self.combo([
-            ("Simulasi 1 Orang", "1"),
-            ("Simulasi 2 Orang", "2"),
-            ("Simulasi 3 Orang Grup", "3_group"),
-            ("Simulasi 3 Orang Seimbang", "3_equal"),
-            ("Simulasi 4 Orang", "4"),
-            ("Simulasi 0 Orang", "0"),
+            ("1", "1"),
+            ("2", "2"),
+            ("0", "0"),
         ], selected=0)
         for hidden_c in (self.aspect_combo, self.framing_combo, self.layout_combo, self.smart_preview_sim_combo):
             hidden_c.setVisible(False)
 
-        def wrap_checkable(cb: QCheckBox, text: str, bold: bool = False) -> QWidget:
-            row = QWidget()
-            row.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-            lay = QHBoxLayout(row)
-            lay.setContentsMargins(0, 2, 0, 2)
-            lay.setSpacing(8)
-            cb.setText("")
-            cb.setMinimumWidth(0)
-            lay.addWidget(cb, 0, Qt.AlignmentFlag.AlignTop)
-            lbl = QLabel(text)
-            lbl.setWordWrap(True)
-            lbl.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Minimum)
-            lbl.setStyleSheet("color: #F8FAFC; font-weight: 700; font-size: 13px;" if bold else "color: #CBD5E1; font-size: 12px;")
-            lbl.mousePressEvent = lambda e: cb.toggle()
-            lbl.setCursor(Qt.CursorShape.PointingHandCursor)
-            lay.addWidget(lbl, 1)
-            return row
+        def section_lbl(txt: str) -> QLabel:
+            lb = QLabel(txt)
+            lb.setStyleSheet("color: #A1A1AA; font-size: 11px; font-weight: 700; letter-spacing: 0.2px; background: transparent; border: none;")
+            return lb
 
-        # SUB-TAB 1: FORMAT & TATA LETAK (PEMISAHAN JELAS FRAMING OTOMATIS vs MANUAL)
-        t1_widget = QWidget()
-        t1_layout = QVBoxLayout(t1_widget)
-        t1_layout.setContentsMargins(6, 10, 16, 12)
-        t1_layout.setSpacing(14)
+        def make_toggle_row(title: str, sub: str = "", checked: bool = False) -> tuple[SettingToggleRow, ToggleSwitch]:
+            row_w = SettingToggleRow(title, sub, checked=checked)
+            return row_w, row_w.switch
 
-        settings = QGroupBox("📐 Mode Framing & Tata Letak")
+        # =========================================================================
+        # SUBTAB 2: RASIO & FRAMING (TANPA FRAMING | OTOMATIS AI | MANUAL BEBAS)
+        # =========================================================================
+        t_frame_widget = QWidget()
+        t1_layout = QVBoxLayout(t_frame_widget)
+        t1_layout.setContentsMargins(6, 10, 12, 12)
+        t1_layout.setSpacing(12)
+
+        settings = QGroupBox("Rasio Kanvas && Gaya Kamera")
         video_v = QVBoxLayout(settings)
-        video_v.setContentsMargins(14, 14, 14, 14)
+        video_v.setContentsMargins(12, 14, 12, 12)
         video_v.setSpacing(10)
 
         self.framing_mode_state = "auto"
-        mode_switch_lbl = QLabel("Pilih Jenis Framing Kamera:")
-        mode_switch_lbl.setStyleSheet("font-weight: 700; color: #F1F5F9; font-size: 12px; padding: 0;")
-        video_v.addWidget(mode_switch_lbl)
+        video_v.addWidget(section_lbl("Mode Framing Video"))
+        self.framing_mode_cards = VisualCardSelector(
+            [
+                ("none", "Tanpa Framing", "Rasio & ukuran asli utuh", "frame_none"),
+                ("auto", "Otomatis AI", "Kamera adaptif pintar", "frame_auto"),
+                ("manual", "Manual Bebas", "Rasio kustom, geser & skala", "frame_manual"),
+            ],
+            columns=3,
+            accent="#3B82F6",
+        )
+        self.framing_mode_cards.set_value("auto", emit=False)
+        self.framing_mode_cards.valueChanged.connect(self.set_framing_mode)
+        video_v.addWidget(self.framing_mode_cards)
 
-        mode_btn_row = QHBoxLayout()
-        mode_btn_row.setSpacing(8)
-        self.btn_mode_auto = QPushButton("🤖 Framing Otomatis (AI)")
-        self.btn_mode_auto.setMinimumHeight(38)
-        self.btn_mode_auto.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_mode_auto.clicked.connect(lambda: self.set_framing_mode("auto"))
+        # Panel 0: Tanpa Framing (Asli)
+        self.none_framing_container = QWidget()
+        none_lay = QVBoxLayout(self.none_framing_container)
+        none_lay.setContentsMargins(0, 2, 0, 0)
+        none_info = QLabel(
+            "Video diekspor sesuai resolusi dan rasio asli sumber tanpa pemotongan, "
+            "tanpa latar blur tambahan, dan tanpa perpindahan kamera otomatis."
+        )
+        none_info.setWordWrap(True)
+        none_info.setStyleSheet(
+            "color: #E4E4E7; background: #0B0B10; border: 1px solid #22222E; border-radius: 9px; padding: 9px 11px; font-size: 11.5px;"
+        )
+        none_lay.addWidget(none_info)
+        self.none_framing_container.setVisible(False)
+        video_v.addWidget(self.none_framing_container)
 
-        self.btn_mode_manual = QPushButton("✋ Framing Manual (Atur Sendiri)")
-        self.btn_mode_manual.setMinimumHeight(38)
-        self.btn_mode_manual.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_mode_manual.clicked.connect(lambda: self.set_framing_mode("manual"))
-
-        mode_btn_row.addWidget(self.btn_mode_auto, 1)
-        mode_btn_row.addWidget(self.btn_mode_manual, 1)
-        video_v.addLayout(mode_btn_row)
-
-        # --- PANEL 1: FRAMING OTOMATIS (AI CAMERA-DIRECTOR) ---
+        # Panel 1: Framing Otomatis AI (Universal + Podcast)
         self.auto_framing_container = QWidget()
         auto_lay = QVBoxLayout(self.auto_framing_container)
-        auto_lay.setContentsMargins(0, 4, 0, 0)
+        auto_lay.setContentsMargins(0, 2, 0, 0)
         auto_lay.setSpacing(8)
 
-        lbl_fmt = QLabel("Gaya Kamera AI Otomatis (9:16 Vertikal):")
-        lbl_fmt.setStyleSheet("font-weight: 700; color: #93C5FD; font-size: 12px; padding: 0;")
-        auto_lay.addWidget(lbl_fmt)
-
+        auto_lay.addWidget(section_lbl("Gaya Kamera AI (Vertikal 9:16)"))
         self.unified_format_combo = self.combo([
-            ("📱 9:16 Auto-Podcast AI (1 Orang Fokus, 2 Orang Split, 0 Wajah Blur)", "auto_podcast_9_16"),
-            ("🎯 9:16 AI Fokus 1 Pembicara (Lacak Pembicara Aktif Otomatis)", "crop_9_16"),
-            ("👥 9:16 AI Split 2 Pembicara (Deteksi 2 Wajah Atas-Bawah)", "split_2_9_16"),
+            ("Adaptif Universal", "auto_universal_9_16"),
+            ("Podcast & Dialog AI", "auto_podcast_9_16"),
+            ("Fokus 1 Subjek", "crop_9_16"),
+            ("Split 2 Subjek", "split_2_9_16"),
+            ("Gaming & Facecam", "facecam_9_16"),
+            ("Sinematik Utuh", "ambient_9_16"),
         ], selected=0)
-        self.unified_format_combo.setMinimumHeight(38)
+        self.unified_format_combo.setVisible(False)
         self.unified_format_combo.currentIndexChanged.connect(self.on_unified_format_changed)
-        auto_lay.addWidget(self.unified_format_combo)
 
-        self.realtime_face_box_check = QCheckBox("Tampilkan Kotak Deteksi Wajah && Kamera AI Real-Time di Video")
-        self.realtime_face_box_check.setChecked(True)
-        self.realtime_face_box_check.setStyleSheet("font-weight: 600; color: #E2E8F0;")
+        self.auto_cam_cards = VisualCardSelector(
+            [
+                ("auto_universal_9_16", "Adaptif Universal", "Semua konten: subjek fokus, layar utuh", "cam_adapt"),
+                ("auto_podcast_9_16", "Podcast & Dialog", "1 orang fokus, 2 orang split otomatis", "cam_split"),
+                ("crop_9_16", "Fokus 1 Subjek", "Kunci 1 pembicara utama di tengah", "cam_focus"),
+                ("split_2_9_16", "Split 2 Panel", "2 pembicara atas & bawah proporsional", "cam_split"),
+                ("facecam_9_16", "Gaming & Stream", "Kamera wajah atas + layar utama bawah", "cam_game"),
+                ("ambient_9_16", "Sinematik Utuh", "Tampilan lebar utuh + latar blur halus", "cam_cinema"),
+            ],
+            columns=2,
+            accent="#3B82F6",
+        )
+        self.auto_cam_cards.bind_combo(self.unified_format_combo)
+        auto_lay.addWidget(self.auto_cam_cards)
+
+        fb_row, self.realtime_face_box_check = make_toggle_row(
+            "Tampilkan Garis Pelacak Subjek di Pratinjau",
+            "Menampilkan indikator posisi subjek saat video diputar (hanya di pratinjau).",
+            checked=False,
+        )
         self.realtime_face_box_check.toggled.connect(
             lambda checked: self.create_preview_video.set_show_face_boxes(checked) if hasattr(self, "create_preview_video") else None
         )
-        auto_lay.addWidget(self.realtime_face_box_check)
+        auto_lay.addWidget(fb_row)
 
         tracker_row = QHBoxLayout()
         tracker_row.setSpacing(8)
-        self.smart_detected_badge = QLabel("🎯 Live AI Tracker Siap: Putar video untuk melihat deteksi pembicara otomatis.")
+        self.smart_detected_badge = QLabel("Pelacak Subjek AI siap · Putar video untuk analisis langsung")
         self.smart_detected_badge.setWordWrap(True)
         self.smart_detected_badge.setStyleSheet(
-            "color: #34D399; background: #06281E; border: 1px solid #059669; border-radius: 8px; padding: 7px 10px; font-size: 12px; font-weight: 600;"
+            "color: #34D399; background: #071914; border: 1px solid #065F46; border-radius: 8px; padding: 7px 10px; font-size: 11.5px; font-weight: 600;"
         )
         tracker_row.addWidget(self.smart_detected_badge, 1)
 
-        self.btn_detect_frame_faces = QPushButton("🔍 Cek Wajah")
-        self.btn_detect_frame_faces.setMinimumHeight(36)
+        self.btn_detect_frame_faces = QPushButton("Cek Subjek")
+        self.btn_detect_frame_faces.setObjectName("secondary")
+        self.btn_detect_frame_faces.setFixedHeight(34)
         self.btn_detect_frame_faces.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_detect_frame_faces.setToolTip("Deteksi wajah pembicara pada frame video saat ini")
-        self.btn_detect_frame_faces.setStyleSheet(
-            "QPushButton { background: #162238; border: 1px solid #2563EB; border-radius: 8px; "
-            "color: #60A5FA; font-size: 12px; font-weight: 700; padding: 6px 14px; } "
-            "QPushButton:hover { background: #2563EB; color: #FFFFFF; }"
-        )
         self.btn_detect_frame_faces.clicked.connect(self.detect_faces_in_current_preview_frame)
         tracker_row.addWidget(self.btn_detect_frame_faces)
         auto_lay.addLayout(tracker_row)
         video_v.addWidget(self.auto_framing_container)
 
-        # --- PANEL 2: FRAMING MANUAL (ATUR SENDIRI TANPA AI) ---
+        # Panel 2: Framing Manual Bebas
         self.manual_framing_container = QWidget()
         man_lay = QVBoxLayout(self.manual_framing_container)
-        man_lay.setContentsMargins(0, 4, 0, 0)
-        man_lay.setSpacing(8)
-
-        man_grid = QGridLayout()
-        man_grid.setHorizontalSpacing(10)
-        man_grid.setVerticalSpacing(6)
-        man_grid.setColumnStretch(0, 1)
-        man_grid.setColumnStretch(1, 1)
-
-        lbl_man_aspect = QLabel("Rasio Video Output:")
-        lbl_man_aspect.setStyleSheet("font-weight: 700; color: #FDE68A; font-size: 12px; padding: 0;")
-        man_grid.addWidget(lbl_man_aspect, 0, 0)
-
-        lbl_man_style = QLabel("Gaya Framing Manual:")
-        lbl_man_style.setStyleSheet("font-weight: 700; color: #FDE68A; font-size: 12px; padding: 0;")
-        man_grid.addWidget(lbl_man_style, 0, 1)
+        man_lay.setContentsMargins(0, 2, 0, 0)
+        man_lay.setSpacing(9)
 
         self.manual_aspect_combo = self.combo([
-            ("9:16 · Vertikal (TikTok/Reels/Shorts)", "9:16"),
-            ("16:9 · Landscape (YouTube)", "16:9"),
-            ("1:1 · Kotak (Instagram Feed)", "1:1"),
-            ("4:5 · Portrait Feed (Instagram)", "4:5"),
-            ("4:3 · Klasik (Tablet/Old)", "4:3"),
-            ("21:9 · Ultrawide Cinema", "21:9"),
-            ("🛠️ Kustom Rasio Bebas (Atur Sendiri)...", "custom"),
+            ("9:16 Vertikal", "9:16"),
+            ("16:9 Lanskap", "16:9"),
+            ("1:1 Persegi", "1:1"),
+            ("4:5 Feed", "4:5"),
+            ("4:3 Klasik", "4:3"),
+            ("21:9 Sinema", "21:9"),
+            ("Rasio Kustom", "custom"),
         ], selected=0)
-        self.manual_aspect_combo.setMinimumHeight(36)
+        self.manual_aspect_combo.setVisible(False)
         self.manual_aspect_combo.currentIndexChanged.connect(self.on_unified_format_changed)
-        man_grid.addWidget(self.manual_aspect_combo, 1, 0)
 
-        self.manual_style_combo = self.combo([
-            ("⬛ Fit Standar (Latar Hitam - Bebas Geser)", "manual_fit"),
-            ("✨ Cinema Blur (Utuh + Blur Bebas)", "manual_ambient"),
-            ("🎯 Crop Penuh (Isi Layar Bebas)", "manual_crop"),
-            ("👥 Split 2 Panel Statis (Kiri/Kanan)", "manual_split"),
-            ("🎮 Streamer Facecam Atas", "manual_facecam"),
-        ], selected=0)
-        self.manual_style_combo.setMinimumHeight(36)
-        self.manual_style_combo.currentIndexChanged.connect(self.on_unified_format_changed)
-        man_grid.addWidget(self.manual_style_combo, 1, 1)
-        man_lay.addLayout(man_grid)
+        man_lay.addWidget(section_lbl("Rasio Kanvas Output"))
+        self.manual_aspect_cards = VisualCardSelector(
+            [
+                ("9:16", "9:16 Vertikal", "TikTok / Reels / Shorts", "ratio_9_16"),
+                ("16:9", "16:9 Lanskap", "YouTube / Layar Lebar", "ratio_16_9"),
+                ("1:1", "1:1 Persegi", "Feed Persegi", "ratio_1_1"),
+                ("4:5", "4:5 Portrait", "Instagram Feed", "ratio_4_5"),
+                ("21:9", "21:9 Sinema", "Ultrawide Sinematik", "ratio_16_9"),
+                ("custom", "Rasio Kustom", "Atur Lebar : Tinggi bebas", "ratio_custom"),
+            ],
+            columns=3,
+            accent="#F59E0B",
+            compact=True,
+        )
+        self.manual_aspect_cards.bind_combo(self.manual_aspect_combo)
+        man_lay.addWidget(self.manual_aspect_cards)
 
         self.custom_ratio_widget = QWidget()
         cr_lay = QVBoxLayout(self.custom_ratio_widget)
-        cr_lay.setContentsMargins(0, 4, 0, 4)
-        cr_lay.setSpacing(6)
-
+        cr_lay.setContentsMargins(0, 0, 0, 0)
         cr_box = QFrame()
-        cr_box.setStyleSheet("background: #091322; border: 1px solid #1E3A8A; border-radius: 8px; padding: 6px 10px;")
+        cr_box.setStyleSheet("background: #0B0B10; border: 1px solid #272732; border-radius: 9px;")
         cr_box_lay = QHBoxLayout(cr_box)
-        cr_box_lay.setContentsMargins(4, 4, 4, 4)
-        cr_box_lay.setSpacing(8)
-
-        cr_lbl = QLabel("📐 Rasio Kustom (Lebar : Tinggi):")
-        cr_lbl.setStyleSheet("color: #93C5FD; font-size: 11px; font-weight: 700;")
+        cr_box_lay.setContentsMargins(10, 7, 10, 7)
+        cr_box_lay.setSpacing(6)
+        cr_lbl = QLabel("Lebar : Tinggi")
+        cr_lbl.setStyleSheet("color: #E4E4E7; font-size: 11.5px; font-weight: 600; border: none;")
         cr_box_lay.addWidget(cr_lbl)
 
-        self.custom_aspect_w = QSpinBox()
+        self.custom_aspect_w = FocusOnlySpinBox()
+        self.custom_aspect_w.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
+        self.custom_aspect_w.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.custom_aspect_w.setRange(1, 9999)
         self.custom_aspect_w.setValue(9)
-        self.custom_aspect_w.setMinimumWidth(65)
-        self.custom_aspect_w.setStyleSheet("background: #111827; color: #FFFFFF; font-weight: 700; border: 1px solid #374151; border-radius: 4px; padding: 2px 6px;")
+        self.custom_aspect_w.setFixedWidth(56)
+        self.custom_aspect_w.setFixedHeight(30)
         self.custom_aspect_w.valueChanged.connect(self.on_custom_ratio_changed)
         cr_box_lay.addWidget(self.custom_aspect_w)
 
         colon_lbl = QLabel(":")
-        colon_lbl.setStyleSheet("color: #FBBF24; font-size: 14px; font-weight: 900;")
+        colon_lbl.setStyleSheet("color: #F59E0B; font-size: 14px; font-weight: 800; border: none;")
         cr_box_lay.addWidget(colon_lbl)
 
-        self.custom_aspect_h = QSpinBox()
+        self.custom_aspect_h = FocusOnlySpinBox()
+        self.custom_aspect_h.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
+        self.custom_aspect_h.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.custom_aspect_h.setRange(1, 9999)
         self.custom_aspect_h.setValue(16)
-        self.custom_aspect_h.setMinimumWidth(65)
-        self.custom_aspect_h.setStyleSheet("background: #111827; color: #FFFFFF; font-weight: 700; border: 1px solid #374151; border-radius: 4px; padding: 2px 6px;")
+        self.custom_aspect_h.setFixedWidth(56)
+        self.custom_aspect_h.setFixedHeight(30)
         self.custom_aspect_h.valueChanged.connect(self.on_custom_ratio_changed)
         cr_box_lay.addWidget(self.custom_aspect_h)
 
-        self.custom_ratio_desc_lbl = QLabel("= 9:16")
-        self.custom_ratio_desc_lbl.setStyleSheet("color: #FDE68A; font-size: 11px; font-weight: 600;")
+        self.custom_ratio_desc_lbl = QLabel("9:16")
+        self.custom_ratio_desc_lbl.setStyleSheet("color: #FBBF24; font-family: 'Cascadia Mono', monospace; font-size: 11px; font-weight: 700; border: none;")
         cr_box_lay.addWidget(self.custom_ratio_desc_lbl)
         cr_box_lay.addStretch()
 
-        for p_label, pw, ph in [("4:5", 4, 5), ("2:3", 2, 3), ("3:4", 3, 4), ("21:9", 21, 9), ("1:2", 1, 2)]:
+        for p_label, pw, ph in [("4:5", 4, 5), ("3:4", 3, 4), ("2:3", 2, 3), ("16:10", 16, 10)]:
             p_btn = QPushButton(p_label)
-            p_btn.setFixedSize(40, 24)
+            p_btn.setFixedSize(42, 26)
             p_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             p_btn.setStyleSheet(
-                "QPushButton { background: #1E293B; border: 1px solid #334155; border-radius: 4px; color: #94A3B8; font-size: 10px; font-weight: 600; } "
-                "QPushButton:hover { background: #2563EB; border-color: #3B82F6; color: #FFFFFF; }"
+                "QPushButton { background: #14141C; border: 1px solid #272732; border-radius: 6px; color: #A1A1AA; font-size: 10.5px; font-weight: 600; padding: 0; } "
+                "QPushButton:hover { background: #F59E0B; border-color: #FBBF24; color: #000000; }"
             )
             p_btn.clicked.connect(lambda _, w=pw, h=ph: self.set_custom_ratio_preset(w, h))
             cr_box_lay.addWidget(p_btn)
@@ -3537,74 +4383,100 @@ class HermesDesktop(QMainWindow):
         self.custom_ratio_widget.setVisible(False)
         man_lay.addWidget(self.custom_ratio_widget)
 
-        self.manual_crop_pan_widget = QWidget()
-        pan_lay = QVBoxLayout(self.manual_crop_pan_widget)
-        pan_lay.setContentsMargins(0, 4, 0, 4)
-        pan_lay.setSpacing(6)
+        self.manual_style_combo = self.combo([
+            ("Fit Utuh", "manual_fit"),
+            ("Sinema Blur", "manual_ambient"),
+            ("Crop Penuh", "manual_crop"),
+            ("Split 2 Panel", "manual_split"),
+            ("Facecam Atas", "manual_facecam"),
+        ], selected=0)
+        self.manual_style_combo.setVisible(False)
+        self.manual_style_combo.currentIndexChanged.connect(self.on_unified_format_changed)
 
-        pan_hint = QLabel("💡 <b>Tarik langsung video di kanan dengan mouse</b> untuk geser posisi bebas, <b>scroll mouse</b> untuk perbesar/perkecil ukuran video, atau gunakan slider:")
+        man_lay.addWidget(section_lbl("Tata Letak Manual"))
+        self.manual_style_cards = VisualCardSelector(
+            [
+                ("manual_fit", "Fit Utuh", "Latar hitam bersih, bebas geser", "frame_manual"),
+                ("manual_ambient", "Sinema Blur", "Video utuh + latar blur halus", "cam_cinema"),
+                ("manual_crop", "Crop Penuh", "Isi penuh kanvas, bebas zoom", "cam_focus"),
+                ("manual_split", "Split 2 Panel", "Kiri di atas & kanan di bawah", "cam_split"),
+                ("manual_facecam", "Facecam Atas", "Kamera wajah + layar utama", "cam_game"),
+            ],
+            columns=2,
+            accent="#F59E0B",
+        )
+        self.manual_style_cards.bind_combo(self.manual_style_combo)
+        man_lay.addWidget(self.manual_style_cards)
+
+        self.manual_crop_pan_widget = QFrame()
+        self.manual_crop_pan_widget.setStyleSheet("QFrame { background: #0B0B10; border: 1px solid #22222E; border-radius: 10px; }")
+        pan_lay = QVBoxLayout(self.manual_crop_pan_widget)
+        pan_lay.setContentsMargins(12, 10, 12, 10)
+        pan_lay.setSpacing(7)
+
+        pan_top = QHBoxLayout()
+        pan_hint = QLabel("Tarik langsung video di kanvas kanan atau scroll mouse untuk ubah skala")
         pan_hint.setWordWrap(True)
-        pan_hint.setStyleSheet("color: #FDE68A; font-size: 11px;")
-        pan_lay.addWidget(pan_hint)
+        pan_hint.setStyleSheet("color: #D4D4D8; font-size: 11px; font-weight: 600; border: none; background: transparent;")
+        pan_top.addWidget(pan_hint, 1)
+        self.btn_reset_pan_zoom = QPushButton("Reset 1.00x")
+        self.btn_reset_pan_zoom.setObjectName("secondary")
+        self.btn_reset_pan_zoom.setFixedHeight(26)
+        self.btn_reset_pan_zoom.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_reset_pan_zoom.clicked.connect(self.reset_manual_pan_zoom)
+        pan_top.addWidget(self.btn_reset_pan_zoom)
+        pan_lay.addLayout(pan_top)
 
         x_row = QHBoxLayout()
-        x_lbl = QLabel("↔️ Geser Horisontal (X):")
-        x_lbl.setStyleSheet("color: #CBD5E1; font-size: 11px; font-weight: 600;")
+        x_lbl = QLabel("Posisi X")
+        x_lbl.setFixedWidth(64)
+        x_lbl.setStyleSheet("color: #A1A1AA; font-size: 11px; font-weight: 600; border: none;")
         x_row.addWidget(x_lbl)
-        self.manual_crop_x_slider = QSlider(Qt.Orientation.Horizontal)
+        self.manual_crop_x_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.manual_crop_x_slider.setRange(0, 100)
         self.manual_crop_x_slider.setValue(50)
         self.manual_crop_x_slider.valueChanged.connect(self.on_manual_crop_x_changed)
         x_row.addWidget(self.manual_crop_x_slider, 1)
-        self.manual_crop_x_val_lbl = QLabel("50% (Tengah)")
-        self.manual_crop_x_val_lbl.setMinimumWidth(45)
-        self.manual_crop_x_val_lbl.setStyleSheet("color: #FBBF24; font-weight: 700; font-size: 11px;")
+        self.manual_crop_x_val_lbl = QLabel("50% · Tengah")
+        self.manual_crop_x_val_lbl.setFixedWidth(92)
+        self.manual_crop_x_val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.manual_crop_x_val_lbl.setStyleSheet("color: #FBBF24; font-family: 'Cascadia Mono', monospace; font-weight: 700; font-size: 11px; border: none;")
         x_row.addWidget(self.manual_crop_x_val_lbl)
         pan_lay.addLayout(x_row)
 
         y_row = QHBoxLayout()
-        y_lbl = QLabel("↕️ Geser Vertikal (Y):")
-        y_lbl.setStyleSheet("color: #CBD5E1; font-size: 11px; font-weight: 600;")
+        y_lbl = QLabel("Posisi Y")
+        y_lbl.setFixedWidth(64)
+        y_lbl.setStyleSheet("color: #A1A1AA; font-size: 11px; font-weight: 600; border: none;")
         y_row.addWidget(y_lbl)
-        self.manual_crop_y_slider = QSlider(Qt.Orientation.Horizontal)
+        self.manual_crop_y_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.manual_crop_y_slider.setRange(0, 100)
         self.manual_crop_y_slider.setValue(50)
         self.manual_crop_y_slider.valueChanged.connect(self.on_manual_crop_y_changed)
         y_row.addWidget(self.manual_crop_y_slider, 1)
-        self.manual_crop_y_val_lbl = QLabel("50% (Tengah)")
-        self.manual_crop_y_val_lbl.setMinimumWidth(45)
-        self.manual_crop_y_val_lbl.setStyleSheet("color: #FBBF24; font-weight: 700; font-size: 11px;")
-        x_row.addWidget(self.manual_crop_y_val_lbl)
+        self.manual_crop_y_val_lbl = QLabel("50% · Tengah")
+        self.manual_crop_y_val_lbl.setFixedWidth(92)
+        self.manual_crop_y_val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.manual_crop_y_val_lbl.setStyleSheet("color: #FBBF24; font-family: 'Cascadia Mono', monospace; font-weight: 700; font-size: 11px; border: none;")
+        y_row.addWidget(self.manual_crop_y_val_lbl)
         pan_lay.addLayout(y_row)
 
         z_row = QHBoxLayout()
-        z_lbl = QLabel("🔍 Ukuran / Skala Video:")
-        z_lbl.setStyleSheet("color: #CBD5E1; font-size: 11px; font-weight: 600;")
+        z_lbl = QLabel("Skala")
+        z_lbl.setFixedWidth(64)
+        z_lbl.setStyleSheet("color: #A1A1AA; font-size: 11px; font-weight: 600; border: none;")
         z_row.addWidget(z_lbl)
-        self.manual_zoom_slider = QSlider(Qt.Orientation.Horizontal)
+        self.manual_zoom_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.manual_zoom_slider.setRange(20, 300)
         self.manual_zoom_slider.setValue(100)
         self.manual_zoom_slider.valueChanged.connect(self.on_manual_zoom_changed)
         z_row.addWidget(self.manual_zoom_slider, 1)
         self.manual_zoom_val_lbl = QLabel("1.00x")
-        self.manual_zoom_val_lbl.setMinimumWidth(45)
-        self.manual_zoom_val_lbl.setStyleSheet("color: #38BDF8; font-weight: 700; font-size: 11px;")
+        self.manual_zoom_val_lbl.setFixedWidth(92)
+        self.manual_zoom_val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.manual_zoom_val_lbl.setStyleSheet("color: #38BDF8; font-family: 'Cascadia Mono', monospace; font-weight: 700; font-size: 11px; border: none;")
         z_row.addWidget(self.manual_zoom_val_lbl)
         pan_lay.addLayout(z_row)
-
-        btn_reset_row = QHBoxLayout()
-        btn_reset_row.addStretch()
-        self.btn_reset_pan_zoom = QPushButton("🔄 Reset Posisi & Ukuran")
-        self.btn_reset_pan_zoom.setMinimumHeight(28)
-        self.btn_reset_pan_zoom.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_reset_pan_zoom.setStyleSheet(
-            "QPushButton { background: #162238; border: 1px solid #334155; border-radius: 6px; "
-            "color: #94A3B8; font-size: 11px; font-weight: 600; padding: 3px 12px; } "
-            "QPushButton:hover { background: #1E293B; border-color: #3B82F6; color: #FFFFFF; }"
-        )
-        self.btn_reset_pan_zoom.clicked.connect(self.reset_manual_pan_zoom)
-        btn_reset_row.addWidget(self.btn_reset_pan_zoom)
-        pan_lay.addLayout(btn_reset_row)
 
         self.manual_crop_pan_widget.setVisible(False)
         man_lay.addWidget(self.manual_crop_pan_widget)
@@ -3614,308 +4486,312 @@ class HermesDesktop(QMainWindow):
         self.format_mode_hint = QLabel("")
         self.format_mode_hint.setWordWrap(True)
         self.format_mode_hint.setStyleSheet(
-            "color: #CBD5E1; font-size: 12px; background: #090E1A; border: 1px solid #1E293B; border-radius: 10px; padding: 10px 12px;"
+            "color: #A1A1AA; font-size: 11.5px; background: #07070B; border: 1px solid #1C1C26; border-radius: 9px; padding: 9px 11px;"
         )
         video_v.addWidget(self.format_mode_hint)
 
         enc_row = QHBoxLayout()
-        enc_lbl = QLabel("Akselerasi Kartu Grafis (Render):")
-        enc_lbl.setStyleSheet("color: #94A3B8; font-size: 12px; font-weight: 600; padding: 0;")
+        enc_row.setSpacing(10)
+        enc_lbl = QLabel("Mesin Render Video")
+        enc_lbl.setStyleSheet("color: #A1A1AA; font-size: 11.5px; font-weight: 600;")
         enc_row.addWidget(enc_lbl)
         hardware_encoders = core.detect_hardware_encoders()
         self.encoder_combo = self.combo([(label, enc) for enc, label in hardware_encoders])
-        self.encoder_combo.setMinimumHeight(36)
+        self.encoder_combo.setMinimumHeight(34)
         enc_row.addWidget(self.encoder_combo, 1)
         video_v.addLayout(enc_row)
 
         t1_layout.addWidget(settings)
-        self.set_framing_mode("auto")
 
-        self.facecam_guide_box = QGroupBox("🎮 Kotak Facecam Streamer")
+        self.facecam_guide_box = QGroupBox("Pengaturan Area Facecam")
         facecam_group_layout = QVBoxLayout(self.facecam_guide_box)
-        facecam_group_layout.setContentsMargins(14, 14, 14, 14)
+        facecam_group_layout.setContentsMargins(12, 12, 12, 12)
         facecam_group_layout.setSpacing(8)
-        fc_hint = QLabel("Pilih posisi kamera wajah atau geser langsung kotak biru di layar pratinjau kanan.")
-        fc_hint.setStyleSheet("color: #94A3B8; font-size: 12px;")
+        fc_hint = QLabel("Pilih sudut kamera wajah atau geser langsung kotak biru pada kanvas pratinjau kanan.")
+        fc_hint.setStyleSheet("color: #71717A; font-size: 11.5px;")
         fc_hint.setWordWrap(True)
         facecam_group_layout.addWidget(fc_hint)
 
         fc_btn_row = QHBoxLayout()
         self.facecam_preset_combo = self.combo([
             ("Deteksi Wajah AI Otomatis", "auto"),
-            ("Manual: Pojok Kiri Atas", "top_left"),
-            ("Manual: Pojok Kanan Atas", "top_right"),
-            ("Manual: Pojok Kiri Bawah", "bottom_left"),
-            ("Manual: Pojok Kanan Bawah", "bottom_right"),
-            ("Manual: Tengah Kiri", "center_left"),
-            ("Manual: Tengah Kanan", "center_right"),
+            ("Pojok Kiri Atas", "top_left"),
+            ("Pojok Kanan Atas", "top_right"),
+            ("Pojok Kiri Bawah", "bottom_left"),
+            ("Pojok Kanan Bawah", "bottom_right"),
+            ("Tengah Kiri", "center_left"),
+            ("Tengah Kanan", "center_right"),
         ])
-        self.facecam_preset_combo.setMinimumHeight(36)
+        self.facecam_preset_combo.setMinimumHeight(34)
         self.facecam_preset_combo.currentIndexChanged.connect(self.on_facecam_preset_changed)
         fc_btn_row.addWidget(self.facecam_preset_combo, 1)
         self.facecam_box_custom_dragged = False
 
-        self.btn_reset_facecam = QPushButton("Reset Posisi")
-        self.btn_reset_facecam.setMinimumHeight(36)
+        self.btn_reset_facecam = QPushButton("Reset")
+        self.btn_reset_facecam.setObjectName("secondary")
+        self.btn_reset_facecam.setFixedHeight(34)
         self.btn_reset_facecam.clicked.connect(self.reset_facecam_to_auto)
         fc_btn_row.addWidget(self.btn_reset_facecam)
         facecam_group_layout.addLayout(fc_btn_row)
         self.facecam_guide_box.setVisible(False)
         t1_layout.addWidget(self.facecam_guide_box)
-
-        anticopy_box = QGroupBox("✨ Visual & Efek Dinamis")
-        ac_layout = QVBoxLayout(anticopy_box)
-        ac_layout.setContentsMargins(14, 14, 14, 14)
-        ac_layout.setSpacing(8)
-        self.micro_zoom_check = QCheckBox()
-        self.micro_zoom_check.setChecked(True)
-        self.color_boost_check = QCheckBox()
-        self.mirror_video_check = QCheckBox()
-        self.speed_shift_check = QCheckBox()
-        self.auto_broll_check = QCheckBox()
-        self.auto_broll_check.setChecked(False)
-        ac_layout.addWidget(wrap_checkable(self.micro_zoom_check, "Zoom Halus Otomatis (1.08x) saat Momen Penting / Kalimat Penekanan"))
-        ac_layout.addWidget(wrap_checkable(self.color_boost_check, "Pertajam Warna & Kontras Video (Tampilan Lebih Jernih)"))
-        ac_layout.addWidget(wrap_checkable(self.mirror_video_check, "Balik Video Kiri-Kanan (Mirror Horizontal Anti-Klaim Hak Cipta)"))
-        ac_layout.addWidget(wrap_checkable(self.speed_shift_check, "Percepat Sedikit Tempo 1.03x (Lolos Deteksi Audio Hak Cipta)"))
-        ac_layout.addWidget(wrap_checkable(self.auto_broll_check, "Sisipkan Video Ilustrasi (B-Roll) Otomatis jika Tersedia"))
-        t1_layout.addWidget(anticopy_box)
         t1_layout.addStretch()
 
-        # SUB-TAB 2: SUBTITLE, JUDUL HOOK ATAS & WATERMARK
-        t2_widget = QWidget()
-        t2_layout = QVBoxLayout(t2_widget)
-        t2_layout.setContentsMargins(6, 10, 16, 12)
-        t2_layout.setSpacing(14)
+        # =========================================================================
+        # SUBTAB 3: SUBTITLE & LIRIK (TIPOGRAFI SEIMBANG + LIRIK LAGU)
+        # =========================================================================
+        t_sub_widget = QWidget()
+        t2_layout = QVBoxLayout(t_sub_widget)
+        t2_layout.setContentsMargins(6, 10, 12, 12)
+        t2_layout.setSpacing(12)
 
-        subtitle_group = QGroupBox("💬 Subtitle Otomatis")
+        subtitle_group = QGroupBox("Tipografi Subtitle Otomatis")
         sub_layout = QVBoxLayout(subtitle_group)
-        sub_layout.setContentsMargins(14, 14, 14, 14)
+        sub_layout.setContentsMargins(12, 14, 12, 12)
         sub_layout.setSpacing(10)
 
-        hardsub_row = QHBoxLayout()
-        hardsub_lbl = QLabel("Tampilkan Subtitle Otomatis di Video")
-        hardsub_lbl.setStyleSheet("font-weight: 700; color: #F8FAFC; font-size: 13px;")
-        hardsub_row.addWidget(hardsub_lbl)
-        hardsub_row.addStretch()
-        self.subtitle_toggle_switch = ToggleSwitch()
-        self.subtitle_toggle_switch.setChecked(True)
+        sub_master_row, self.subtitle_toggle_switch = make_toggle_row(
+            "Tampilkan Subtitle di Video",
+            "Menyusun teks proporsional otomatis tanpa kata menggantung sendirian.",
+            checked=True,
+        )
         self.subtitle_enabled = self.subtitle_toggle_switch
-        hardsub_row.addWidget(self.subtitle_toggle_switch)
-        sub_layout.addLayout(hardsub_row)
+        sub_layout.addWidget(sub_master_row)
 
-        skip_sub_row = QHBoxLayout()
-        skip_sub_lbl = QLabel("Matikan otomatis jika video asli sudah memiliki teks subtitle bawaan")
-        skip_sub_lbl.setStyleSheet("color: #94A3B8; font-size: 12px;")
-        skip_sub_row.addWidget(skip_sub_lbl)
-        skip_sub_row.addStretch()
-        self.skip_if_has_subtitles_toggle = ToggleSwitch()
-        self.skip_if_has_subtitles_toggle.setChecked(True)
+        skip_sub_w, self.skip_if_has_subtitles_toggle = make_toggle_row(
+            "Lewati Jika Video Sudah Punya Subtitle Bawaan",
+            "Mencegah teks bertumpuk pada video yang sudah memiliki hardsub.",
+            checked=True,
+        )
         self.skip_if_has_subtitles_toggle.toggled.connect(self.update_create_preview)
-        skip_sub_row.addWidget(self.skip_if_has_subtitles_toggle)
-        sub_layout.addLayout(skip_sub_row)
-
-        subtitle_grid = QGridLayout()
-        subtitle_grid.setVerticalSpacing(6)
-        subtitle_grid.setHorizontalSpacing(8)
-        subtitle_grid.setColumnStretch(0, 1)
-        subtitle_grid.setColumnStretch(1, 1)
+        sub_layout.addWidget(skip_sub_w)
 
         self.subtitle_combo = self.combo([
-            ("Bold Viral (Tegas)", "bold"),
-            ("Highlight Box Biru", "highlight"),
-            ("Klasik Bersih", "classic"),
-            ("Minimalis", "minimal"),
-            ("Neon Cyber", "neon"),
-            ("Karaoke Pop", "karaoke"),
-            ("Kotak Hitam", "box"),
+            ("Modern Bersih (Rekomendasi)", "bold"),
+            ("CapCut Viral (Tegas & Rapi)", "highlight"),
+            ("Minimalis Elegan", "minimal"),
+            ("Karaoke Lembut (Sorot Kata)", "karaoke"),
+            ("Sinematik Film (Klasik)", "classic"),
+            ("Pita Hitam Rapi (Box TV)", "box"),
+            ("Neon Halus (Soft Glow)", "neon"),
             ("Tanpa Subtitle", "none"),
-        ])
+        ], selected=0)
+        self.subtitle_combo.setMinimumHeight(35)
+        self.subtitle_combo.currentIndexChanged.connect(self.update_create_preview)
+        self.subtitle_style_cards = None
+
         self.subtitle_mode_combo = self.combo([
-            ("Karaoke: Sorot Kata", "active_highlight"),
-            ("Pop 1 Kata", "single_word"),
-            ("Kalimat Utuh", "phrase"),
+            ("Sorot per Kata (Karaoke Halus)", "active_highlight"),
+            ("1 Kata Dinamis (Pop Cepat)", "single_word"),
+            ("Kalimat Utuh Tenang", "phrase"),
         ], selected=0)
-        self.subtitle_position_combo = self.combo([
-            ("Bawah (Aman TikTok)", "auto"),
-            ("Bawah Layar", "bottom"),
-            ("Tengah (Split)", "center"),
-            ("Atas Layar", "top"),
-            ("Geser Bebas", "free"),
+        self.subtitle_mode_combo.setMinimumHeight(35)
+        self.subtitle_mode_combo.currentIndexChanged.connect(self.update_create_preview)
+        self.subtitle_mode_pills = None
+
+        self.subtitle_lines_combo = self.combo([
+            ("2 Baris Seimbang", 2),
+            ("1 Baris Ringkas", 1),
+            ("Paragraf Utuh", -1),
         ])
-        self.subtitle_active_color_combo = self.combo([
-            ("🌈 Otomatis Emosi Kata", "auto_context"),
-            ("💛 Kuning Cerah", "#FFDD00"),
-            ("💚 Hijau Cuan", "#00F57A"),
-            ("🩵 Biru Elektrik", "#00E5FF"),
-            ("❤️ Merah Tegas", "#FF4D4D"),
-            ("🩷 Pink Pop", "#FF66CC"),
-        ], selected=0)
+        self.subtitle_lines_combo.setVisible(False)
+
         self.subtitle_size_combo = self.combo([
-            ("Sedang · 14pt (HP)", 14),
             ("Kecil · 12pt", 12),
+            ("Sedang · 14pt", 14),
             ("Besar · 17pt", 17),
             ("Ekstra · 20pt", 20),
+        ], selected=1)
+        self.subtitle_size_combo.setVisible(False)
+
+        # GRID SEBELAHAN: GAYA DESAIN HURUF (DROPDOWN) & ANIMASI KEMUNCULAN TEKS (DROPDOWN)
+        typo_grid = QGridLayout()
+        typo_grid.setHorizontalSpacing(12)
+        typo_grid.setVerticalSpacing(7)
+        typo_grid.setColumnStretch(0, 1)
+        typo_grid.setColumnStretch(1, 1)
+
+        typo_grid.addWidget(section_lbl("Gaya Desain Huruf (Preset Font)"), 0, 0)
+        typo_grid.addWidget(section_lbl("Gaya Animasi Teks"), 0, 1)
+        typo_grid.addWidget(self.subtitle_combo, 1, 0)
+        typo_grid.addWidget(self.subtitle_mode_combo, 1, 1)
+
+        self.subtitle_lines_pills = SegmentedPillBar([("2 Baris", 2), ("1 Baris", 1), ("Bebas", -1)], accent="#3B82F6")
+        self.subtitle_lines_pills.bind_combo(self.subtitle_lines_combo)
+
+        self.subtitle_size_pills = SegmentedPillBar([("12", 12), ("14", 14), ("17", 17), ("20", 20)], accent="#3B82F6")
+        self.subtitle_size_pills.bind_combo(self.subtitle_size_combo)
+
+        typo_grid.addWidget(section_lbl("Susunan Baris Teks"), 2, 0)
+        typo_grid.addWidget(section_lbl("Ukuran Huruf Teks"), 2, 1)
+        typo_grid.addWidget(self.subtitle_lines_pills, 3, 0)
+        typo_grid.addWidget(self.subtitle_size_pills, 3, 1)
+
+        self.subtitle_position_combo = self.combo([
+            ("Bawah (Area Aman HP)", "auto"),
+            ("Bawah Tepi", "bottom"),
+            ("Tengah Layar", "center"),
+            ("Atas Layar", "top"),
+            ("Geser Bebas di Kanvas", "free"),
         ])
-        self.subtitle_lines_combo = self.combo([
-            ("Maksimal 2 Baris", 2),
-            ("1 Baris Saja", 1),
-            ("Bebas (Kalimat)", -1),
-        ])
+        self.subtitle_active_color_combo = self.combo([
+            ("Otomatis Konteks Kata", "auto_context"),
+            ("Kuning Emas", "#FFDD00"),
+            ("Hijau Zamrud", "#00F57A"),
+            ("Biru Sian", "#00E5FF"),
+            ("Merah Koral", "#FF4D4D"),
+            ("Merah Muda", "#FF66CC"),
+        ], selected=1)
         self.subtitle_color_combo = self.combo([
-            ("Putih (Default)", "white"),
-            ("Tema Otomatis", "auto"),
+            ("Putih Bersih", "white"),
+            ("Otomatis", "auto"),
             ("Kuning", "yellow"),
-            ("Cyan", "cyan"),
+            ("Sian", "cyan"),
             ("Hijau", "green"),
-            ("Pink", "pink"),
-            ("Warna HEX", "custom"),
+            ("Merah Muda", "pink"),
+            ("Kustom HEX", "custom"),
         ])
+        for c_sub in (self.subtitle_position_combo, self.subtitle_active_color_combo, self.subtitle_color_combo):
+            c_sub.setMinimumHeight(35)
 
-        for control in (
-            self.subtitle_combo,
-            self.subtitle_mode_combo,
-            self.subtitle_position_combo,
-            self.subtitle_active_color_combo,
-            self.subtitle_size_combo,
-            self.subtitle_lines_combo,
-            self.subtitle_color_combo,
-        ):
-            control.setMinimumHeight(36)
+        typo_grid.addWidget(section_lbl("Posisi Subtitle di Layar"), 4, 0)
+        typo_grid.addWidget(section_lbl("Warna Sorotan Kata Aktif"), 4, 1)
+        typo_grid.addWidget(self.subtitle_position_combo, 5, 0)
+        typo_grid.addWidget(self.subtitle_active_color_combo, 5, 1)
+        sub_layout.addLayout(typo_grid)
 
-        sub_layout.addWidget(QLabel("Desain Huruf Subtitle:"))
-        sub_layout.addWidget(self.subtitle_combo)
-
-        sub_layout.addWidget(QLabel("Gaya Animasi Kata:"))
-        sub_layout.addWidget(self.subtitle_mode_combo)
-
-        sub_layout.addWidget(QLabel("Warna Sorotan Kata Aktif:"))
-        sub_layout.addWidget(self.subtitle_active_color_combo)
-
-        sub_layout.addWidget(QLabel("Posisi Subtitle di Layar:"))
-        sub_layout.addWidget(self.subtitle_position_combo)
-
-        sub_layout.addWidget(QLabel("Ukuran Huruf Subtitle:"))
-        sub_layout.addWidget(self.subtitle_size_combo)
-
-        sub_layout.addWidget(QLabel("Jumlah Baris Teks Subtitle:"))
-        sub_layout.addWidget(self.subtitle_lines_combo)
-
-        custom_color_box = QWidget()
-        custom_color_row = QHBoxLayout(custom_color_box)
-        custom_color_row.setContentsMargins(0, 0, 0, 0)
-        custom_color_row.setSpacing(4)
+        base_col_row = QHBoxLayout()
+        base_col_row.setSpacing(8)
+        base_col_row.addWidget(section_lbl("Warna Dasar"))
+        base_col_row.addWidget(self.subtitle_color_combo, 1)
         self.subtitle_color_button = QPushButton()
         self.subtitle_color_button.setObjectName("colorSwatch")
-        self.subtitle_color_button.setFixedSize(28, 28)
+        self.subtitle_color_button.setFixedSize(30, 30)
+        self.subtitle_color_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.subtitle_color_button.clicked.connect(self.choose_subtitle_color)
+        base_col_row.addWidget(self.subtitle_color_button)
         self.subtitle_color_hex = QLineEdit("#FFFFFF")
-        self.subtitle_color_hex.setMinimumHeight(32)
-        self.subtitle_color_hex.setMaximumWidth(64)
+        self.subtitle_color_hex.setFixedHeight(32)
+        self.subtitle_color_hex.setFixedWidth(78)
         self.subtitle_color_hex.editingFinished.connect(self.apply_custom_subtitle_hex)
-        custom_color_row.addWidget(self.subtitle_color_combo, 1)
-        custom_color_row.addWidget(self.subtitle_color_button)
-        custom_color_row.addWidget(self.subtitle_color_hex)
+        base_col_row.addWidget(self.subtitle_color_hex)
 
-        self.btn_safe_zone = QPushButton("👁️ Panduan Area Aman HP (Safe Zone)")
-        self.btn_safe_zone.setToolTip("Tampilkan atau sembunyikan garis panduan area aman layar HP (Shorts / Reels / TikTok)")
-        self.btn_safe_zone.setMinimumHeight(36)
-        self.btn_safe_zone.setIcon(make_vector_icon("safezone", "#38BDF8", 16))
-        self.btn_safe_zone.setStyleSheet(
-            "QPushButton { background: #162238; border: 1px solid #2C3C56; border-radius: 8px; "
-            "color: #38BDF8; font-size: 11px; font-weight: 600; padding: 4px 8px; } "
-            "QPushButton:hover { background: #1E293B; border-color: #3B82F6; }"
-        )
+        self.btn_safe_zone = QPushButton("Panduan Area HP")
+        self.btn_safe_zone.setObjectName("secondary")
+        self.btn_safe_zone.setFixedHeight(32)
+        self.btn_safe_zone.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_safe_zone.setToolTip("Tampilkan batas area aman dari tombol & caption TikTok/Reels/Shorts")
         self.btn_safe_zone.clicked.connect(self.toggle_safe_zone_overlay)
+        base_col_row.addWidget(self.btn_safe_zone)
+        sub_layout.addLayout(base_col_row)
 
-        sub_layout.addWidget(QLabel("Warna Teks Dasar Subtitle:"))
-        sub_layout.addWidget(custom_color_box)
-        sub_layout.addWidget(self.btn_safe_zone)
-
-        self.emoji_subtitles_check = QCheckBox()
-        self.emoji_subtitles_check.setChecked(True)
-        sub_layout.addWidget(wrap_checkable(self.emoji_subtitles_check, "Tambahkan Emoji Kontekstual Otomatis pada Kata Kunci Penting"))
+        sub_extra_grid = QGridLayout()
+        sub_extra_grid.setHorizontalSpacing(8)
+        sub_extra_grid.setVerticalSpacing(8)
+        sub_extra_grid.setColumnStretch(0, 1)
+        sub_extra_grid.setColumnStretch(1, 1)
+        emoji_row_w, self.emoji_subtitles_check = make_toggle_row(
+            "Emoji Kontekstual",
+            "Tambahkan ikon hanya saat relevan",
+            checked=False,
+        )
+        censor_row_w, self.censor_profanity_checkbox = make_toggle_row(
+            "Sensor Kata Kasar",
+            "Samarkan umpatan di teks",
+            checked=False,
+        )
+        self.emoji_subtitles_check.toggled.connect(self.update_create_preview)
+        self.censor_profanity_checkbox.toggled.connect(self.update_create_preview)
+        sub_extra_grid.addWidget(emoji_row_w, 0, 0)
+        sub_extra_grid.addWidget(censor_row_w, 0, 1)
+        sub_layout.addLayout(sub_extra_grid)
         t2_layout.addWidget(subtitle_group)
 
         # GROUP: TERJEMAHAN LIRIK LAGU & SUBTITLE MUSIK
-        lyrics_group = QGroupBox("🎵 Terjemahan Lirik Lagu & Subtitle Musik")
+        lyrics_group = QGroupBox("Terjemahan Lirik Lagu && Ekspor File")
         lyr_layout = QVBoxLayout(lyrics_group)
-        lyr_layout.setContentsMargins(14, 14, 14, 14)
-        lyr_layout.setSpacing(10)
+        lyr_layout.setContentsMargins(12, 14, 12, 12)
+        lyr_layout.setSpacing(9)
 
-        self.translate_lyrics_check = QCheckBox()
-        self.translate_lyrics_check.setChecked(False)
-        lyr_layout.addWidget(
-            wrap_checkable(
-                self.translate_lyrics_check,
-                "Terjemahkan Lirik Lagu / Subtitle Otomatis (AI Lyrics Translator)",
-                bold=True,
-            )
+        lyr_toggle_w, self.translate_lyrics_check = make_toggle_row(
+            "Aktifkan Terjemahan Lirik Lagu / Subtitle",
+            "Terjemahkan lirik otomatis & simpan file .srt, .lrc, atau .txt ke folder pilihan.",
+            checked=False,
         )
+        lyr_layout.addWidget(lyr_toggle_w)
 
         self.lyrics_options_widget = QWidget()
         lyr_opts_layout = QVBoxLayout(self.lyrics_options_widget)
         lyr_opts_layout.setContentsMargins(0, 4, 0, 0)
-        lyr_opts_layout.setSpacing(10)
+        lyr_opts_layout.setSpacing(8)
 
-        # Target language combo
         self.lyrics_target_lang_combo = self.combo([
-            ("🇮🇩 Bahasa Indonesia (ID)", "id"),
-            ("🇺🇸 English (EN)", "en"),
-            ("🇯🇵 Jepang (JA)", "ja"),
-            ("🇰🇷 Korea (KO)", "ko"),
-            ("🇨🇳 Mandarin (ZH)", "zh"),
-            ("🇪🇸 Spanyol (ES)", "es"),
-            ("🇸🇦 Arab (AR)", "ar"),
-            ("🇫🇷 Prancis (FR)", "fr"),
-            ("🇩🇪 Jerman (DE)", "de"),
+            ("Bahasa Indonesia (ID)", "id"),
+            ("Inggris (EN)", "en"),
+            ("Jepang (JA)", "ja"),
+            ("Korea (KO)", "ko"),
+            ("Mandarin (ZH)", "zh"),
+            ("Spanyol (ES)", "es"),
+            ("Arab (AR)", "ar"),
+            ("Prancis (FR)", "fr"),
+            ("Jerman (DE)", "de"),
         ], selected=0)
-        self.lyrics_target_lang_combo.setMinimumHeight(36)
-
-        # Display mode combo
         self.lyrics_display_mode_combo = self.combo([
-            ("Dual Subtitle (Lirik Asli + Terjemahan)", "dual"),
+            ("Dua Bahasa (Asli + Terjemahan)", "dual"),
             ("Hanya Terjemahan", "translated_only"),
-            ("Hanya Lirik Asli (Simpan File Terjemahan Saja)", "original_only"),
+            ("Hanya Asli (Ekspor File Terjemahan)", "original_only"),
         ], selected=0)
-        self.lyrics_display_mode_combo.setMinimumHeight(36)
-
-        # Position combo
         self.lyrics_pos_combo = self.combo([
-            ("Otomatis (Ikuti Posisi Subtitle)", "auto"),
+            ("Ikuti Posisi Subtitle", "auto"),
             ("Bawah Layar", "bottom"),
             ("Tengah Layar", "center"),
             ("Atas Layar", "top"),
-            ("Geser Bebas (Custom X & Y)", "free"),
+            ("Posisi Bebas (X & Y)", "free"),
         ], selected=0)
-        self.lyrics_pos_combo.setMinimumHeight(36)
+        for lc in (self.lyrics_target_lang_combo, self.lyrics_display_mode_combo, self.lyrics_pos_combo):
+            lc.setMinimumHeight(34)
 
-        # Free position sliders panel
+        lyr_g = QGridLayout()
+        lyr_g.setHorizontalSpacing(10)
+        lyr_g.setVerticalSpacing(5)
+        lyr_g.setColumnStretch(0, 1)
+        lyr_g.setColumnStretch(1, 1)
+        lyr_g.addWidget(section_lbl("Bahasa Tujuan"), 0, 0)
+        lyr_g.addWidget(section_lbl("Tampilan di Video"), 0, 1)
+        lyr_g.addWidget(self.lyrics_target_lang_combo, 1, 0)
+        lyr_g.addWidget(self.lyrics_display_mode_combo, 1, 1)
+        lyr_opts_layout.addLayout(lyr_g)
+
+        lyr_opts_layout.addWidget(section_lbl("Posisi Tampil Lirik"))
+        lyr_opts_layout.addWidget(self.lyrics_pos_combo)
+
         self.lyrics_free_pos_widget = QWidget()
         lyr_free_layout = QVBoxLayout(self.lyrics_free_pos_widget)
         lyr_free_layout.setContentsMargins(0, 0, 0, 0)
         lyr_free_layout.setSpacing(6)
 
         lyr_x_row = QHBoxLayout()
-        lyr_x_lbl = QLabel("Posisi X (Kiri-Kanan):")
-        lyr_x_lbl.setStyleSheet("color: #94A3B8; font-size: 11px;")
-        self.lyrics_x_slider = QSlider(Qt.Orientation.Horizontal)
+        lyr_x_lbl = QLabel("Posisi X")
+        lyr_x_lbl.setFixedWidth(64)
+        lyr_x_lbl.setStyleSheet("color: #A1A1AA; font-size: 11px;")
+        self.lyrics_x_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.lyrics_x_slider.setRange(0, 100)
         self.lyrics_x_slider.setValue(15)
         self.lyrics_x_val_lbl = QLabel("15%")
-        self.lyrics_x_val_lbl.setStyleSheet("color: #38BDF8; font-size: 11px; min-width: 32px;")
+        self.lyrics_x_val_lbl.setStyleSheet("color: #38BDF8; font-family: 'Cascadia Mono', monospace; font-size: 11px; min-width: 36px;")
         lyr_x_row.addWidget(lyr_x_lbl)
         lyr_x_row.addWidget(self.lyrics_x_slider, 1)
         lyr_x_row.addWidget(self.lyrics_x_val_lbl)
 
         lyr_y_row = QHBoxLayout()
-        lyr_y_lbl = QLabel("Posisi Y (Atas-Bawah):")
-        lyr_y_lbl.setStyleSheet("color: #94A3B8; font-size: 11px;")
-        self.lyrics_y_slider = QSlider(Qt.Orientation.Horizontal)
+        lyr_y_lbl = QLabel("Posisi Y")
+        lyr_y_lbl.setFixedWidth(64)
+        lyr_y_lbl.setStyleSheet("color: #A1A1AA; font-size: 11px;")
+        self.lyrics_y_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.lyrics_y_slider.setRange(0, 100)
         self.lyrics_y_slider.setValue(78)
         self.lyrics_y_val_lbl = QLabel("78%")
-        self.lyrics_y_val_lbl.setStyleSheet("color: #38BDF8; font-size: 11px; min-width: 32px;")
+        self.lyrics_y_val_lbl.setStyleSheet("color: #38BDF8; font-family: 'Cascadia Mono', monospace; font-size: 11px; min-width: 36px;")
         lyr_y_row.addWidget(lyr_y_lbl)
         lyr_y_row.addWidget(self.lyrics_y_slider, 1)
         lyr_y_row.addWidget(self.lyrics_y_val_lbl)
@@ -3923,49 +4799,37 @@ class HermesDesktop(QMainWindow):
         lyr_free_layout.addLayout(lyr_x_row)
         lyr_free_layout.addLayout(lyr_y_row)
         self.lyrics_free_pos_widget.setVisible(False)
+        lyr_opts_layout.addWidget(self.lyrics_free_pos_widget)
 
-        # File save options
-        self.save_lyrics_srt_check = QCheckBox()
-        self.save_lyrics_srt_check.setChecked(True)
-        self.save_lyrics_lrc_check = QCheckBox()
-        self.save_lyrics_lrc_check.setChecked(True)
-        self.save_lyrics_txt_check = QCheckBox()
-        self.save_lyrics_txt_check.setChecked(True)
+        lyr_save_row = QHBoxLayout()
+        lyr_save_row.setSpacing(8)
+        srt_w, self.save_lyrics_srt_check = make_toggle_row("File .SRT", "", checked=True)
+        lrc_w, self.save_lyrics_lrc_check = make_toggle_row("File .LRC", "", checked=True)
+        txt_w, self.save_lyrics_txt_check = make_toggle_row("File .TXT", "", checked=True)
+        lyr_save_row.addWidget(srt_w, 1)
+        lyr_save_row.addWidget(lrc_w, 1)
+        lyr_save_row.addWidget(txt_w, 1)
+        lyr_opts_layout.addWidget(section_lbl("Format Ekspor File Lirik"))
+        lyr_opts_layout.addLayout(lyr_save_row)
 
-        lyr_folder_box = QWidget()
-        lyr_folder_row = QHBoxLayout(lyr_folder_box)
-        lyr_folder_row.setContentsMargins(0, 0, 0, 0)
+        lyr_folder_row = QHBoxLayout()
         lyr_folder_row.setSpacing(6)
         self.lyrics_folder_edit = QLineEdit()
-        self.lyrics_folder_edit.setPlaceholderText("Default: Disimpan di folder klip hasil render...")
-        self.lyrics_folder_edit.setMinimumHeight(36)
-        btn_lyrics_folder = QPushButton("Pilih Folder...")
-        btn_lyrics_folder.setMinimumHeight(36)
+        self.lyrics_folder_edit.setPlaceholderText("Default: Otomatis di dalam folder hasil klip...")
+        self.lyrics_folder_edit.setMinimumHeight(34)
+        btn_lyrics_folder = QPushButton("Pilih Folder")
+        btn_lyrics_folder.setObjectName("secondary")
+        btn_lyrics_folder.setFixedHeight(34)
+        btn_lyrics_folder.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_lyrics_folder.clicked.connect(self.choose_lyrics_folder)
         lyr_folder_row.addWidget(self.lyrics_folder_edit, 1)
         lyr_folder_row.addWidget(btn_lyrics_folder)
-
-        lyr_opts_layout.addWidget(QLabel("Bahasa Target Terjemahan:"))
-        lyr_opts_layout.addWidget(self.lyrics_target_lang_combo)
-        lyr_opts_layout.addWidget(QLabel("Mode Tampilan Lirik di Video:"))
-        lyr_opts_layout.addWidget(self.lyrics_display_mode_combo)
-        lyr_opts_layout.addWidget(QLabel("Posisi Tampil Lirik di Layar:"))
-        lyr_opts_layout.addWidget(self.lyrics_pos_combo)
-        lyr_opts_layout.addWidget(self.lyrics_free_pos_widget)
-
-        file_save_title = QLabel("📁 Simpan File Lirik / Subtitle:")
-        file_save_title.setStyleSheet("font-weight: 700; color: #E2E8F0; margin-top: 4px;")
-        lyr_opts_layout.addWidget(file_save_title)
-        lyr_opts_layout.addWidget(wrap_checkable(self.save_lyrics_srt_check, "Simpan File Subtitle Terjemahan (.srt)"))
-        lyr_opts_layout.addWidget(wrap_checkable(self.save_lyrics_lrc_check, "Simpan File Lirik Sinkron Musik / Karaoke (.lrc)"))
-        lyr_opts_layout.addWidget(wrap_checkable(self.save_lyrics_txt_check, "Simpan File Teks Lirik Lengkap (.txt)"))
-        lyr_opts_layout.addWidget(QLabel("Folder Khusus Simpan File Lirik (Opsional):"))
-        lyr_opts_layout.addWidget(lyr_folder_box)
+        lyr_opts_layout.addWidget(section_lbl("Lokasi Simpan File Lirik"))
+        lyr_opts_layout.addLayout(lyr_folder_row)
 
         lyr_layout.addWidget(self.lyrics_options_widget)
         self.lyrics_options_widget.setVisible(False)
 
-        # Signals
         self.translate_lyrics_check.toggled.connect(self.on_translate_lyrics_toggled)
         self.lyrics_target_lang_combo.currentIndexChanged.connect(self.update_create_preview)
         self.lyrics_display_mode_combo.currentIndexChanged.connect(self.update_create_preview)
@@ -3974,255 +4838,384 @@ class HermesDesktop(QMainWindow):
         self.lyrics_y_slider.valueChanged.connect(self.on_lyrics_y_slider_changed)
 
         t2_layout.addWidget(lyrics_group)
-
-        wm_group = QGroupBox("🔥 Judul Hook & Watermark")
-        wm_layout = QVBoxLayout(wm_group)
-        wm_layout.setContentsMargins(12, 14, 12, 12)
-        wm_layout.setSpacing(10)
-
-        self.hook_banner_toggle = QCheckBox()
-        self.hook_banner_toggle.setChecked(True)
-        wm_layout.addWidget(wrap_checkable(self.hook_banner_toggle, "Aktifkan Judul Hook Pancingan di Video (Live Preview & Sync Auto-Clipper)", bold=True))
-
-        hb_hint = QLabel("💡 Tips: Kamu bisa memilih posisi Hook di bawah atau langsung tarik/geser kotak Hook di kanvas video kanan.")
-        hb_hint.setWordWrap(True)
-        hb_hint.setStyleSheet("color: #93C5FD; font-size: 11px; padding: 0 2px;")
-        wm_layout.addWidget(hb_hint)
-
-        self.hook_banner_edit = QLineEdit()
-        self.hook_banner_edit.setPlaceholderText("Kosongkan = AI otomatis meracik judul hook dari isi obrolan...")
-        self.hook_banner_edit.setMinimumHeight(38)
-
-        self.hook_banner_dur_combo = self.combo([
-            ("♾️ Selamanya (Full)", 0),
-            ("⚡ 3 Detik Intro", 3),
-            ("⚡ 5 Detik Pertama", 5),
-            ("⚡ 8 Detik Pertama", 8),
-            ("⚡ 15 Detik Pertama", 15),
-            ("📸 2 Detik (Cover)", 2),
-        ], selected=0)
-        self.hook_banner_dur_combo.setMinimumHeight(36)
-
-        self.hook_banner_pos_combo = self.combo([
-            ("Atas (Header Ideal)", "top"),
-            ("Tengah Atas", "upper_mid"),
-            ("Tengah Layar", "center"),
-            ("Bawah (Atas Sub)", "bottom_above_sub"),
-            ("Geser Bebas", "free"),
-        ], selected=0)
-        self.hook_banner_pos_combo.setMinimumHeight(36)
-
-        # Hidden spinbox kept in sync for backward compatibility
-        self.hook_banner_dur_spin = self.spin(0, 3600, 0)
-        self.hook_banner_dur_spin.setVisible(False)
-        self.hook_banner_dur_combo.currentIndexChanged.connect(self.on_hook_banner_dur_combo_changed)
-        self.hook_banner_pos_combo.currentIndexChanged.connect(self.update_create_preview)
-
-        wm_layout.addWidget(QLabel("Teks Judul Hook (Kosong = Otomatis AI):"))
-        wm_layout.addWidget(self.hook_banner_edit)
-
-        wm_layout.addWidget(QLabel("Durasi Tampil Hook:"))
-        wm_layout.addWidget(self.hook_banner_dur_combo)
-
-        wm_layout.addWidget(QLabel("Posisi Penempatan Hook:"))
-        wm_layout.addWidget(self.hook_banner_pos_combo)
-
-        self.watermark_edit = QLineEdit()
-        self.watermark_edit.setPlaceholderText("Opsional: @nama_akun / channel")
-        self.watermark_edit.setMinimumHeight(38)
-
-        self.watermark_pos_combo = self.combo([
-            ("Pojok Kanan Bawah", "bottom_right"),
-            ("Pojok Kiri Atas", "top_left"),
-            ("Pojok Kanan Atas", "top_right"),
-            ("Pojok Kiri Bawah", "bottom_left"),
-            ("Tengah Layar", "center"),
-            ("Geser Bebas (Custom X & Y)", "free"),
-        ])
-        self.watermark_pos_combo.setMinimumHeight(38)
-
-        # Free position sliders panel for watermark
-        self.watermark_free_pos_widget = QWidget()
-        wm_free_layout = QVBoxLayout(self.watermark_free_pos_widget)
-        wm_free_layout.setContentsMargins(0, 0, 0, 0)
-        wm_free_layout.setSpacing(6)
-
-        wm_x_row = QHBoxLayout()
-        wm_x_lbl = QLabel("Posisi X (Kiri-Kanan):")
-        wm_x_lbl.setStyleSheet("color: #94A3B8; font-size: 11px;")
-        self.watermark_x_slider = QSlider(Qt.Orientation.Horizontal)
-        self.watermark_x_slider.setRange(0, 100)
-        self.watermark_x_slider.setValue(85)
-        self.watermark_x_val_lbl = QLabel("85%")
-        self.watermark_x_val_lbl.setStyleSheet("color: #38BDF8; font-size: 11px; min-width: 32px;")
-        wm_x_row.addWidget(wm_x_lbl)
-        wm_x_row.addWidget(self.watermark_x_slider, 1)
-        wm_x_row.addWidget(self.watermark_x_val_lbl)
-
-        wm_y_row = QHBoxLayout()
-        wm_y_lbl = QLabel("Posisi Y (Atas-Bawah):")
-        wm_y_lbl.setStyleSheet("color: #94A3B8; font-size: 11px;")
-        self.watermark_y_slider = QSlider(Qt.Orientation.Horizontal)
-        self.watermark_y_slider.setRange(0, 100)
-        self.watermark_y_slider.setValue(8)
-        self.watermark_y_val_lbl = QLabel("8%")
-        self.watermark_y_val_lbl.setStyleSheet("color: #38BDF8; font-size: 11px; min-width: 32px;")
-        wm_y_row.addWidget(wm_y_lbl)
-        wm_y_row.addWidget(self.watermark_y_slider, 1)
-        wm_y_row.addWidget(self.watermark_y_val_lbl)
-
-        wm_free_layout.addLayout(wm_x_row)
-        wm_free_layout.addLayout(wm_y_row)
-        self.watermark_free_pos_widget.setVisible(False)
-
-        wm_layout.addWidget(QLabel("Teks Watermark Channel (Opsional):"))
-        wm_layout.addWidget(self.watermark_edit)
-
-        wm_layout.addWidget(QLabel("Posisi Watermark:"))
-        wm_layout.addWidget(self.watermark_pos_combo)
-        wm_layout.addWidget(self.watermark_free_pos_widget)
-
-        op_row = QHBoxLayout()
-        self.watermark_opacity_slider = QSlider(Qt.Orientation.Horizontal)
-        self.watermark_opacity_slider.setRange(10, 100)
-        self.watermark_opacity_slider.setValue(70)
-        self.watermark_opacity_lbl = QLabel("70%")
-        self.watermark_opacity_lbl.setStyleSheet("color: #94A3B8; font-size: 12px; min-width: 34px;")
-        self.watermark_opacity_slider.valueChanged.connect(lambda v: self.watermark_opacity_lbl.setText(f"{v}%"))
-        op_row.addWidget(self.watermark_opacity_slider, 1)
-        op_row.addWidget(self.watermark_opacity_lbl)
-
-        wm_layout.addWidget(QLabel("Transparansi Watermark:"))
-        wm_layout.addLayout(op_row)
-
-        wm_img_row = QHBoxLayout()
-        wm_img_row.setSpacing(6)
-        self.watermark_image_edit = QLineEdit()
-        self.watermark_image_edit.setPlaceholderText("Opsional: Logo .PNG...")
-        self.watermark_image_edit.setMinimumHeight(38)
-        self.watermark_image_edit.textChanged.connect(self.update_create_preview)
-        btn_wm_png = QPushButton("Pilih PNG")
-        btn_wm_png.setMinimumHeight(38)
-        btn_wm_png.clicked.connect(self.choose_watermark_image)
-        wm_img_row.addWidget(self.watermark_image_edit, 1)
-        wm_img_row.addWidget(btn_wm_png)
-
-        wm_layout.addWidget(QLabel("Logo Gambar Watermark (Opsional):"))
-        wm_layout.addLayout(wm_img_row)
-
-        self.subtitle_active_color_combo.currentIndexChanged.connect(self.update_create_preview)
-        self.watermark_edit.textChanged.connect(self.update_create_preview)
-        self.watermark_pos_combo.currentIndexChanged.connect(self.on_watermark_pos_changed)
-        self.watermark_x_slider.valueChanged.connect(self.on_watermark_x_slider_changed)
-        self.watermark_y_slider.valueChanged.connect(self.on_watermark_y_slider_changed)
-        self.watermark_opacity_slider.valueChanged.connect(self.update_create_preview)
-        self.hook_banner_toggle.toggled.connect(self.update_create_preview)
-        self.hook_banner_edit.textChanged.connect(self.update_create_preview)
-        t2_layout.addWidget(wm_group)
         t2_layout.addStretch()
 
+        self.subtitle_active_color_combo.currentIndexChanged.connect(self.update_create_preview)
         self.subtitle_color_combo.currentIndexChanged.connect(self.update_subtitle_color_chip)
         self.subtitle_toggle_switch.toggled.connect(self.update_subtitle_controls)
-        self.load_studio_hook_settings()
-        self.update_subtitle_color_chip()
-        self.update_subtitle_controls()
 
-        # SUB-TAB 3: AUDIO & MUSIK LATAR
-        t3_widget = QWidget()
-        t3_layout = QVBoxLayout(t3_widget)
-        t3_layout.setContentsMargins(6, 10, 16, 12)
-        t3_layout.setSpacing(14)
+        # SUB-TAB 1: MODE PEMOTONGAN (OTOMATIS AI VS MANUAL MULTI-SEGMEN) & MESIN AI
+        t_mode_widget = QWidget()
+        tm_layout = QVBoxLayout(t_mode_widget)
+        tm_layout.setContentsMargins(6, 8, 12, 12)
+        tm_layout.setSpacing(10)
 
-        bgm_group = QGroupBox("🎵 Audio & Musik Latar")
-        bgm_box_layout = QVBoxLayout(bgm_group)
-        bgm_box_layout.setContentsMargins(14, 14, 14, 14)
-        bgm_box_layout.setSpacing(10)
+        mode_group = QGroupBox("Pengaturan Metode Pemotongan Klip")
+        self.mode_group_box = mode_group
+        mode_layout = QVBoxLayout(mode_group)
+        mode_layout.setContentsMargins(12, 14, 12, 12)
+        mode_layout.setSpacing(10)
 
-        bgm_file_row = QHBoxLayout()
-        self.bgm_path_label = QLabel("Musik latar lokal belum dipilih (Saat upload ke TikTok otomatis memakai Sound Viral TikTok)")
-        self.bgm_path_label.setWordWrap(True)
-        self.bgm_path_label.setStyleSheet(
-            "color: #94A3B8; font-size: 12px; background: #090E1A; "
-            "border: 1px solid #1E293B; border-radius: 8px; padding: 8px 12px;"
+        self.mode_combo = self.combo([
+            ("Otomatis AI (Momen Terbaik)", "smart"),
+            ("Manual Bebas (Multi-Segmen)", "manual"),
+            ("Bagi Rata Jumlah Bagian", "split_count"),
+            ("Bagi Rata Durasi Detik", "split_duration"),
+        ])
+        self.mode_combo.setVisible(False)
+        self.mode_combo.currentIndexChanged.connect(self.update_mode_settings)
+
+        self.auto_submode_widget = QWidget()
+        auto_sub_lay = QVBoxLayout(self.auto_submode_widget)
+        auto_sub_lay.setContentsMargins(0, 0, 0, 0)
+        auto_sub_lay.setSpacing(5)
+        auto_sub_lay.addWidget(section_lbl("Pilih Cara Pemotongan Otomatis (3 Opsi Mode Otomatis)"))
+        self.mode_pills = SegmentedPillBar([
+            ("✨ Otomatis AI (Momen Terbaik)", "smart"),
+            ("🔢 Bagi Jumlah Klip", "split_count"),
+            ("⏱️ Bagi Berdasarkan Durasi", "split_duration"),
+        ], accent="#3B82F6")
+        self.mode_pills.bind_combo(self.mode_combo)
+        auto_sub_lay.addWidget(self.mode_pills)
+        mode_layout.addWidget(self.auto_submode_widget)
+
+        self.mode_stack = QStackedWidget()
+
+        # PAGE 0: MODE OTOMATIS AI (UNIVERSAL + PODCAST)
+        page_smart = QWidget()
+        ps_layout = QVBoxLayout(page_smart)
+        ps_layout.setContentsMargins(0, 2, 0, 2)
+        ps_layout.setSpacing(10)
+
+        self.profile_combo = self.combo([
+            ("Universal (Semua Jenis Video)", "auto"),
+            ("Podcast & Wawancara", "podcast"),
+            ("Gaming & Live Stream", "live"),
+            ("Edukasi, Tips & Tutorial", "education"),
+            ("Musik, Lagu & Lirik", "music"),
+            ("Vlog, Film & Sinematik", "cinematic"),
+            ("Pilih Manual di Review", "manual"),
+        ])
+        self.profile_combo.setVisible(False)
+        self.profile_combo.currentIndexChanged.connect(self.update_profile_hint)
+
+        ps_layout.addWidget(section_lbl("Jenis Video Anda"))
+        self.profile_cards = VisualCardSelector([
+            ("auto", "Universal", "Cocok untuk semua video", "universal", "OTOMATIS", "#3B82F6"),
+            ("podcast", "Podcast & Obrolan", "Tanya-jawab & diskusi", "podcast", "POPULER", "#8B5CF6"),
+            ("live", "Gaming & Stream", "Reaksi seru & momen live", "gaming", "SERU", "#10B981"),
+            ("education", "Edukasi & Tutorial", "Penjelasan & tips praktis", "edu", "ILMU", "#F59E0B"),
+            ("music", "Musik & Lagu", "Bagian reff, lagu & lirik", "music", "LIRIK", "#EC4899"),
+            ("cinematic", "Vlog & Cerita", "Alur cerita & sinematik", "cinema", "CERITA", "#06B6D4"),
+        ], columns=3, accent="#3B82F6", card_height=62)
+        self.profile_cards.bind_combo(self.profile_combo)
+        ps_layout.addWidget(self.profile_cards)
+
+        self.clip_flavor_combo = self.combo([
+            ("Sorotan Utama (Universal)", "universal"),
+            ("Debat & Pernyataan Tajam", "spicy_drama"),
+            ("Intisari Ilmu & Solusi", "deep_meat"),
+            ("Komedi & Momen Lucu", "funny_blunder"),
+            ("Reaksi Heboh & Klimaks", "hype_rage"),
+            ("Reff, Chorus & Lirik Lagu", "music_lyrics"),
+            ("Narasi & Alur Sinematik", "cinematic_story"),
+        ], selected=0)
+        self.clip_flavor_combo.setVisible(False)
+
+        ps_layout.addWidget(section_lbl("Bagian Apa yang Ingin Diambil AI?"))
+        self.clip_flavor_cards = VisualCardSelector([
+            ("universal", "Momen Terbaik", "Pembuka kuat & isi jelas", "ai_spark", "UTAMA", "#3B82F6"),
+            ("spicy_drama", "Opini & Debat", "Argumen seru & pernyataan kuat", "podcast", "TAJAM", "#EF4444"),
+            ("deep_meat", "Inti Pembahasan", "Tips penting & solusi langsung", "edu", "INTI", "#F59E0B"),
+            ("funny_blunder", "Momen Lucu", "Tawa & kejadian menghibur", "cam_focus", "FUN", "#10B981"),
+            ("music_lyrics", "Reff & Puncak Lagu", "Bagian lagu paling enak", "music", "MUSIK", "#EC4899"),
+            ("cinematic_story", "Momen Berkesan", "Suasana & cerita menyentuh", "cinema", "VLOG", "#06B6D4"),
+        ], columns=3, accent="#3B82F6", card_height=60)
+        self.clip_flavor_cards.bind_combo(self.clip_flavor_combo)
+        ps_layout.addWidget(self.clip_flavor_cards)
+
+        self.clip_count = self.spin(0, 200, 0)
+        self.clip_count.setVisible(False)
+        self.max_clips = self.spin(1, 200, 15)
+        self.min_duration = self.spin(0, 3600, 0)
+        self.max_duration = self.spin(0, 3600, 0)
+        self.min_duration.setSpecialValueText("Otomatis")
+        self.max_duration.setSpecialValueText("Otomatis")
+        for sp in (self.max_clips, self.min_duration, self.max_duration):
+            sp.setFixedHeight(34)
+
+        self.smart_duration_mode = self.combo([("auto", "auto"), ("fixed", "fixed")])
+        self.smart_duration_mode.setVisible(False)
+        self.smart_fixed_duration = self.spin(5, 3600, 60)
+        self.smart_fixed_duration.setVisible(False)
+        self.use_llm = QCheckBox("Gunakan AI")
+        self.use_llm.setChecked(True)
+        self.use_llm.setVisible(False)
+
+        dur_grid = QGridLayout()
+        dur_grid.setHorizontalSpacing(8)
+        dur_grid.setVerticalSpacing(4)
+        dur_grid.setColumnStretch(0, 1)
+        dur_grid.setColumnStretch(1, 1)
+        dur_grid.setColumnStretch(2, 1)
+        dur_grid.addWidget(section_lbl("Maks. Klip"), 0, 0)
+        dur_grid.addWidget(section_lbl("Durasi Min (dtk)"), 0, 1)
+        dur_grid.addWidget(section_lbl("Durasi Maks (dtk)"), 0, 2)
+        dur_grid.addWidget(self.max_clips, 1, 0)
+        dur_grid.addWidget(self.min_duration, 1, 1)
+        dur_grid.addWidget(self.max_duration, 1, 2)
+        ps_layout.addLayout(dur_grid)
+
+        ai_rules_grid = QGridLayout()
+        ai_rules_grid.setHorizontalSpacing(8)
+        ai_rules_grid.setVerticalSpacing(8)
+        ai_rules_grid.setColumnStretch(0, 1)
+        ai_rules_grid.setColumnStretch(1, 1)
+
+        ae_w, self.use_audio_energy_check = make_toggle_row(
+            "Deteksi Lonjakan Suara",
+            " Analisis tawa, reaksi & penekanan vokal",
+            checked=True,
         )
-        bgm_file_row.addWidget(self.bgm_path_label, 1)
+        sn_w, self.snap_sentence_check = make_toggle_row(
+            "Kunci Kalimat Utuh",
+            "Cegah potongan menggantung di tengah kalimat",
+            checked=True,
+        )
+        tf_w, self.trim_filler_check = make_toggle_row(
+            "Pangkas Jeda Awal",
+            "Mulai langsung dari kalimat pembuka",
+            checked=True,
+        )
+        sh_w, self.spicy_headline_check = make_toggle_row(
+            "Judul & Caption AI",
+            "Buat ide judul & deskripsi otomatis",
+            checked=True,
+        )
+        ai_rules_grid.addWidget(ae_w, 0, 0)
+        ai_rules_grid.addWidget(sn_w, 0, 1)
+        ai_rules_grid.addWidget(tf_w, 1, 0)
+        ai_rules_grid.addWidget(sh_w, 1, 1)
+        ps_layout.addLayout(ai_rules_grid)
 
-        self.btn_pick_bgm = QPushButton("🎵 Pilih Musik")
-        self.btn_pick_bgm.setMinimumHeight(38)
-        self.btn_pick_bgm.clicked.connect(self.choose_bgm_file)
-        bgm_file_row.addWidget(self.btn_pick_bgm)
+        self.profile_hint = QLabel("AI menyesuaikan cara memilih klip dengan kategori video yang Anda pilih.")
+        self.profile_hint.setWordWrap(True)
+        self.profile_hint.setStyleSheet(
+            "color: #A1A1AA; background: #0D0D12; border: 1px solid #1F1F2B; border-radius: 8px; padding: 7px 10px; font-size: 11px;"
+        )
+        ps_layout.addWidget(self.profile_hint)
+        self.mode_stack.addWidget(page_smart)
 
-        self.btn_clear_bgm = QPushButton("Hapus")
-        self.btn_clear_bgm.setMinimumHeight(38)
-        self.btn_clear_bgm.setEnabled(False)
-        self.btn_clear_bgm.clicked.connect(self.clear_bgm_file)
-        bgm_file_row.addWidget(self.btn_clear_bgm)
-        bgm_box_layout.addLayout(bgm_file_row)
+        # PAGE 1: SPLIT BY COUNT
+        page_count = QWidget()
+        pc_layout = QVBoxLayout(page_count)
+        pc_layout.setContentsMargins(0, 4, 0, 4)
+        pc_layout.setSpacing(8)
+        pc_info = QLabel(
+            "<b>Bagi Rata Jumlah Klip:</b> Video akan dibagi rata menjadi sejumlah bagian klip dengan durasi sama panjang dari awal hingga akhir (tanpa perlu analisis momen AI)."
+        )
+        pc_info.setWordWrap(True)
+        pc_info.setStyleSheet(
+            "color: #BFDBFE; background: #0B1222; border: 1px solid #1E3A8A; border-radius: 8px; padding: 8px 10px; font-size: 11px;"
+        )
+        pc_layout.addWidget(pc_info)
+        pc_row = QHBoxLayout()
+        pc_row.addWidget(section_lbl("Ingin Dibagi Menjadi Berapa Klip?"))
+        self.split_count = self.spin(1, 500, 10)
+        self.split_count.setFixedHeight(36)
+        self.split_count.valueChanged.connect(self.update_segment_estimate)
+        pc_row.addWidget(self.split_count, 1)
+        pc_layout.addLayout(pc_row)
+        self.mode_stack.addWidget(page_count)
 
-        bgm_vol_row = QHBoxLayout()
-        self.bgm_vol_slider = QSlider(Qt.Orientation.Horizontal)
-        self.bgm_vol_slider.setRange(0, 100)
-        self.bgm_vol_slider.setValue(8)
-        self.bgm_vol_label = QLabel("8%")
-        self.bgm_vol_label.setStyleSheet("color: #38BDF8; font-weight: 700; font-size: 12px; min-width: 36px;")
-        self.bgm_vol_slider.valueChanged.connect(self.on_bgm_vol_changed)
-        bgm_vol_row.addWidget(self.bgm_vol_slider, 1)
-        bgm_vol_row.addWidget(self.bgm_vol_label)
+        # PAGE 2: SPLIT BY DURATION
+        page_dur = QWidget()
+        pd_layout = QVBoxLayout(page_dur)
+        pd_layout.setContentsMargins(0, 4, 0, 4)
+        pd_layout.setSpacing(8)
+        pd_info = QLabel(
+            "<b>Bagi Berdasarkan Durasi:</b> Video akan dipotong berurutan setiap sekian detik sesuai durasi yang Anda tentukan (misal: tiap 60 detik menjadi 1 klip)."
+        )
+        pd_info.setWordWrap(True)
+        pd_info.setStyleSheet(
+            "color: #BFDBFE; background: #0B1222; border: 1px solid #1E3A8A; border-radius: 8px; padding: 8px 10px; font-size: 11px;"
+        )
+        pd_layout.addWidget(pd_info)
+        pd_row = QHBoxLayout()
+        pd_row.addWidget(section_lbl("Durasi Setiap Klip (Detik)"))
+        self.segment_duration = self.spin(5, 3600, 60)
+        self.segment_duration.setFixedHeight(36)
+        self.segment_duration.valueChanged.connect(self.update_segment_estimate)
+        pd_row.addWidget(self.segment_duration, 1)
+        pd_layout.addLayout(pd_row)
+        self.mode_stack.addWidget(page_dur)
 
-        bgm_box_layout.addWidget(QLabel("Volume Musik Latar (Ideal 5%–10%):"))
-        bgm_box_layout.addLayout(bgm_vol_row)
+        # PAGE 3: MODE CLIPPING MANUAL (MULTI-SEGMEN BEBAS TANPA BATAS)
+        page_manual = QWidget()
+        pm_layout = QVBoxLayout(page_manual)
+        pm_layout.setContentsMargins(0, 2, 0, 2)
+        pm_layout.setSpacing(9)
+        self.pre_manual_segments: list[dict[str, Any]] = []
 
-        voice_vol_row = QHBoxLayout()
-        self.voice_vol_slider = QSlider(Qt.Orientation.Horizontal)
-        self.voice_vol_slider.setRange(50, 150)
-        self.voice_vol_slider.setValue(100)
-        self.voice_vol_label = QLabel("100%")
-        self.voice_vol_label.setStyleSheet("color: #34D399; font-weight: 700; font-size: 12px; min-width: 36px;")
-        self.voice_vol_slider.valueChanged.connect(self.on_voice_vol_changed)
-        voice_vol_row.addWidget(self.voice_vol_slider, 1)
-        voice_vol_row.addWidget(self.voice_vol_label)
+        pm_info = QLabel(
+            "<b>Mode Clipping Manual · Multi-Segmen Bebas:</b> "
+            "Putar video di pratinjau kanan, klik <b>Ambil Waktu</b> untuk menandai titik mulai & selesai, lalu klik "
+            "<b>+ Tambah Segmen</b>. Anda bebas menyusun banyak segmen sekaligus (#01, #02, #03...) dalam sekali proses, "
+            "dan klik segmen mana saja di daftar untuk melompat & mengeditnya secara langsung."
+        )
+        pm_info.setWordWrap(True)
+        pm_info.setStyleSheet(
+            "color: #FDE68A; background: #141007; border: 1px solid #92400E; border-radius: 8px; padding: 8px 10px; font-size: 11px;"
+        )
+        pm_layout.addWidget(pm_info)
 
-        bgm_box_layout.addWidget(QLabel("Volume Suara Pembicara Utama:"))
-        bgm_box_layout.addLayout(voice_vol_row)
+        pm_grid = QGridLayout()
+        pm_grid.setHorizontalSpacing(8)
+        pm_grid.setVerticalSpacing(5)
+        pm_grid.setColumnStretch(0, 1)
+        pm_grid.setColumnStretch(1, 1)
 
-        audio_fx_layout = QVBoxLayout()
-        audio_fx_layout.setSpacing(8)
-        self.bgm_duck_checkbox = QCheckBox()
-        self.bgm_duck_checkbox.setChecked(True)
-        audio_fx_layout.addWidget(wrap_checkable(self.bgm_duck_checkbox, "Otomatis Kecilkan Musik Saat Pembicara Bicara (Auto-Ducking)"))
+        pm_grid.addWidget(section_lbl("Waktu Mulai (MM:SS / dtk)"), 0, 0)
+        pm_grid.addWidget(section_lbl("Waktu Selesai (MM:SS / dtk)"), 0, 1)
 
-        self.loudnorm_checkbox = QCheckBox()
-        self.loudnorm_checkbox.setChecked(True)
-        audio_fx_layout.addWidget(wrap_checkable(self.loudnorm_checkbox, "Stabilkan & Jernihkan Suara Pembicara (Standar Broadcast -14 LUFS)"))
+        start_box = QHBoxLayout()
+        start_box.setSpacing(5)
+        self.pre_manual_start_edit = QLineEdit("00:00")
+        self.pre_manual_start_edit.setPlaceholderText("00:00")
+        self.pre_manual_start_edit.setFixedHeight(34)
+        self.pre_manual_start_edit.setStyleSheet("font-family: 'Cascadia Mono', 'Consolas', monospace; font-weight: 700;")
+        start_box.addWidget(self.pre_manual_start_edit, 1)
+        self.btn_grab_manual_start = QPushButton("[ Ambil Waktu")
+        self.btn_grab_manual_start.setObjectName("secondary")
+        self.btn_grab_manual_start.setFixedHeight(34)
+        self.btn_grab_manual_start.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_grab_manual_start.setToolTip("Ambil waktu mulai langsung dari posisi putar video di sebelah kanan")
+        self.btn_grab_manual_start.clicked.connect(lambda: self.grab_preview_time_for_manual(is_start=True))
+        start_box.addWidget(self.btn_grab_manual_start)
+        pm_grid.addLayout(start_box, 1, 0)
 
-        self.censor_profanity_checkbox = QCheckBox()
-        self.censor_profanity_checkbox.setChecked(False)
-        audio_fx_layout.addWidget(wrap_checkable(self.censor_profanity_checkbox, "Sensor Kata Kasar Otomatis di Teks Subtitle"))
+        end_box = QHBoxLayout()
+        end_box.setSpacing(5)
+        self.pre_manual_end_edit = QLineEdit("01:00")
+        self.pre_manual_end_edit.setPlaceholderText("01:00")
+        self.pre_manual_end_edit.setFixedHeight(34)
+        self.pre_manual_end_edit.setStyleSheet("font-family: 'Cascadia Mono', 'Consolas', monospace; font-weight: 700;")
+        end_box.addWidget(self.pre_manual_end_edit, 1)
+        self.btn_grab_manual_end = QPushButton("Ambil Waktu ]")
+        self.btn_grab_manual_end.setObjectName("secondary")
+        self.btn_grab_manual_end.setFixedHeight(34)
+        self.btn_grab_manual_end.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_grab_manual_end.setToolTip("Ambil waktu selesai langsung dari posisi putar video di sebelah kanan")
+        self.btn_grab_manual_end.clicked.connect(lambda: self.grab_preview_time_for_manual(is_start=False))
+        end_box.addWidget(self.btn_grab_manual_end)
+        pm_grid.addLayout(end_box, 1, 1)
 
-        bgm_box_layout.addLayout(audio_fx_layout)
-        t3_layout.addWidget(bgm_group)
-        t3_layout.addStretch()
+        pm_grid.addWidget(section_lbl("Judul Segmen (Opsional)"), 2, 0, 1, 2)
+        self.pre_manual_title_edit = QLineEdit()
+        self.pre_manual_title_edit.setPlaceholderText("Contoh: Bagian Pembuka / Reff Lagu / Momen Inti...")
+        self.pre_manual_title_edit.setFixedHeight(34)
+        pm_grid.addWidget(self.pre_manual_title_edit, 3, 0, 1, 2)
+        pm_layout.addLayout(pm_grid)
 
-        # SUB-TAB 4: AI & DURASI KLIP
-        t4_widget = QWidget()
-        t4_layout = QVBoxLayout(t4_widget)
-        t4_layout.setContentsMargins(6, 10, 16, 12)
-        t4_layout.setSpacing(14)
+        pm_btn_row = QHBoxLayout()
+        pm_btn_row.setSpacing(6)
+        self.btn_add_pre_manual = QPushButton("+ Tambah Segmen")
+        self.btn_add_pre_manual.setFixedHeight(34)
+        self.btn_add_pre_manual.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_add_pre_manual.setStyleSheet(
+            "QPushButton { background: #2563EB; border: 1px solid #60A5FA; border-radius: 8px; color: #FFFFFF; font-weight: 700; font-size: 11px; padding: 0 12px; } "
+            "QPushButton:hover { background: #1D4ED8; }"
+        )
+        self.btn_add_pre_manual.clicked.connect(self.add_pre_manual_segment)
+        pm_btn_row.addWidget(self.btn_add_pre_manual, 1)
 
-        ai_group = QGroupBox("🧠 Mesin AI & Transkripsi")
+        self.btn_upd_pre_manual = QPushButton("Simpan Edit")
+        self.btn_upd_pre_manual.setObjectName("secondary")
+        self.btn_upd_pre_manual.setFixedHeight(34)
+        self.btn_upd_pre_manual.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_upd_pre_manual.setToolTip("Perbarui waktu atau judul pada segmen yang sedang dipilih di daftar bawah")
+        self.btn_upd_pre_manual.clicked.connect(self.update_selected_pre_manual_segment)
+        pm_btn_row.addWidget(self.btn_upd_pre_manual)
+
+        self.btn_full_video_manual = QPushButton("1 Video Utuh")
+        self.btn_full_video_manual.setFixedHeight(34)
+        self.btn_full_video_manual.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_full_video_manual.setToolTip("Masukkan seluruh durasi video dari awal hingga akhir sebagai segmen")
+        self.btn_full_video_manual.setStyleSheet(
+            "QPushButton { background: #064E3B; border: 1px solid #10B981; border-radius: 8px; color: #ECFDF5; font-weight: 700; font-size: 11px; padding: 0 10px; } "
+            "QPushButton:hover { background: #047857; }"
+        )
+        self.btn_full_video_manual.clicked.connect(self.add_full_video_manual_segment)
+        pm_btn_row.addWidget(self.btn_full_video_manual)
+
+        self.btn_del_pre_manual = QPushButton("Hapus")
+        self.btn_del_pre_manual.setObjectName("secondary")
+        self.btn_del_pre_manual.setFixedHeight(34)
+        self.btn_del_pre_manual.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_del_pre_manual.clicked.connect(self.remove_selected_pre_manual_segment)
+        pm_btn_row.addWidget(self.btn_del_pre_manual)
+        pm_layout.addLayout(pm_btn_row)
+
+        pm_layout.addWidget(section_lbl("Daftar Segmen Manual (Klik Segmen untuk Pratinjau & Edit)"))
+        self.pre_manual_list = QListWidget()
+        self.pre_manual_list.setMinimumHeight(124)
+        self.pre_manual_list.setMaximumHeight(168)
+        self.pre_manual_list.setStyleSheet(
+            "QListWidget { background: #07070B; border: 1px solid #1F1F2B; border-radius: 8px; color: #F4F4F5; "
+            "font-family: 'Cascadia Mono', 'Segoe UI Variable Text', monospace; font-size: 11px; padding: 4px; } "
+            "QListWidget::item { padding: 6px 8px; border-radius: 6px; margin-bottom: 2px; } "
+            "QListWidget::item:selected { background: #261A07; border: 1px solid #F59E0B; color: #FEF3C7; } "
+            "QListWidget::item:hover:!selected { background: #12121A; }"
+        )
+        self.pre_manual_list.itemClicked.connect(self.on_pre_manual_item_clicked)
+        pm_layout.addWidget(self.pre_manual_list)
+        self.mode_stack.addWidget(page_manual)
+
+        mode_layout.addWidget(self.mode_stack)
+
+        est_strip = QFrame()
+        est_strip.setStyleSheet("background: #0D0D14; border: 1px solid #1F1F2B; border-radius: 8px;")
+        est_layout = QVBoxLayout(est_strip)
+        est_layout.setContentsMargins(10, 7, 10, 7)
+        est_layout.setSpacing(2)
+        self.duration_info = QLabel("Durasi sumber: belum dimuat")
+        self.duration_info.setStyleSheet("color: #A1A1AA; font-size: 11px; font-weight: 600; border: 0; background: transparent;")
+        self.segment_estimate = QLabel("Estimasi klip akan tampil setelah video dipilih.")
+        self.segment_estimate.setStyleSheet("color: #60A5FA; font-size: 11px; font-weight: 700; border: 0; background: transparent;")
+        self.segment_estimate.setWordWrap(True)
+        est_layout.addWidget(self.duration_info)
+        est_layout.addWidget(self.segment_estimate)
+        mode_layout.addWidget(est_strip)
+
+        tm_layout.addWidget(mode_group)
+
+        # GROUP: MESIN AI & BAHASA TRANSKRIPSI (DIPISAH ANTARA ANALISIS AI VS SUARA KE TEKS)
+        ai_group = QGroupBox("Mesin Analisis AI && Suara ke Teks (Subtitle)")
+        self.ai_engine_group = ai_group
         ai_layout = QVBoxLayout(ai_group)
-        ai_layout.setContentsMargins(14, 14, 14, 14)
+        ai_layout.setContentsMargins(12, 14, 12, 12)
         ai_layout.setSpacing(8)
 
+        self.ai_engine_mode_note = QLabel(
+            "💡 <b>Mode Manual Aktif:</b> Mesin Analisis Momen AI dinonaktifkan karena Anda menentukan titik potong sendiri. "
+            "Hanya <b>Mesin Suara ke Teks</b> yang digunakan untuk membuat teks subtitle otomatis."
+        )
+        self.ai_engine_mode_note.setWordWrap(True)
+        self.ai_engine_mode_note.setStyleSheet(
+            "color: #A7F3D0; background: #061A14; border: 1px solid #059669; border-radius: 8px; padding: 7px 10px; font-size: 11px;"
+        )
+        self.ai_engine_mode_note.setVisible(False)
+        ai_layout.addWidget(self.ai_engine_mode_note)
+
         self.ai_provider_combo = self.combo([
-            ("Google Gemini Cloud (Akurasi Tinggi & Cepat)", "gemini"),
-            ("Model AI Lokal GGUF (100% Offline Tanpa Kuota)", "local"),
+            ("Google Gemini Cloud (Cepat & Akurat)", "gemini"),
+            ("Model Lokal GGUF (100% Offline)", "local"),
         ])
         self.whisper_combo = self.combo([
             ("Gemini Audio Cloud (Cepat & Akurat)", "gemini"),
             ("Whisper Small (Offline · Cepat)", "small"),
-            ("Whisper Medium (Offline · Detail)", "medium"),
-            ("Whisper Large-v3 (Offline · Akurasi Maksimal)", "large-v3"),
+            ("Whisper Medium (Offline · Seimbang)", "medium"),
+            ("Whisper Large-v3 (Offline · Presisi)", "large-v3"),
         ])
         self.language_combo = self.combo([
             ("Deteksi Bahasa Otomatis", "auto"),
@@ -4232,55 +5225,55 @@ class HermesDesktop(QMainWindow):
             ("Bahasa Korea", "ko"),
         ])
         self.custom_prompt_edit = QLineEdit()
-        self.custom_prompt_edit.setPlaceholderText("Contoh: Cari bagian saat membahas gaji, bisnis, atau perdebatan seru...")
+        self.custom_prompt_edit.setPlaceholderText("Opsional: Ketik topik/bagian yang ingin dicari AI (misal: bahas harga, momen lucu)...")
 
         for c in (self.ai_provider_combo, self.whisper_combo, self.language_combo, self.custom_prompt_edit):
-            c.setMinimumHeight(38)
+            c.setMinimumHeight(34)
 
-        ai_layout.addWidget(QLabel("Mesin Analisis Momen AI:"))
-        ai_layout.addWidget(self.ai_provider_combo)
-        ai_layout.addWidget(QLabel("Mesin Transkripsi Suara ke Teks:"))
-        ai_layout.addWidget(self.whisper_combo)
-        ai_layout.addWidget(QLabel("Bahasa Video:"))
-        ai_layout.addWidget(self.language_combo)
-        ai_layout.addWidget(QLabel("Fokus Topik Khusus (Opsional):"))
-        ai_layout.addWidget(self.custom_prompt_edit)
+        # Baris 1: Mesin Suara ke Teks & Bahasa Video (Selalu digunakan untuk Subtitle baik di Otomatis maupun Manual)
+        stt_grid = QGridLayout()
+        stt_grid.setHorizontalSpacing(10)
+        stt_grid.setVerticalSpacing(5)
+        stt_grid.setColumnStretch(0, 3)
+        stt_grid.setColumnStretch(1, 2)
+        stt_grid.addWidget(section_lbl("Mesin Suara ke Teks (Pembuat Subtitle)"), 0, 0)
+        stt_grid.addWidget(section_lbl("Bahasa di Dalam Video"), 0, 1)
+        stt_grid.addWidget(self.whisper_combo, 1, 0)
+        stt_grid.addWidget(self.language_combo, 1, 1)
+        ai_layout.addLayout(stt_grid)
 
-        self.gemini_panel = QFrame()
-        self.gemini_panel.setStyleSheet("background: #090E1A; border: 1px solid #1E293B; border-radius: 8px; padding: 6px;")
-        gemini_layout = QVBoxLayout(self.gemini_panel)
-        gemini_layout.setContentsMargins(8, 6, 8, 6)
-        gemini_key_row = QHBoxLayout()
-        gemini_key_row.addWidget(QLabel("Gemini API Key:"))
-        self.gemini_key_edit = QLineEdit()
-        self.gemini_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.gemini_key_edit.setPlaceholderText("Masukkan API Key Google Gemini...")
-        saved_key = core.get_active_gemini_api_key()
-        self.gemini_key_edit.setText(saved_key)
-        self.gemini_key_edit.textChanged.connect(self.on_gemini_key_changed)
-        self.gemini_key_edit.setMinimumHeight(36)
-        gemini_key_row.addWidget(self.gemini_key_edit, 1)
-        self.gemini_test_button = QPushButton("Uji Koneksi")
-        self.gemini_test_button.setMinimumHeight(36)
-        self.gemini_test_button.clicked.connect(self.test_gemini_connection)
-        gemini_key_row.addWidget(self.gemini_test_button)
-        self.gemini_status_badge = QLabel("")
-        gemini_key_row.addWidget(self.gemini_status_badge)
-        gemini_layout.addLayout(gemini_key_row)
-        ai_layout.addWidget(self.gemini_panel)
+        # Kontainer Khusus Analisis Momen AI (HANYA tampil saat Mode Otomatis AI dipilih)
+        self.ai_analysis_container = QWidget()
+        ai_an_layout = QVBoxLayout(self.ai_analysis_container)
+        ai_an_layout.setContentsMargins(0, 2, 0, 0)
+        ai_an_layout.setSpacing(8)
+
+        an_grid = QGridLayout()
+        an_grid.setHorizontalSpacing(10)
+        an_grid.setVerticalSpacing(5)
+        an_grid.setColumnStretch(0, 2)
+        an_grid.setColumnStretch(1, 3)
+        an_grid.addWidget(section_lbl("Mesin Analisis Momen AI (Khusus Mode Otomatis AI)"), 0, 0)
+        an_grid.addWidget(section_lbl("Cari Topik / Bagian Tertentu (Opsional)"), 0, 1)
+        an_grid.addWidget(self.ai_provider_combo, 1, 0)
+        an_grid.addWidget(self.custom_prompt_edit, 1, 1)
+        ai_an_layout.addLayout(an_grid)
 
         self.local_panel = QFrame()
-        self.local_panel.setStyleSheet("background: #090E1A; border: 1px solid #1E293B; border-radius: 8px; padding: 6px;")
+        self.local_panel.setStyleSheet("background: #07070B; border: 1px solid #1F1F2B; border-radius: 8px;")
         local_layout = QVBoxLayout(self.local_panel)
-        local_layout.setContentsMargins(8, 6, 8, 6)
+        local_layout.setContentsMargins(10, 8, 10, 8)
         local_row = QHBoxLayout()
-        local_row.addWidget(QLabel("Model Offline (.gguf):"))
+        local_row.setSpacing(8)
+        local_row.addWidget(section_lbl("Model AI Offline (.GGUF)"))
         self.model_file_combo = ClickOnlyComboBox()
-        self.model_file_combo.setMinimumHeight(36)
+        self.model_file_combo.setMinimumHeight(32)
         self.model_file_combo.currentIndexChanged.connect(self.on_model_file_changed)
         local_row.addWidget(self.model_file_combo, 1)
         self.model_folder_button = QPushButton("Pilih Folder")
-        self.model_folder_button.setMinimumHeight(36)
+        self.model_folder_button.setObjectName("secondary")
+        self.model_folder_button.setFixedHeight(32)
+        self.model_folder_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.model_folder_button.clicked.connect(self.pick_model_folder)
         local_row.addWidget(self.model_folder_button)
         local_layout.addLayout(local_row)
@@ -4288,314 +5281,390 @@ class HermesDesktop(QMainWindow):
         self.model_path_edits["qwen"].setVisible(False)
         self.model_path_edits["hermes"] = QLineEdit()
         self.model_path_edits["hermes"].setVisible(False)
-        ai_layout.addWidget(self.local_panel)
-        t4_layout.addWidget(ai_group)
+        ai_an_layout.addWidget(self.local_panel)
+        ai_layout.addWidget(self.ai_analysis_container)
 
-        mode_group = QGroupBox("⏱️ Pemotongan & Durasi Klip")
-        mode_layout = QVBoxLayout(mode_group)
-        mode_layout.setContentsMargins(14, 14, 14, 14)
-        mode_layout.setSpacing(8)
+        self.gemini_panel = QFrame()
+        self.gemini_panel.setStyleSheet("background: #07070B; border: 1px solid #1F1F2B; border-radius: 8px;")
+        gemini_layout = QVBoxLayout(self.gemini_panel)
+        gemini_layout.setContentsMargins(10, 8, 10, 8)
+        gemini_key_row = QHBoxLayout()
+        gemini_key_row.setSpacing(8)
+        gemini_key_row.addWidget(section_lbl("API Key Gemini"))
+        self.gemini_key_edit = QLineEdit()
+        self.gemini_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.gemini_key_edit.setPlaceholderText("Tempel API Key Google Gemini...")
+        saved_key = core.get_active_gemini_api_key()
+        self.gemini_key_edit.setText(saved_key)
+        self.gemini_key_edit.textChanged.connect(self.on_gemini_key_changed)
+        self.gemini_key_edit.setFixedHeight(32)
+        gemini_key_row.addWidget(self.gemini_key_edit, 1)
+        self.gemini_test_button = QPushButton("Uji Koneksi")
+        self.gemini_test_button.setObjectName("secondary")
+        self.gemini_test_button.setFixedHeight(32)
+        self.gemini_test_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.gemini_test_button.clicked.connect(self.test_gemini_connection)
+        gemini_key_row.addWidget(self.gemini_test_button)
+        self.gemini_status_badge = QLabel("")
+        gemini_key_row.addWidget(self.gemini_status_badge)
+        gemini_layout.addLayout(gemini_key_row)
+        ai_layout.addWidget(self.gemini_panel)
 
-        clip_mode_btn_row = QHBoxLayout()
-        clip_mode_btn_row.setSpacing(8)
-        self.btn_clip_mode_auto = QPushButton("🤖 Clipping Otomatis (AI)")
-        self.btn_clip_mode_auto.setToolTip("Pemotongan klip cerdas otomatis dengan AI atau pembagian rata")
-        self.btn_clip_mode_auto.setMinimumHeight(38)
-        self.btn_clip_mode_auto.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_clip_mode_auto.clicked.connect(lambda: self.set_clipping_mode_quick("auto"))
-
-        self.btn_clip_mode_manual = QPushButton("✂️ Clipping Manual")
-        self.btn_clip_mode_manual.setToolTip("Atur detik sendiri tanpa pemotongan otomatis")
-        self.btn_clip_mode_manual.setMinimumHeight(38)
-        self.btn_clip_mode_manual.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_clip_mode_manual.clicked.connect(lambda: self.set_clipping_mode_quick("manual"))
-
-        clip_mode_btn_row.addWidget(self.btn_clip_mode_auto, 1)
-        clip_mode_btn_row.addWidget(self.btn_clip_mode_manual, 1)
-        mode_layout.addLayout(clip_mode_btn_row)
-
-        mode_header = QHBoxLayout()
-        mode_header.addWidget(QLabel("Metode Pemilihan Klip:"))
-        self.mode_combo = self.combo([
-            ("✨ Otomatis Pilih Momen Terbaik dengan AI (Rekomendasi)", "smart"),
-            ("✂️ Clipping Manual (Atur Detik Sendiri / Tanpa Pemotongan Otomatis)", "manual"),
-            ("📏 Bagi Video Rata Berdasarkan Jumlah Klip", "split_count"),
-            ("⏱️ Bagi Video Rata Berdasarkan Durasi Detik", "split_duration"),
-        ])
-        self.mode_combo.setMinimumHeight(38)
-        self.mode_combo.currentIndexChanged.connect(self.update_mode_settings)
-        mode_header.addWidget(self.mode_combo, 1)
-        mode_layout.addLayout(mode_header)
-
-        self.mode_stack = QStackedWidget()
-
-        page_smart = QWidget()
-        ps_layout = QVBoxLayout(page_smart)
-        ps_layout.setContentsMargins(0, 4, 0, 4)
-        ps_layout.setSpacing(8)
-
-        self.profile_combo = self.combo([
-            ("Otomatis Sesuaikan Jenis Video (Podcast / Obrolan)", "auto"),
-            ("Live Stream / Reaksi Spontan", "live"),
-            ("Podcast / Wawancara Mendalam", "standard"),
-            ("🎵 Klip Lagu & Video Musik (Lirik & Reff)", "music"),
-            ("Pilih Klip Sendiri Nanti di Menu Review", "manual"),
-        ])
-        self.profile_combo.setMinimumHeight(38)
-        self.profile_combo.currentIndexChanged.connect(self.update_profile_hint)
-
-        self.clip_count = self.spin(0, 200, 0)
-        self.max_clips = self.spin(1, 200, 25)
-        self.min_duration = self.spin(0, 3600, 0)
-        self.max_duration = self.spin(0, 3600, 0)
-        for sp in (self.max_clips, self.min_duration, self.max_duration):
-            sp.setMinimumHeight(38)
-
-        self.smart_duration_mode = self.combo([("auto", "auto"), ("fixed", "fixed")])
-        self.smart_fixed_duration = self.spin(5, 3600, 60)
-        self.use_llm = QCheckBox("Gunakan AI")
-        self.use_llm.setChecked(True)
-        self.use_llm.setVisible(False)
-
-        ps_layout.addWidget(QLabel("Jenis Konten Video:"))
-        ps_layout.addWidget(self.profile_combo)
-
-        dur_row = QHBoxLayout()
-        dur_row.setSpacing(8)
-        c_col = QVBoxLayout()
-        c_col.setSpacing(3)
-        c_col.addWidget(QLabel("Maks Klip:"))
-        c_col.addWidget(self.max_clips)
-        dur_row.addLayout(c_col, 1)
-
-        min_col = QVBoxLayout()
-        min_col.setSpacing(3)
-        min_col.addWidget(QLabel("Min Detik:"))
-        min_col.addWidget(self.min_duration)
-        dur_row.addLayout(min_col, 1)
-
-        max_col = QVBoxLayout()
-        max_col.setSpacing(3)
-        max_col.addWidget(QLabel("Maks Detik:"))
-        max_col.addWidget(self.max_duration)
-        dur_row.addLayout(max_col, 1)
-        ps_layout.addLayout(dur_row)
-
-        self.clip_flavor_combo = self.combo([
-            ("🔥 Momen Paling Viral, Debat & Pernyataan Mengejutkan", "spicy_drama"),
-            ("🎯 Semua Momen Terbaik (Hook Kuat + Cerita Menarik)", "viral_all"),
-            ("🥩 Insight Daging, Tips Penting & Ilmu Bermanfaat (Pemicu Save)", "deep_meat"),
-            ("😂 Momen Lucu, Tawa Pecah & Hiburan (Pemicu Share)", "funny_blunder"),
-            ("⚡ Momen Emosi Tinggi & Reaksi Heboh", "hype_rage"),
-            ("🎵 Klip Lagu: Reff, Chorus & Lirik Paling Puitis", "music_lyrics"),
-        ], selected=0)
-        self.clip_flavor_combo.setMinimumHeight(38)
-
-        ps_layout.addWidget(QLabel("Fokus Momen yang Dicari AI:"))
-        ps_layout.addWidget(self.clip_flavor_combo)
-
-        self.use_audio_energy_check = QCheckBox()
-        self.use_audio_energy_check.setChecked(True)
-        self.trim_filler_check = QCheckBox()
-        self.trim_filler_check.setChecked(True)
-        self.snap_sentence_check = QCheckBox()
-        self.snap_sentence_check.setChecked(True)
-        self.spicy_headline_check = QCheckBox()
-        self.spicy_headline_check.setChecked(True)
-
-        ps_layout.addWidget(wrap_checkable(self.use_audio_energy_check, "Deteksi Lonjakan Suara Otomatis (Tawa, Debat & Penekanan Vokal)"))
-        ps_layout.addWidget(wrap_checkable(self.trim_filler_check, "Buang Jeda / Basa-Basi di Awal Klip (Langsung Masuk ke Inti)"))
-        ps_layout.addWidget(wrap_checkable(self.snap_sentence_check, "Jaga Kalimat Tanya-Jawab Tetap Utuh (Anti-Potong Tengah Kalimat)"))
-        ps_layout.addWidget(wrap_checkable(self.spicy_headline_check, "Buat Judul, Hook & Caption Otomatis Pemicu Save & Share FYP"))
-
-        self.profile_hint = QLabel("AI otomatis mencari momen dengan pembuka kuat dan mengunci kalimat hingga selesai.")
-        self.profile_hint.setWordWrap(True)
-        self.profile_hint.setStyleSheet("color: #94A3B8; font-size: 12px;")
-        ps_layout.addWidget(self.profile_hint)
-        self.mode_stack.addWidget(page_smart)
-
-        page_count = QWidget()
-        pc_layout = QVBoxLayout(page_count)
-        pc_layout.setContentsMargins(0, 4, 0, 4)
-        pc_row = QHBoxLayout()
-        pc_row.addWidget(QLabel("Bagi Video Menjadi Berapa Klip:"))
-        self.split_count = self.spin(1, 500, 10)
-        self.split_count.setMinimumHeight(38)
-        self.split_count.valueChanged.connect(self.update_segment_estimate)
-        pc_row.addWidget(self.split_count, 1)
-        pc_layout.addLayout(pc_row)
-        self.mode_stack.addWidget(page_count)
-
-        page_dur = QWidget()
-        pd_layout = QVBoxLayout(page_dur)
-        pd_layout.setContentsMargins(0, 4, 0, 4)
-        pd_row = QHBoxLayout()
-        pd_row.addWidget(QLabel("Durasi Setiap Klip (detik):"))
-        self.segment_duration = self.spin(5, 3600, 90)
-        self.segment_duration.setMinimumHeight(38)
-        self.segment_duration.valueChanged.connect(self.update_segment_estimate)
-        pd_row.addWidget(self.segment_duration, 1)
-        pd_layout.addLayout(pd_row)
-        self.mode_stack.addWidget(page_dur)
-
-        page_manual = QWidget()
-        pm_layout = QVBoxLayout(page_manual)
-        pm_layout.setContentsMargins(0, 4, 0, 4)
-        pm_layout.setSpacing(8)
-        self.pre_manual_segments: list[dict[str, Any]] = []
-
-        pm_info = QLabel(
-            "✂️ <b>Mode Clipping Manual (Tanpa Pemotongan Otomatis AI):</b><br>"
-            "Tambahkan rentang waktu klip yang ingin dipotong di bawah ini, klik <b>🎬 Gunakan 1 Video Utuh</b> "
-            "jika tidak ingin memotong durasi sama sekali, atau kosongkan untuk memotong langsung di Timeline Review."
-        )
-        pm_info.setWordWrap(True)
-        pm_info.setStyleSheet(
-            "color: #FDE68A; background: #1C1917; border: 1px solid #D97706; border-radius: 8px; padding: 8px 10px; font-size: 11px;"
-        )
-        pm_layout.addWidget(pm_info)
-
-        pm_grid = QGridLayout()
-        pm_grid.setHorizontalSpacing(8)
-        pm_grid.setVerticalSpacing(6)
-        pm_grid.setColumnStretch(0, 1)
-        pm_grid.setColumnStretch(1, 1)
-
-        pm_grid.addWidget(QLabel("Waktu Mulai (MM:SS / detik)"), 0, 0)
-        pm_grid.addWidget(QLabel("Waktu Selesai (MM:SS / detik)"), 0, 1)
-
-        start_box = QHBoxLayout()
-        start_box.setSpacing(4)
-        self.pre_manual_start_edit = QLineEdit("00:00")
-        self.pre_manual_start_edit.setPlaceholderText("00:00")
-        self.pre_manual_start_edit.setMinimumHeight(34)
-        start_box.addWidget(self.pre_manual_start_edit, 1)
-        self.btn_grab_manual_start = QPushButton("📍 Posisi Video")
-        self.btn_grab_manual_start.setMinimumHeight(34)
-        self.btn_grab_manual_start.setToolTip("Ambil waktu dari posisi putar video di kanvas pratinjau kanan")
-        self.btn_grab_manual_start.clicked.connect(lambda: self.grab_preview_time_for_manual(is_start=True))
-        start_box.addWidget(self.btn_grab_manual_start)
-        pm_grid.addLayout(start_box, 1, 0)
-
-        end_box = QHBoxLayout()
-        end_box.setSpacing(4)
-        self.pre_manual_end_edit = QLineEdit("01:00")
-        self.pre_manual_end_edit.setPlaceholderText("01:00")
-        self.pre_manual_end_edit.setMinimumHeight(34)
-        end_box.addWidget(self.pre_manual_end_edit, 1)
-        self.btn_grab_manual_end = QPushButton("📍 Posisi Video")
-        self.btn_grab_manual_end.setMinimumHeight(34)
-        self.btn_grab_manual_end.setToolTip("Ambil waktu dari posisi putar video di kanvas pratinjau kanan")
-        self.btn_grab_manual_end.clicked.connect(lambda: self.grab_preview_time_for_manual(is_start=False))
-        end_box.addWidget(self.btn_grab_manual_end)
-        pm_grid.addLayout(end_box, 1, 1)
-
-        pm_grid.addWidget(QLabel("Judul Klip Manual (Opsional)"), 2, 0, 1, 2)
-        self.pre_manual_title_edit = QLineEdit()
-        self.pre_manual_title_edit.setPlaceholderText("Contoh: Highlight Pembuka / Bagian 1...")
-        self.pre_manual_title_edit.setMinimumHeight(34)
-        pm_grid.addWidget(self.pre_manual_title_edit, 3, 0, 1, 2)
-        pm_layout.addLayout(pm_grid)
-
-        pm_btn_row = QHBoxLayout()
-        pm_btn_row.setSpacing(6)
-        self.btn_add_pre_manual = QPushButton("➕ Tambah Rentang Klip")
-        self.btn_add_pre_manual.setMinimumHeight(34)
-        self.btn_add_pre_manual.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_add_pre_manual.setStyleSheet(
-            "QPushButton { background: #1D4ED8; border: 1px solid #60A5FA; border-radius: 7px; color: #FFFFFF; font-weight: 700; font-size: 12px; padding: 4px 10px; } "
-            "QPushButton:hover { background: #2563EB; }"
-        )
-        self.btn_add_pre_manual.clicked.connect(self.add_pre_manual_segment)
-        pm_btn_row.addWidget(self.btn_add_pre_manual, 1)
-
-        self.btn_full_video_manual = QPushButton("🎬 Gunakan 1 Video Utuh")
-        self.btn_full_video_manual.setMinimumHeight(34)
-        self.btn_full_video_manual.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_full_video_manual.setToolTip("Gunakan seluruh durasi video dari awal sampai akhir tanpa dipotong")
-        self.btn_full_video_manual.setStyleSheet(
-            "QPushButton { background: #065F46; border: 1px solid #34D399; border-radius: 7px; color: #ECFDF5; font-weight: 700; font-size: 12px; padding: 4px 10px; } "
-            "QPushButton:hover { background: #047857; }"
-        )
-        self.btn_full_video_manual.clicked.connect(self.add_full_video_manual_segment)
-        pm_btn_row.addWidget(self.btn_full_video_manual, 1)
-
-        self.btn_del_pre_manual = QPushButton("🗑️ Hapus")
-        self.btn_del_pre_manual.setMinimumHeight(34)
-        self.btn_del_pre_manual.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_del_pre_manual.clicked.connect(self.remove_selected_pre_manual_segment)
-        pm_btn_row.addWidget(self.btn_del_pre_manual)
-        pm_layout.addLayout(pm_btn_row)
-
-        self.pre_manual_list = QListWidget()
-        self.pre_manual_list.setFixedHeight(82)
-        self.pre_manual_list.setStyleSheet(
-            "QListWidget { background: #090E1A; border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; font-size: 12px; padding: 4px; }"
-        )
-        pm_layout.addWidget(self.pre_manual_list)
-        self.mode_stack.addWidget(page_manual)
-
-        mode_layout.addWidget(self.mode_stack)
-
-        self.duration_info = QLabel("Durasi sumber: belum diketahui")
-        self.duration_info.setStyleSheet("color: #94A3B8; font-size: 12px; font-weight: 500;")
-        mode_layout.addWidget(self.duration_info)
-
-        self.segment_estimate = QLabel("Estimasi jumlah klip akan tampil setelah video dimuat.")
-        self.segment_estimate.setStyleSheet("color: #38BDF8; font-size: 12px; font-weight: 700;")
-        self.segment_estimate.setWordWrap(True)
-        mode_layout.addWidget(self.segment_estimate)
-
-        t4_layout.addWidget(mode_group)
-        t4_layout.addStretch()
+        tm_layout.addWidget(ai_group)
+        tm_layout.addStretch()
 
         self.ai_provider_combo.currentIndexChanged.connect(self.on_ai_provider_changed)
+        self.whisper_combo.currentIndexChanged.connect(self.update_ai_engine_visibility)
         self.on_ai_provider_changed()
         self.load_model_paths()
         self.refresh_model_file_choices()
 
-        # Modern Segmented Pill Sub-Tabs
+        # SUB-TAB 4: AUDIO, EFEK VISUAL REAL-TIME & OVERLAY OPSIONAL
+        t_audio_widget = QWidget()
+        t3_layout = QVBoxLayout(t_audio_widget)
+        t3_layout.setContentsMargins(6, 8, 12, 12)
+        t3_layout.setSpacing(10)
+
+        bgm_group = QGroupBox("Audio Utama && Musik Latar")
+        bgm_box_layout = QVBoxLayout(bgm_group)
+        bgm_box_layout.setContentsMargins(12, 14, 12, 12)
+        bgm_box_layout.setSpacing(9)
+
+        bgm_file_row = QHBoxLayout()
+        bgm_file_row.setSpacing(6)
+        self.bgm_path_label = QLabel("Belum ada musik latar dipilih (opsional)")
+        self.bgm_path_label.setWordWrap(True)
+        self.bgm_path_label.setStyleSheet(
+            "color: #A1A1AA; font-size: 11px; background: #07070B; "
+            "border: 1px solid #1F1F2B; border-radius: 8px; padding: 7px 10px;"
+        )
+        bgm_file_row.addWidget(self.bgm_path_label, 1)
+
+        self.btn_pick_bgm = QPushButton("Pilih Musik")
+        self.btn_pick_bgm.setObjectName("secondary")
+        self.btn_pick_bgm.setFixedHeight(34)
+        self.btn_pick_bgm.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_pick_bgm.clicked.connect(self.choose_bgm_file)
+        bgm_file_row.addWidget(self.btn_pick_bgm)
+
+        self.btn_clear_bgm = QPushButton("Hapus")
+        self.btn_clear_bgm.setObjectName("secondary")
+        self.btn_clear_bgm.setFixedHeight(34)
+        self.btn_clear_bgm.setEnabled(False)
+        self.btn_clear_bgm.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_clear_bgm.clicked.connect(self.clear_bgm_file)
+        bgm_file_row.addWidget(self.btn_clear_bgm)
+        bgm_box_layout.addLayout(bgm_file_row)
+
+        vol_grid = QGridLayout()
+        vol_grid.setHorizontalSpacing(12)
+        vol_grid.setVerticalSpacing(4)
+        vol_grid.setColumnStretch(0, 1)
+        vol_grid.setColumnStretch(1, 1)
+
+        vol_grid.addWidget(section_lbl("Volume Suara Video"), 0, 0)
+        vol_grid.addWidget(section_lbl("Volume Musik Latar"), 0, 1)
+
+        voice_vol_row = QHBoxLayout()
+        self.voice_vol_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.voice_vol_slider.setRange(50, 150)
+        self.voice_vol_slider.setValue(100)
+        self.voice_vol_label = QLabel("100%")
+        self.voice_vol_label.setStyleSheet("color: #34D399; font-family: 'Cascadia Mono', monospace; font-weight: 700; font-size: 11px; min-width: 38px;")
+        self.voice_vol_slider.valueChanged.connect(self.on_voice_vol_changed)
+        voice_vol_row.addWidget(self.voice_vol_slider, 1)
+        voice_vol_row.addWidget(self.voice_vol_label)
+        vol_grid.addLayout(voice_vol_row, 1, 0)
+
+        bgm_vol_row = QHBoxLayout()
+        self.bgm_vol_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.bgm_vol_slider.setRange(0, 100)
+        self.bgm_vol_slider.setValue(8)
+        self.bgm_vol_label = QLabel("8%")
+        self.bgm_vol_label.setStyleSheet("color: #60A5FA; font-family: 'Cascadia Mono', monospace; font-weight: 700; font-size: 11px; min-width: 34px;")
+        self.bgm_vol_slider.valueChanged.connect(self.on_bgm_vol_changed)
+        bgm_vol_row.addWidget(self.bgm_vol_slider, 1)
+        bgm_vol_row.addWidget(self.bgm_vol_label)
+        vol_grid.addLayout(bgm_vol_row, 1, 1)
+        bgm_box_layout.addLayout(vol_grid)
+
+        audio_fx_grid = QGridLayout()
+        audio_fx_grid.setHorizontalSpacing(8)
+        audio_fx_grid.setVerticalSpacing(8)
+        audio_fx_grid.setColumnStretch(0, 1)
+        audio_fx_grid.setColumnStretch(1, 1)
+        duck_w, self.bgm_duck_checkbox = make_toggle_row(
+            "Auto-Ducking Musik",
+            "Kecilkan musik saat ada suara bicara",
+            checked=True,
+        )
+        loud_w, self.loudnorm_checkbox = make_toggle_row(
+            "Normalisasi Suara",
+            "Stabilkan volume standar -14 LUFS",
+            checked=True,
+        )
+        audio_fx_grid.addWidget(duck_w, 0, 0)
+        audio_fx_grid.addWidget(loud_w, 0, 1)
+        bgm_box_layout.addLayout(audio_fx_grid)
+        t3_layout.addWidget(bgm_group)
+
+        # GROUP: EFEK VISUAL REAL-TIME (DEFAULT MATI — TANPA AI SLOP)
+        fx_group = QGroupBox("Efek Visual && Penyesuaian Gambar")
+        fx_layout = QVBoxLayout(fx_group)
+        fx_layout.setContentsMargins(12, 14, 12, 12)
+        fx_layout.setSpacing(8)
+
+        fx_grid = QGridLayout()
+        fx_grid.setHorizontalSpacing(8)
+        fx_grid.setVerticalSpacing(8)
+        fx_grid.setColumnStretch(0, 1)
+        fx_grid.setColumnStretch(1, 1)
+
+        cb_w, self.color_boost_check = make_toggle_row(
+            "Pertajam Warna & Kontras",
+            "Tampil langsung di pratinjau kanan",
+            checked=False,
+        )
+        mr_w, self.mirror_video_check = make_toggle_row(
+            "Balik Kiri-Kanan (Mirror)",
+            "Cerminkan gambar secara real-time",
+            checked=False,
+        )
+        sp_w, self.speed_shift_check = make_toggle_row(
+            "Tempo Halus 1.03x",
+            "Percepat sedikit laju putar & audio",
+            checked=False,
+        )
+        mz_w, self.micro_zoom_check = make_toggle_row(
+            "Zoom Halus Momen Penting",
+            "Zoom 1.06x saat penekanan kalimat",
+            checked=False,
+        )
+        self.color_boost_check.toggled.connect(self.update_create_preview)
+        self.mirror_video_check.toggled.connect(self.update_create_preview)
+        self.speed_shift_check.toggled.connect(self.update_create_preview)
+
+        fx_grid.addWidget(cb_w, 0, 0)
+        fx_grid.addWidget(mr_w, 0, 1)
+        fx_grid.addWidget(sp_w, 1, 0)
+        fx_grid.addWidget(mz_w, 1, 1)
+        fx_layout.addLayout(fx_grid)
+
+        br_w, self.auto_broll_check = make_toggle_row(
+            "Sisipkan Video B-Roll Otomatis",
+            "Tampilkan klip ilustrasi pendek dari folder lokal Anda",
+            checked=False,
+        )
+        fx_layout.addWidget(br_w)
+
+        self.broll_folder_widget = QWidget()
+        br_row = QHBoxLayout(self.broll_folder_widget)
+        br_row.setContentsMargins(0, 0, 0, 0)
+        br_row.setSpacing(6)
+        self.broll_folder_edit = QLineEdit()
+        self.broll_folder_edit.setPlaceholderText("Pilih folder berisi kumpulan video B-Roll (.mp4)...")
+        self.broll_folder_edit.setFixedHeight(32)
+        btn_broll_dir = QPushButton("Pilih Folder")
+        btn_broll_dir.setObjectName("secondary")
+        btn_broll_dir.setFixedHeight(32)
+        btn_broll_dir.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_broll_dir.clicked.connect(self.choose_broll_folder)
+        br_row.addWidget(self.broll_folder_edit, 1)
+        br_row.addWidget(btn_broll_dir)
+        self.broll_folder_widget.setVisible(False)
+        self.auto_broll_check.toggled.connect(self.broll_folder_widget.setVisible)
+        fx_layout.addWidget(self.broll_folder_widget)
+        t3_layout.addWidget(fx_group)
+
+        # GROUP: WATERMARK & BANNER JUDUL OPSIONAL (OFF BY DEFAULT — ZERO SLOP)
+        wm_group = QGroupBox("Watermark && Overlay Judul (Opsional)")
+        wm_layout = QVBoxLayout(wm_group)
+        wm_layout.setContentsMargins(12, 14, 12, 12)
+        wm_layout.setSpacing(8)
+
+        wm_inputs_grid = QGridLayout()
+        wm_inputs_grid.setHorizontalSpacing(8)
+        wm_inputs_grid.setVerticalSpacing(5)
+        wm_inputs_grid.setColumnStretch(0, 1)
+        wm_inputs_grid.setColumnStretch(1, 1)
+        wm_inputs_grid.addWidget(section_lbl("Teks Watermark"), 0, 0)
+        wm_inputs_grid.addWidget(section_lbl("Logo PNG Transparan"), 0, 1)
+
+        self.watermark_edit = QLineEdit()
+        self.watermark_edit.setPlaceholderText("Contoh: @ChannelAnda")
+        self.watermark_edit.setFixedHeight(34)
+        self.watermark_edit.textChanged.connect(self.update_create_preview)
+        wm_inputs_grid.addWidget(self.watermark_edit, 1, 0)
+
+        wm_png_row = QHBoxLayout()
+        wm_png_row.setSpacing(5)
+        self.watermark_image_edit = QLineEdit()
+        self.watermark_image_edit.setPlaceholderText("Opsional: File .png")
+        self.watermark_image_edit.setFixedHeight(34)
+        self.watermark_image_edit.textChanged.connect(self.update_create_preview)
+        btn_pick_wm = QPushButton("Pilih PNG")
+        btn_pick_wm.setObjectName("secondary")
+        btn_pick_wm.setFixedHeight(34)
+        btn_pick_wm.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_pick_wm.clicked.connect(self.choose_watermark_image)
+        btn_clear_wm = QPushButton("Hapus")
+        btn_clear_wm.setObjectName("secondary")
+        btn_clear_wm.setFixedHeight(34)
+        btn_clear_wm.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_clear_wm.clicked.connect(self.clear_watermark_image)
+        wm_png_row.addWidget(self.watermark_image_edit, 1)
+        wm_png_row.addWidget(btn_pick_wm)
+        wm_png_row.addWidget(btn_clear_wm)
+        wm_inputs_grid.addLayout(wm_png_row, 1, 1)
+        wm_layout.addLayout(wm_inputs_grid)
+
+        wm_pos_op_grid = QGridLayout()
+        wm_pos_op_grid.setHorizontalSpacing(10)
+        wm_pos_op_grid.setVerticalSpacing(4)
+        wm_pos_op_grid.setColumnStretch(0, 1)
+        wm_pos_op_grid.setColumnStretch(1, 1)
+        wm_pos_op_grid.addWidget(section_lbl("Posisi Watermark"), 0, 0)
+        wm_pos_op_grid.addWidget(section_lbl("Transparansi Watermark"), 0, 1)
+
+        self.watermark_pos_combo = self.combo([
+            ("Kanan Atas", "top_right"),
+            ("Kiri Atas", "top_left"),
+            ("Kanan Bawah", "bottom_right"),
+            ("Kiri Bawah", "bottom_left"),
+            ("Tengah Layar", "center"),
+            ("Posisi Bebas (Geser di Video)", "free"),
+        ], selected=0)
+        self.watermark_pos_combo.setMinimumHeight(34)
+        self.watermark_pos_combo.currentIndexChanged.connect(self.on_watermark_pos_changed)
+        wm_pos_op_grid.addWidget(self.watermark_pos_combo, 1, 0)
+
+        wm_op_row = QHBoxLayout()
+        self.watermark_opacity_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.watermark_opacity_slider.setRange(15, 100)
+        self.watermark_opacity_slider.setValue(75)
+        self.watermark_opacity_lbl = QLabel("75%")
+        self.watermark_opacity_lbl.setStyleSheet("color: #A1A1AA; font-family: 'Cascadia Mono', monospace; font-size: 11px; min-width: 34px;")
+        self.watermark_opacity_slider.valueChanged.connect(
+            lambda v: (self.watermark_opacity_lbl.setText(f"{v}%"), self.update_create_preview())
+        )
+        wm_op_row.addWidget(self.watermark_opacity_slider, 1)
+        wm_op_row.addWidget(self.watermark_opacity_lbl)
+        wm_pos_op_grid.addLayout(wm_op_row, 1, 1)
+        wm_layout.addLayout(wm_pos_op_grid)
+
+        self.watermark_free_pos_widget = QWidget()
+        wm_free_l = QHBoxLayout(self.watermark_free_pos_widget)
+        wm_free_l.setContentsMargins(0, 0, 0, 0)
+        wm_free_l.setSpacing(8)
+        wm_free_l.addWidget(section_lbl("X"))
+        self.watermark_x_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.watermark_x_slider.setRange(0, 100)
+        self.watermark_x_slider.setValue(85)
+        self.watermark_x_val_lbl = QLabel("85%")
+        self.watermark_x_val_lbl.setStyleSheet("color: #60A5FA; font-family: 'Cascadia Mono', monospace; font-size: 11px;")
+        self.watermark_x_slider.valueChanged.connect(self.on_watermark_x_slider_changed)
+        wm_free_l.addWidget(self.watermark_x_slider, 1)
+        wm_free_l.addWidget(self.watermark_x_val_lbl)
+
+        wm_free_l.addWidget(section_lbl("Y"))
+        self.watermark_y_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.watermark_y_slider.setRange(0, 100)
+        self.watermark_y_slider.setValue(8)
+        self.watermark_y_val_lbl = QLabel("8%")
+        self.watermark_y_val_lbl.setStyleSheet("color: #60A5FA; font-family: 'Cascadia Mono', monospace; font-size: 11px;")
+        self.watermark_y_slider.valueChanged.connect(self.on_watermark_y_slider_changed)
+        wm_free_l.addWidget(self.watermark_y_slider, 1)
+        wm_free_l.addWidget(self.watermark_y_val_lbl)
+        self.watermark_free_pos_widget.setVisible(False)
+        wm_layout.addWidget(self.watermark_free_pos_widget)
+
+        hb_row_w, self.hook_banner_toggle = make_toggle_row(
+            "Tampilkan Banner Judul Pembuka (Hook)",
+            "Kotak judul di awal video (mati secara bawaan agar video tetap bersih)",
+            checked=False,
+        )
+        wm_layout.addWidget(hb_row_w)
+
+        self.hook_banner_options_widget = QWidget()
+        hb_opts_l = QVBoxLayout(self.hook_banner_options_widget)
+        hb_opts_l.setContentsMargins(0, 2, 0, 0)
+        hb_opts_l.setSpacing(6)
+        self.hook_banner_edit = QLineEdit()
+        self.hook_banner_edit.setPlaceholderText("Kosongkan agar otomatis mengikuti judul klip, atau ketik teks sendiri...")
+        self.hook_banner_edit.setFixedHeight(34)
+        self.hook_banner_edit.textChanged.connect(self.update_create_preview)
+        hb_opts_l.addWidget(self.hook_banner_edit)
+
+        hb_sub_row = QHBoxLayout()
+        hb_sub_row.setSpacing(8)
+        self.hook_banner_dur_combo = self.combo([
+            ("3 Detik Awal", 3),
+            ("5 Detik Awal", 5),
+            ("8 Detik Awal", 8),
+            ("Sepanjang Klip", 0),
+        ], selected=1)
+        self.hook_banner_dur_combo.setMinimumHeight(34)
+        self.hook_banner_dur_combo.currentIndexChanged.connect(self.update_create_preview)
+        self.hook_banner_dur_spin = self.spin(0, 120, 5)
+        self.hook_banner_dur_spin.setVisible(False)
+
+        self.hook_banner_pos_combo = self.combo([
+            ("Atas Tengah", "top"),
+            ("Tengah Layar", "center"),
+            ("Geser Bebas di Video", "free"),
+        ], selected=0)
+        self.hook_banner_pos_combo.setMinimumHeight(34)
+        self.hook_banner_pos_combo.currentIndexChanged.connect(self.update_create_preview)
+        hb_sub_row.addWidget(self.hook_banner_dur_combo, 1)
+        hb_sub_row.addWidget(self.hook_banner_pos_combo, 1)
+        hb_opts_l.addLayout(hb_sub_row)
+        self.hook_banner_options_widget.setVisible(False)
+        self.hook_banner_toggle.toggled.connect(self.hook_banner_options_widget.setVisible)
+        self.hook_banner_toggle.toggled.connect(self.update_create_preview)
+        wm_layout.addWidget(self.hook_banner_options_widget)
+
+        cta_row_w, self.outro_cta_check = make_toggle_row(
+            "Tampilkan Teks Ajakan Penutup (Outro CTA)",
+            "Tambahkan teks ajakan simpan/bagikan pada 2.5 detik terakhir klip",
+            checked=False,
+        )
+        wm_layout.addWidget(cta_row_w)
+
+        t3_layout.addWidget(wm_group)
+        t3_layout.addStretch()
+
+        # PURE BLACK SEGMENTED SUB-TABS
         self.create_subtabs = QTabWidget()
         self.create_subtabs.setDocumentMode(True)
+        self.create_subtabs.tabBar().setUsesScrollButtons(False)
+        self.create_subtabs.tabBar().setExpanding(True)
         self.create_subtabs.setStyleSheet(
-            "QTabWidget::pane { border: 1px solid #1E293B; background: #0B101C; border-radius: 12px; margin-top: 6px; } "
+            "QTabWidget::pane { border: 1px solid #1C1C26; background: #050508; border-radius: 12px; margin-top: 6px; } "
             "QTabBar { background: transparent; } "
-            "QTabBar::tab { background: #111827; border: 1px solid #1E293B; color: #94A3B8; "
-            "padding: 7px 11px; font-size: 12px; font-weight: 700; border-radius: 8px; margin-right: 4px; } "
-            "QTabBar::tab:selected { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1D4ED8, stop:1 #2563EB); "
-            "border: 1px solid #60A5FA; color: #FFFFFF; } "
-            "QTabBar::tab:hover:!selected { color: #F8FAFC; background: #1E293B; border-color: #334155; }"
+            "QTabBar::tab { background: #0C0C12; border: 1px solid #1E1E2A; color: #A1A1AA; "
+            "padding: 7px 8px; font-size: 11px; font-weight: 700; border-radius: 8px; margin-right: 4px; } "
+            "QTabBar::tab:selected { background: #172554; border: 1px solid #3B82F6; color: #FFFFFF; } "
+            "QTabBar::tab:hover:!selected { color: #F4F4F5; background: #14141D; border-color: #2E2E3E; }"
         )
-
-        class _ResponsiveTabScroll(QScrollArea):
-            def resizeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-                super().resizeEvent(event)
-                inner = self.widget()
-                if inner is not None and self.viewport() is not None:
-                    vw = max(240, self.viewport().width())
-                    inner.setMaximumWidth(vw)
-                    inner.resize(vw, inner.height())
 
         def wrap_tab(w: QWidget) -> QScrollArea:
             for child in w.findChildren(QWidget):
                 if isinstance(child, QLabel):
-                    if len(child.text().strip()) > 6:
+                    if len(child.text().strip()) > 14 and child.minimumWidth() == 0:
                         child.setWordWrap(True)
-                        child.setMinimumWidth(0)
                 elif isinstance(child, QComboBox):
                     child.setMinimumWidth(0)
                     child.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
                     child.setMinimumContentsLength(6)
                     sp = child.sizePolicy()
-                    sp.setHorizontalPolicy(QSizePolicy.Policy.Ignored)
+                    sp.setHorizontalPolicy(QSizePolicy.Policy.Expanding)
                     child.setSizePolicy(sp)
-                elif isinstance(child, (QLineEdit, QSpinBox, QCheckBox, QPushButton)):
-                    child.setMinimumWidth(0)
-                    sp = child.sizePolicy()
-                    sp.setHorizontalPolicy(QSizePolicy.Policy.Ignored)
-                    child.setSizePolicy(sp)
+                elif isinstance(child, QLineEdit):
+                    if child.maximumWidth() > 500:
+                        child.setMinimumWidth(0)
             w.setMinimumWidth(0)
-            sa = _ResponsiveTabScroll()
+            w.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+            sa = QScrollArea()
             sa.setWidgetResizable(True)
             sa.setFrameShape(QFrame.Shape.NoFrame)
             sa.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -4603,10 +5672,10 @@ class HermesDesktop(QMainWindow):
             sa.setWidget(w)
             return sa
 
-        self.create_subtabs.addTab(wrap_tab(t1_widget), "1. Format && Kamera")
-        self.create_subtabs.addTab(wrap_tab(t2_widget), "2. Subtitle && Hook")
-        self.create_subtabs.addTab(wrap_tab(t3_widget), "3. Audio && Musik")
-        self.create_subtabs.addTab(wrap_tab(t4_widget), "4. AI && Durasi")
+        self.create_subtabs.addTab(wrap_tab(t_mode_widget), "1 · Mode && Potongan")
+        self.create_subtabs.addTab(wrap_tab(t_frame_widget), "2 · Rasio && Framing")
+        self.create_subtabs.addTab(wrap_tab(t_sub_widget), "3 · Subtitle && Lirik")
+        self.create_subtabs.addTab(wrap_tab(t_audio_widget), "4 · Audio && Overlay")
         self.create_subtabs.tabBarClicked.connect(self.on_subtab_bar_clicked)
         self.create_subtabs.currentChanged.connect(self.on_subtab_changed)
 
@@ -4615,16 +5684,16 @@ class HermesDesktop(QMainWindow):
         self.progress_panel = QFrame()
         self.progress_panel.setObjectName("progressCard")
         self.progress_panel.setStyleSheet(
-            "QFrame#progressCard { background: #0F172A; border: 1px solid #2563EB; border-radius: 12px; padding: 14px; margin-top: 6px; }"
+            "QFrame#progressCard { background: #09090E; border: 1px solid #2563EB; border-radius: 12px; padding: 12px; margin-top: 4px; }"
         )
         prog_layout = QVBoxLayout(self.progress_panel)
-        prog_layout.setSpacing(8)
+        prog_layout.setSpacing(6)
 
         total_header = QHBoxLayout()
         self.status_label = QLabel("Menyiapkan proses...")
-        self.status_label.setStyleSheet("font-weight: 700; font-size: 13px; color: #F8FAFC; border: 0; background: transparent;")
+        self.status_label.setStyleSheet("font-weight: 700; font-size: 12px; color: #F4F4F5; border: 0; background: transparent;")
         self.total_percent_label = QLabel("0%")
-        self.total_percent_label.setStyleSheet("font-weight: 800; font-size: 14px; color: #38BDF8; border: 0; background: transparent;")
+        self.total_percent_label.setStyleSheet("font-family: 'Cascadia Mono', monospace; font-weight: 800; font-size: 13px; color: #60A5FA; border: 0; background: transparent;")
         total_header.addWidget(self.status_label, 1)
         total_header.addWidget(self.total_percent_label)
         prog_layout.addLayout(total_header)
@@ -4632,18 +5701,18 @@ class HermesDesktop(QMainWindow):
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
         self.progress.setTextVisible(False)
-        self.progress.setFixedHeight(8)
+        self.progress.setFixedHeight(7)
         self.progress.setStyleSheet(
-            "QProgressBar { background: #1E293B; border-radius: 4px; border: 0; } "
-            "QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563EB, stop:1 #38BDF8); border-radius: 4px; }"
+            "QProgressBar { background: #181822; border-radius: 3px; border: 0; } "
+            "QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563EB, stop:1 #38BDF8); border-radius: 3px; }"
         )
         prog_layout.addWidget(self.progress)
 
         sub_header = QHBoxLayout()
         self.sub_status_label = QLabel("Detail tahapan...")
-        self.sub_status_label.setStyleSheet("font-size: 12px; color: #94A3B8; border: 0; background: transparent;")
+        self.sub_status_label.setStyleSheet("font-size: 11px; color: #A1A1AA; border: 0; background: transparent;")
         self.sub_percent_label = QLabel("0%")
-        self.sub_percent_label.setStyleSheet("font-weight: 700; font-size: 12px; color: #10B981; border: 0; background: transparent;")
+        self.sub_percent_label.setStyleSheet("font-family: 'Cascadia Mono', monospace; font-weight: 700; font-size: 11px; color: #34D399; border: 0; background: transparent;")
         sub_header.addWidget(self.sub_status_label, 1)
         sub_header.addWidget(self.sub_percent_label)
         prog_layout.addLayout(sub_header)
@@ -4651,50 +5720,50 @@ class HermesDesktop(QMainWindow):
         self.sub_progress = QProgressBar()
         self.sub_progress.setRange(0, 100)
         self.sub_progress.setTextVisible(False)
-        self.sub_progress.setFixedHeight(6)
+        self.sub_progress.setFixedHeight(5)
         self.sub_progress.setStyleSheet(
-            "QProgressBar { background: #1E293B; border-radius: 3px; border: 0; } "
-            "QProgressBar::chunk { background: #10B981; border-radius: 3px; }"
+            "QProgressBar { background: #181822; border-radius: 2px; border: 0; } "
+            "QProgressBar::chunk { background: #10B981; border-radius: 2px; }"
         )
         prog_layout.addWidget(self.sub_progress)
         self.progress_panel.setVisible(False)
         left_outer_layout.addWidget(self.progress_panel)
 
         action_row = QHBoxLayout()
-        action_row.setSpacing(12)
-        action_row.setContentsMargins(0, 4, 0, 0)
+        action_row.setSpacing(10)
+        action_row.setContentsMargins(0, 2, 0, 0)
 
-        btn_back_tab0 = QPushButton("← Pilih Video Lain")
-        btn_back_tab0.setMinimumHeight(44)
-        btn_back_tab0.setMinimumWidth(140)
+        btn_back_tab0 = QPushButton("← Pilih Video")
+        btn_back_tab0.setFixedHeight(42)
+        btn_back_tab0.setMinimumWidth(124)
         btn_back_tab0.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_back_tab0.setStyleSheet(
-            "QPushButton { background: #111827; border: 1px solid #334155; border-radius: 10px; "
-            "color: #E2E8F0; font-size: 13px; font-weight: 600; padding: 8px 16px; } "
-            "QPushButton:hover { background: #1E293B; border-color: #3B82F6; color: #FFFFFF; }"
+            "QPushButton { background: #0C0C12; border: 1px solid #242432; border-radius: 10px; "
+            "color: #E4E4E7; font-size: 12px; font-weight: 700; padding: 0 14px; } "
+            "QPushButton:hover { background: #161622; border-color: #3B82F6; color: #FFFFFF; }"
         )
         btn_back_tab0.clicked.connect(lambda: self.switch_tab(1))
         action_row.addWidget(btn_back_tab0)
 
-        self.start_button = QPushButton("🚀 Analisis && Buat Klip Sekarang")
+        self.start_button = QPushButton("Mulai Analisis && Buat Klip AI")
         self.start_button.setObjectName("primary")
-        self.start_button.setMinimumHeight(44)
+        self.start_button.setFixedHeight(42)
         self.start_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.start_button.setStyleSheet(
-            "QPushButton#primary { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563EB, stop:1 #4F46E5); "
-            "border: 1px solid #60A5FA; border-radius: 10px; color: #FFFFFF; font-size: 14px; font-weight: 800; padding: 8px 24px; } "
-            "QPushButton#primary:hover { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1D4ED8, stop:1 #4338CA); }"
+            "QPushButton#primary { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563EB, stop:1 #1D4ED8); "
+            "border: 1px solid #60A5FA; border-radius: 10px; color: #FFFFFF; font-size: 13px; font-weight: 800; padding: 0 22px; } "
+            "QPushButton#primary:hover { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3B82F6, stop:1 #2563EB); }"
         )
         self.start_button.clicked.connect(self.start_process)
         action_row.addWidget(self.start_button, 1)
 
-        self.cancel_button = QPushButton("⏹ Batalkan Proses && Ubah Pengaturan")
-        self.cancel_button.setMinimumHeight(44)
+        self.cancel_button = QPushButton("Batalkan Proses")
+        self.cancel_button.setFixedHeight(42)
         self.cancel_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.cancel_button.setStyleSheet(
-            "QPushButton { background: #3B1219; border: 1px solid #EF4444; border-radius: 10px; "
-            "color: #FCA5A5; font-size: 13px; font-weight: 700; padding: 8px 20px; } "
-            "QPushButton:hover { background: #7F1D1D; color: #FFFFFF; }"
+            "QPushButton { background: #2A0A10; border: 1px solid #EF4444; border-radius: 10px; "
+            "color: #FCA5A5; font-size: 12px; font-weight: 700; padding: 0 18px; } "
+            "QPushButton:hover { background: #450A0A; color: #FFFFFF; }"
         )
         self.cancel_button.clicked.connect(self.cancel_current_process)
         self.cancel_button.setVisible(False)
@@ -4703,26 +5772,31 @@ class HermesDesktop(QMainWindow):
 
         self.create_splitter.addWidget(left_column_container)
 
-        # RIGHT COLUMN: PRATINJAU VIDEO REAL-TIME (USER POV)
+        # RIGHT COLUMN: PRATINJAU VIDEO REAL-TIME (PURE BLACK MONITOR)
         right_container = QFrame()
+        self.studio_right_container = right_container
         right_container.setObjectName("studioPreviewCard")
-        right_container.setMinimumWidth(310)
+        right_container.setMinimumWidth(360)
+        right_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         right_container.setStyleSheet(
-            "QFrame#studioPreviewCard { background: #0B101C; border: 1px solid #1E293B; border-radius: 14px; }"
+            "QFrame#studioPreviewCard { background: #060609; border: 1px solid #1C1C26; border-radius: 14px; }"
         )
         right_col = QVBoxLayout(right_container)
         right_col.setContentsMargins(14, 12, 14, 12)
         right_col.setSpacing(8)
 
         preview_header_row = QHBoxLayout()
-        preview_title = QLabel("📱 Studio Preview (User POV)")
-        preview_title.setStyleSheet("font-size: 14px; font-weight: 800; color: #F8FAFC; border: 0; background: transparent;")
+        live_dot = QLabel("●")
+        live_dot.setStyleSheet("color: #10B981; font-size: 11px; border: 0; background: transparent;")
+        preview_header_row.addWidget(live_dot)
+        preview_title = QLabel("Pratinjau Real-Time (POV Hasil)")
+        preview_title.setStyleSheet("font-size: 13px; font-weight: 800; color: #FAFAFA; border: 0; background: transparent;")
         preview_header_row.addWidget(preview_title)
         preview_header_row.addStretch()
 
-        self.preview_layout_badge = QLabel("9:16 · Auto-Framing AI")
+        self.preview_layout_badge = QLabel("9:16 · Adaptif AI")
         self.preview_layout_badge.setStyleSheet(
-            "background: #172554; color: #7DD3FC; border: 1px solid #2563EB; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: 700;"
+            "background: #111827; color: #93C5FD; border: 1px solid #2563EB; border-radius: 6px; padding: 3px 9px; font-size: 10px; font-weight: 700;"
         )
         preview_header_row.addWidget(self.preview_layout_badge)
         right_col.addLayout(preview_header_row)
@@ -4735,7 +5809,7 @@ class HermesDesktop(QMainWindow):
         self.bgm_preview_player = QMediaPlayer(self)
         self.bgm_preview_audio = QAudioOutput(self)
         self.bgm_preview_player.setAudioOutput(self.bgm_preview_audio)
-        self.bgm_preview_audio.setVolume(0.18)
+        self.bgm_preview_audio.setVolume(0.08)
 
         preview_box = QWidget()
         preview_box.setStyleSheet("background: transparent; border: 0;")
@@ -4746,6 +5820,9 @@ class HermesDesktop(QMainWindow):
         preview_frame = QFrame()
         self.create_preview_frame = preview_frame
         preview_frame.setObjectName("previewCanvas")
+        preview_frame.setStyleSheet(
+            "QFrame#previewCanvas { background: #000000; border: 1px solid #272733; border-radius: 10px; }"
+        )
         preview_stack = QGridLayout(preview_frame)
         self.create_preview_stack = preview_stack
         preview_stack.setContentsMargins(0, 0, 0, 0)
@@ -4775,7 +5852,7 @@ class HermesDesktop(QMainWindow):
         self.preview_facecam_main = QLabel("VIDEO UTAMA")
         self.preview_facecam_main.setVisible(False)
 
-        self.preview_subtitle_sample = DraggableSubtitleLabel("Contoh subtitle akan tampil di sini", self.create_preview_video)
+        self.preview_subtitle_sample = DraggableSubtitleLabel("Contoh subtitle tampil di sini", self.create_preview_video)
         self.preview_subtitle_sample.setObjectName("previewSubtitle")
         self.preview_subtitle_sample.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_subtitle_sample.moved.connect(self.on_free_subtitle_moved)
@@ -4784,23 +5861,23 @@ class HermesDesktop(QMainWindow):
         self.preview_hook_banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_hook_banner.setWordWrap(True)
         self.preview_hook_banner.setCursor(Qt.CursorShape.OpenHandCursor)
-        self.preview_hook_banner.setToolTip("Tarik & geser kotak Hook ini ke posisi mana saja di layar")
+        self.preview_hook_banner.setToolTip("Geser kotak judul ke posisi mana saja di kanvas")
         self.preview_hook_banner.moved.connect(self.on_free_hook_banner_moved)
         self.preview_hook_banner.setVisible(False)
 
         self.preview_watermark_label = DraggableSubtitleLabel("", self.create_preview_video)
         self.preview_watermark_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_watermark_label.setCursor(Qt.CursorShape.OpenHandCursor)
-        self.preview_watermark_label.setToolTip("Tarik & geser Watermark ini ke posisi mana saja di layar")
+        self.preview_watermark_label.setToolTip("Geser watermark ke posisi mana saja di kanvas")
         self.preview_watermark_label.moved.connect(self.on_free_watermark_moved)
         self.preview_watermark_label.setVisible(False)
 
         self.create_preview_video.videoRectChanged.connect(lambda _: self.facecam_box.update_geometry_from_parent())
         self.facecam_box.cropChanged.connect(lambda *_: setattr(self, "facecam_box_custom_dragged", True))
 
-        self.preview_placeholder = QLabel("🎬 Muat atau putar video untuk melihat pratinjau langsung.")
+        self.preview_placeholder = QLabel("Pilih video pada langkah 1 untuk melihat pratinjau langsung")
         self.preview_placeholder.setWordWrap(True)
-        self.preview_placeholder.setStyleSheet("color: #94A3B8; font-size: 12px; font-weight: 600; padding: 12px;")
+        self.preview_placeholder.setStyleSheet("color: #71717A; font-size: 12px; font-weight: 600; padding: 16px; background: transparent; border: 0;")
         self.preview_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         preview_stack.addWidget(self.preview_placeholder, 0, 0, Qt.AlignmentFlag.AlignCenter)
 
@@ -4811,12 +5888,12 @@ class HermesDesktop(QMainWindow):
         self.preview_summary = QLabel("")
         self.preview_summary.setWordWrap(True)
         self.preview_summary.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview_summary.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: 500; border: 0; background: transparent;")
+        self.preview_summary.setStyleSheet("color: #A1A1AA; font-size: 11px; font-weight: 500; border: 0; background: transparent;")
         right_col.addWidget(self.preview_summary)
 
         self.create_seek_slider = WaveformScrubber()
         self.create_seek_slider.setRange(0, 0)
-        self.create_seek_slider.setFixedHeight(26)
+        self.create_seek_slider.setFixedHeight(28)
         self.create_seek_slider.setEnabled(False)
         self.create_seek_slider.sliderMoved.connect(self.seek_create_preview)
         self.create_preview_player.positionChanged.connect(self.update_create_seek)
@@ -4824,15 +5901,17 @@ class HermesDesktop(QMainWindow):
         right_col.addWidget(self.create_seek_slider)
 
         controls_toolbar = QHBoxLayout()
-        controls_toolbar.setSpacing(8)
+        controls_toolbar.setSpacing(6)
         ctrl_btn_style = (
-            "QPushButton { background: #141C2B; border: 1px solid #28374F; border-radius: 8px; color: #CBD5E1; padding: 0px; } "
-            "QPushButton:hover { background: #1E293B; border-color: #3B82F6; color: #FFFFFF; } "
-            "QPushButton:pressed { background: #0F1522; }"
+            "QPushButton { background: #0E0E15; border: 1px solid #222230; border-radius: 8px; color: #D4D4D8; padding: 0px; } "
+            "QPushButton:hover { background: #181824; border-color: #3B82F6; color: #FFFFFF; } "
+            "QPushButton:pressed { background: #09090E; }"
         )
 
         self.create_preview_time = QLabel("00:00 / 00:00")
-        self.create_preview_time.setStyleSheet("font-size: 12px; font-weight: 700; color: #38BDF8; background: transparent; border: 0;")
+        self.create_preview_time.setStyleSheet(
+            "font-family: 'Cascadia Mono', 'Consolas', monospace; font-size: 11px; font-weight: 700; color: #60A5FA; background: transparent; border: 0;"
+        )
         controls_toolbar.addWidget(self.create_preview_time)
         self.create_preview_pos_time = QLabel("")
         self.create_preview_pos_time.setVisible(False)
@@ -4840,36 +5919,36 @@ class HermesDesktop(QMainWindow):
         controls_toolbar.addStretch()
 
         btn_prev = QPushButton()
-        btn_prev.setIcon(make_vector_icon("prev", "#CBD5E1", 18))
-        btn_prev.setToolTip("Ulang dari Awal Video (00:00)")
-        btn_prev.setFixedSize(34, 34)
+        btn_prev.setIcon(make_vector_icon("prev", "#D4D4D8", 16))
+        btn_prev.setToolTip("Kembali ke Awal (00:00)")
+        btn_prev.setFixedSize(32, 32)
         btn_prev.setStyleSheet(ctrl_btn_style)
         btn_prev.clicked.connect(lambda: self.seek_create_preview(0))
         controls_toolbar.addWidget(btn_prev)
 
         btn_rew = QPushButton()
-        btn_rew.setIcon(make_vector_icon("rewind", "#CBD5E1", 18))
+        btn_rew.setIcon(make_vector_icon("rewind", "#D4D4D8", 16))
         btn_rew.setToolTip("Mundur 5 Detik")
-        btn_rew.setFixedSize(34, 34)
+        btn_rew.setFixedSize(32, 32)
         btn_rew.setStyleSheet(ctrl_btn_style)
         btn_rew.clicked.connect(lambda: self.seek_create_preview(max(0, self.create_preview_player.position() - 5000)))
         controls_toolbar.addWidget(btn_rew)
 
         self.create_preview_play = QPushButton()
-        self.create_preview_play.setIcon(make_vector_icon("play", "#FFFFFF", 20))
-        self.create_preview_play.setToolTip("Putar / Jeda Pratinjau Video")
-        self.create_preview_play.setFixedSize(42, 42)
+        self.create_preview_play.setIcon(make_vector_icon("play", "#FFFFFF", 18))
+        self.create_preview_play.setToolTip("Putar / Jeda Pratinjau")
+        self.create_preview_play.setFixedSize(40, 40)
         self.create_preview_play.setStyleSheet(
-            "QPushButton { background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #2563EB, stop:1 #3B82F6); border-radius: 21px; border: 0; padding: 0px; } "
-            "QPushButton:hover { background: #1D4ED8; } QPushButton:pressed { background: #1E40AF; }"
+            "QPushButton { background: #2563EB; border-radius: 20px; border: 1px solid #60A5FA; padding: 0px; } "
+            "QPushButton:hover { background: #3B82F6; } QPushButton:pressed { background: #1D4ED8; }"
         )
         self.create_preview_play.clicked.connect(self.toggle_create_preview)
         controls_toolbar.addWidget(self.create_preview_play)
 
         btn_ff = QPushButton()
-        btn_ff.setIcon(make_vector_icon("forward", "#CBD5E1", 18))
+        btn_ff.setIcon(make_vector_icon("forward", "#D4D4D8", 16))
         btn_ff.setToolTip("Maju 5 Detik")
-        btn_ff.setFixedSize(34, 34)
+        btn_ff.setFixedSize(32, 32)
         btn_ff.setStyleSheet(ctrl_btn_style)
         btn_ff.clicked.connect(
             lambda: self.seek_create_preview(
@@ -4879,18 +5958,18 @@ class HermesDesktop(QMainWindow):
         controls_toolbar.addWidget(btn_ff)
 
         btn_next = QPushButton()
-        btn_next.setIcon(make_vector_icon("next", "#CBD5E1", 18))
+        btn_next.setIcon(make_vector_icon("next", "#D4D4D8", 16))
         btn_next.setToolTip("Lompat ke Akhir Video")
-        btn_next.setFixedSize(34, 34)
+        btn_next.setFixedSize(32, 32)
         btn_next.setStyleSheet(ctrl_btn_style)
         btn_next.clicked.connect(lambda: self.seek_create_preview(self.create_preview_player.duration()))
         controls_toolbar.addWidget(btn_next)
         controls_toolbar.addStretch()
 
         self.create_preview_mute_btn = QPushButton()
-        self.create_preview_mute_btn.setIcon(make_vector_icon("volume_on", "#CBD5E1", 18))
+        self.create_preview_mute_btn.setIcon(make_vector_icon("volume_on", "#D4D4D8", 16))
         self.create_preview_mute_btn.setToolTip("Bisukan / Aktifkan Suara")
-        self.create_preview_mute_btn.setFixedSize(34, 34)
+        self.create_preview_mute_btn.setFixedSize(32, 32)
         self.create_preview_mute_btn.setStyleSheet(ctrl_btn_style)
         self.create_preview_mute_btn.clicked.connect(self.toggle_create_mute)
         controls_toolbar.addWidget(self.create_preview_mute_btn)
@@ -4915,16 +5994,23 @@ class HermesDesktop(QMainWindow):
                 control.currentIndexChanged.connect(self.update_create_preview)
 
         self.create_splitter.addWidget(right_container)
-        self.create_splitter.setStretchFactor(0, 7)
-        self.create_splitter.setStretchFactor(1, 4)
-        self.create_splitter.setSizes([720, 440])
+        self.create_splitter.setCollapsible(0, False)
+        self.create_splitter.setCollapsible(1, False)
+        self.create_splitter.setStretchFactor(0, 1)
+        self.create_splitter.setStretchFactor(1, 1)
+        self.create_splitter.setSizes([640, 540])
         self.create_splitter.splitterMoved.connect(lambda pos, idx: self.update_create_preview())
 
         self.settings_group = settings
         self.subtitle_group = subtitle_group
         self.ai_group = ai_group
         self.clip_stage_widgets = [self.create_subtabs, self.start_button, preview_frame]
-        self.on_unified_format_changed()
+        self.load_studio_hook_settings()
+        self.update_subtitle_color_chip()
+        self.update_subtitle_controls()
+        self.set_framing_mode("auto")
+        self.set_clipping_mode_quick("auto")
+        self.update_profile_hint()
         return page
 
     def build_video_tab(self) -> QWidget:
@@ -4945,53 +6031,57 @@ class HermesDesktop(QMainWindow):
         left_col = QVBoxLayout()
         left_col.setSpacing(14)
 
-        step_title = QLabel("STEP 1: MASUKKAN VIDEO")
-        step_title.setStyleSheet("font-size: 15px; font-weight: 700; color: #FFFFFF; letter-spacing: 0.5px;")
+        step_title = QLabel("Pilih Video Sumber")
+        step_title.setStyleSheet("font-size: 18px; font-weight: 800; color: #FAFAFA; letter-spacing: 0.2px;")
         left_col.addWidget(step_title)
+
+        step_sub = QLabel("Tarik berkas video lokal (MP4/MKV/MOV) atau tempel tautan YouTube / TikTok / Reels.")
+        step_sub.setStyleSheet("font-size: 12px; color: #71717A; margin-top: -6px; margin-bottom: 4px;")
+        left_col.addWidget(step_sub)
 
         self.drop_zone = DropZoneWidget()
         self.drop_zone.fileDropped.connect(self.on_file_dropped)
         self.drop_zone.clicked.connect(self.choose_local_video)
         left_col.addWidget(self.drop_zone)
 
-        lbl_url = QLabel("Link video")
-        lbl_url.setStyleSheet("font-size: 13px; font-weight: 500; color: #CBD5E1;")
+        lbl_url = QLabel("Tautan Video Online")
+        lbl_url.setStyleSheet("font-size: 12px; font-weight: 700; color: #D4D4D8;")
         left_col.addWidget(lbl_url)
 
         self.url_edit = QLineEdit()
-        self.url_edit.setPlaceholderText("https://www.youtube.com/watch?v=...")
-        self.url_edit.setMinimumHeight(42)
+        self.url_edit.setPlaceholderText("Tempel tautan YouTube, Shorts, TikTok, atau Instagram...")
+        self.url_edit.setMinimumHeight(40)
         left_col.addWidget(self.url_edit)
 
         url_action_row = QHBoxLayout()
         url_action_row.setSpacing(12)
 
         self.quality_combo = self.combo([
-            ("Kualitas unduhan: 1080p - Full HD", "1080"),
-            ("Kualitas unduhan: 720p - HD", "720"),
-            ("Kualitas unduhan: 480p", "480"),
-            ("Kualitas unduhan: 360p - Hemat", "360"),
-            ("Kualitas unduhan: Terbaik (hingga 4K)", "best"),
+            ("Kualitas 1080p · Full HD (Disarankan)", "1080"),
+            ("Kualitas 720p · HD Cepat", "720"),
+            ("Kualitas 480p · Ringan", "480"),
+            ("Kualitas 360p · Hemat Kuota", "360"),
+            ("Kualitas Asli Terbaik (Hingga 4K)", "best"),
         ], 0)
-        self.quality_combo.setMinimumHeight(42)
+        self.quality_combo.setMinimumHeight(40)
         url_action_row.addWidget(self.quality_combo, 1)
 
-        self.download_button = QPushButton("Unduh video")
+        self.download_button = QPushButton("Unduh Video")
         self.download_button.setObjectName("primary")
-        self.download_button.setMinimumHeight(42)
+        self.download_button.setMinimumHeight(40)
         self.download_button.setStyleSheet("font-weight: 700; padding: 0 24px;")
         self.download_button.clicked.connect(self.start_download)
         url_action_row.addWidget(self.download_button)
         left_col.addLayout(url_action_row)
 
-        self.local_file_button = QPushButton("Pilih File Lokal...")
+        self.local_file_button = QPushButton("Pilih Berkas Lokal...")
         self.local_file_button.setVisible(False)
         self.local_file_button.clicked.connect(self.choose_local_video)
 
         self.dl_progress_card = QFrame()
         self.dl_progress_card.setObjectName("dlProgressCard")
         self.dl_progress_card.setStyleSheet(
-            "QFrame#dlProgressCard { background: #0d121c; border: 1px solid #1e293b; border-radius: 10px; padding: 12px; margin-top: 10px; }"
+            "QFrame#dlProgressCard { background: #09090E; border: 1px solid #1C1C26; border-radius: 11px; padding: 12px; margin-top: 10px; }"
         )
         dl_card_layout = QVBoxLayout(self.dl_progress_card)
         dl_card_layout.setContentsMargins(14, 12, 14, 12)
@@ -4999,9 +6089,9 @@ class HermesDesktop(QMainWindow):
 
         dl_header = QHBoxLayout()
         self.dl_status_label = QLabel("Mengunduh video sumber...")
-        self.dl_status_label.setStyleSheet("font-weight: 600; font-size: 13px; color: #f1f5f9; background: transparent; border: 0;")
+        self.dl_status_label.setStyleSheet("font-weight: 700; font-size: 13px; color: #FAFAFA; background: transparent; border: 0;")
         self.dl_percent_label = QLabel("0%")
-        self.dl_percent_label.setStyleSheet("font-weight: 700; font-size: 13px; color: #38bdf8; background: transparent; border: 0;")
+        self.dl_percent_label.setStyleSheet("font-weight: 800; font-size: 13px; color: #38BDF8; background: transparent; border: 0;")
         dl_header.addWidget(self.dl_status_label, 1)
         dl_header.addWidget(self.dl_percent_label)
         dl_card_layout.addLayout(dl_header)
@@ -5012,13 +6102,13 @@ class HermesDesktop(QMainWindow):
         self.dl_progress_bar.setTextVisible(False)
         self.dl_progress_bar.setFixedHeight(8)
         self.dl_progress_bar.setStyleSheet(
-            "QProgressBar { background: #1e293b; border-radius: 4px; border: 0; } "
-            "QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284c7, stop:1 #38bdf8); border-radius: 4px; }"
+            "QProgressBar { background: #14141E; border-radius: 4px; border: 0; } "
+            "QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563EB, stop:1 #38BDF8); border-radius: 4px; }"
         )
         dl_card_layout.addWidget(self.dl_progress_bar)
 
-        self.dl_detail_label = QLabel("Menyiapkan download...")
-        self.dl_detail_label.setStyleSheet("font-size: 11px; font-weight: 500; color: #94a3b8; background: transparent; border: 0;")
+        self.dl_detail_label = QLabel("Menyiapkan unduhan...")
+        self.dl_detail_label.setStyleSheet("font-size: 11px; font-weight: 500; color: #71717A; background: transparent; border: 0;")
         dl_card_layout.addWidget(self.dl_detail_label)
 
         self.dl_progress_card.setVisible(False)
@@ -5201,36 +6291,88 @@ class HermesDesktop(QMainWindow):
         self.url_edit.setText(str(path))
         self.show_clip_stage(str(path), f"Video siap digunakan · {title}")
 
+    def ensure_splitter_balanced(self) -> None:
+        if not hasattr(self, "create_splitter"):
+            return
+        total_w = self.create_splitter.width()
+        if total_w < 500:
+            total_w = max(500, self.width() - 40)
+        left_w = int(total_w * 0.52)
+        right_w = max(360, total_w - left_w)
+        self.create_splitter.setSizes([left_w, right_w])
+
     def build_tutorial_tab(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(28, 24, 28, 24)
-        layout.setSpacing(12)
-        eyebrow = QLabel("PUSAT INFORMASI, PANDUAN LENGKAP & DOKUMENTASI")
+        layout.setContentsMargins(28, 20, 28, 20)
+        layout.setSpacing(10)
+        eyebrow = QLabel("PANDUAN LENGKAP PENGGUNAAN")
         eyebrow.setObjectName("eyebrow")
         layout.addWidget(eyebrow)
-        title = QLabel("Panduan Penggunaan & Pusat Informasi ENCLip")
+        title = QLabel("Panduan Penggunaan ENCLip Studio")
         title.setObjectName("title")
         layout.addWidget(title)
         content = QTextEdit()
         content.setReadOnly(True)
+        content.setStyleSheet(
+            "QTextEdit { background: #07070C; border: 1px solid #1E1E2A; border-radius: 12px; padding: 16px; color: #E4E4E7; }"
+        )
         content.setHtml(
-            "<div style='font-family: Segoe UI, Arial, sans-serif; line-height: 1.6; color: #CBD5E1;'>"
-            "<h2 style='color: #60A5FA; margin-top: 0;'>1. Panduan Cepat (3 Langkah Mudah)</h2>"
-            "<ol>"
-            "<li><b>Setup Lingkungan (Tab Setup):</b> Pastikan FFmpeg, Whisper, yt-dlp, dan Gemini API Key aktif.</li>"
-            "<li><b>Masukkan Video (Tab Video):</b> Unduh dari link YouTube atau seret file video lokal ke aplikasi.</li>"
-            "<li><b>Atur & Render (Tab Buat clip):</b> Pilih tata letak <i>Otomatis Framing Wajah AI</i> dan klik <b>Mulai Render Video</b>.</li>"
+            "<div style='font-family: \"Segoe UI Variable Text\", \"Segoe UI\", Arial, sans-serif; line-height: 1.6; color: #D4D4D8; font-size: 13px;'>"
+            "<div style='background: #0B132B; border: 1px solid #1D4ED8; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;'>"
+            "<b style='color: #60A5FA; font-size: 14px;'>🔑 Cara Mendapatkan Google Gemini API Key (100% Gratis &amp; Resmi)</b><br>"
+            "<span style='color: #94A3B8; font-size: 12px;'>Gemini API digunakan untuk analisis momen viral otomatis dan penyusunan judul serta deskripsi. Google menyediakan kuota gratis yang sangat melimpah tanpa perlu kartu kredit.</span>"
+            "<ol style='margin-top: 8px; margin-bottom: 4px; padding-left: 20px; line-height: 1.7;'>"
+            "<li>Buka browser Anda dan kunjungi situs resmi: <b style='color: #38BDF8;'>https://aistudio.google.com</b></li>"
+            "<li>Login menggunakan akun Google / Gmail Anda.</li>"
+            "<li>Klik tombol biru <b>'Get API key'</b> (di panel menu sebelah kiri) atau <b>'Create API key'</b>.</li>"
+            "<li>Pilih opsi <b>'Create API key in new project'</b>.</li>"
+            "<li>Google akan membuat kode API Key unik. Klik tombol <b>Copy</b> untuk menyalin kode tersebut.</li>"
+            "<li>Buka ENCLip Studio → masuk ke tab <b>Studio Klip</b> (pada kolom <i>Gemini API Key</i>) atau buka menu <b>● Sistem</b> di pojok kanan atas.</li>"
+            "<li>Tempelkan (Paste) kode API Key Anda ke kolom yang tersedia, lalu klik <b>Uji Koneksi</b>. Status akan berubah hijau: <b style='color: #34D399;'>Terhubung (Gemini Aktif)</b>. Kunci otomatis tersimpan secara aman di komputer Anda.</li>"
             "</ol>"
-            "<h2 style='color: #60A5FA;'>2. 100% Gemini Vision AI Camera-Director</h2>"
-            "<p>Sistem mendeteksi perpindahan angle kamera secara otomatis dan mengenali <b>hanya pembicara manusia hidup</b> "
-            "(mengabaikan radio, mikrofon, atau dekorasi meja) dengan 5 skenario tata letak pintar (1 orang tengah penuh, "
-            "2 orang atas-bawah, 3 orang grup/seimbang, dan 4 orang grup 2+2).</p>"
-            "<h2 style='color: #60A5FA;'>3. Siklus Tanya-Jawab Utuh (Full Context Auto-Heal)</h2>"
-            "<p>Setiap klip dikunci mulai dari awal kalimat pertanyaan/topik pembuka hingga akhir penjelasan narasumber.</p>"
+            "</div>"
+            "<h3 style='color: #38BDF8; margin-top: 10px; margin-bottom: 6px;'>🚀 Alur 4 Tahap Pembuatan Klip</h3>"
+            "<ol style='margin-top: 4px; padding-left: 20px; line-height: 1.65;'>"
+            "<li><b>1 · Pilih Video:</b> Masukkan video dari komputer Anda (drag &amp; drop file MP4/MKV/MOV) atau unduh langsung dari tautan YouTube/TikTok.</li>"
+            "<li><b>2 · Studio Klip:</b> Atur metode pemotongan, rasio layar (9:16 vertikal), gaya font subtitle, dan musik latar. Pratinjau video di sebelah kanan langsung mencerminkan setiap perubahan secara real-time.</li>"
+            "<li><b>3 · Review &amp; Trim:</b> Tinjau klip yang berhasil dibuat, sesuaikan batas detik awal/akhir pada garis waktu jika diperlukan, dan edit kata pada subtitle sebelum disimpan.</li>"
+            "<li><b>4 · Hasil Ekspor:</b> Tonton hasil video akhir beresolusi tinggi, salin caption otomatis, atau buka foldernya untuk diunggah ke TikTok, Instagram Reels, atau YouTube Shorts.</li>"
+            "</ol>"
+            "<hr style='border: 0; border-top: 1px solid #1F1F2B; margin: 14px 0;'>"
+            "<h3 style='color: #60A5FA; margin-bottom: 6px;'>✂️ Pilihan Metode Pemotongan Video</h3>"
+            "<ul style='padding-left: 20px; line-height: 1.65;'>"
+            "<li><b style='color: #93C5FD;'>Mode Otomatis (3 Opsi Pemotongan):</b>"
+            "<ul>"
+            "<li><b>Otomatis AI (Momen Terbaik):</b> AI menganalisis transkrip pembicaraan dan lonjakan suara untuk menemukan potongan terbaik secara utuh tanpa kalimat terpotong.</li>"
+            "<li><b>Bagi Jumlah Klip:</b> Membagi durasi video secara rata menjadi sejumlah bagian (misal 5 atau 10 klip) tanpa memanggil AI.</li>"
+            "<li><b>Bagi Berdasarkan Durasi:</b> Memotong video secara berurutan setiap sekian detik yang Anda tentukan (misal setiap 60 detik).</li>"
+            "</ul></li>"
+            "<li><b style='color: #FBBF24;'>Clipping Manual Bebas (Multi-Segmen):</b>"
+            "<ul>"
+            "<li>Gunakan tombol <b>[ Ambil Waktu</b> dan <b>Ambil Waktu ]</b> saat memutar video di pratinjau kanan untuk menentukan awal dan akhir, lalu klik <b>+ Tambah Segmen</b>.</li>"
+            "<li>Anda bisa membuat banyak segmen sekaligus (#01, #02, #03...) atau klik <b>1 Video Utuh</b> untuk memproses seluruh video tanpa memotong.</li>"
+            "<li>Pada Mode Manual, mesin analisis momen AI otomatis dinonaktifkan sehingga hanya modul suara ke teks (transkripsi) yang bekerja membuat subtitle.</li>"
+            "</ul></li>"
+            "</ul>"
+            "<hr style='border: 0; border-top: 1px solid #1F1F2B; margin: 14px 0;'>"
+            "<h3 style='color: #34D399; margin-bottom: 6px;'>📐 Rasio Kanvas &amp; Framing Kamera</h3>"
+            "<ul style='padding-left: 20px; line-height: 1.65;'>"
+            "<li><b>Tanpa Framing:</b> Mempertahankan rasio dan resolusi asli video tanpa pemotongan maupun blur.</li>"
+            "<li><b>Framing Otomatis AI (9:16):</b> Kamera pintar adaptif yang otomatis mengikuti pembicara, membuat split screen 2 panel atas-bawah saat ada 2 pembicara, atau menambahkan blur sinematik halus pada video lanskap.</li>"
+            "<li><b>Framing Manual Bebas:</b> Pilih rasio (9:16, 16:9, 1:1, 4:5, 21:9, atau Rasio Kustom) serta geser posisi X, Y, dan perbesar skala zoom langsung di layar pratinjau.</li>"
+            "</ul>"
+            "<hr style='border: 0; border-top: 1px solid #1F1F2B; margin: 14px 0;'>"
+            "<h3 style='color: #F59E0B; margin-bottom: 6px;'>💬 Subtitle, Audio &amp; Proteksi Konten</h3>"
+            "<ul style='padding-left: 20px; line-height: 1.65;'>"
+            "<li><b>Gaya Desain Huruf (Dropdown):</b> Pilihan font modern yang nyaman di mata (Modern Bersih, CapCut Viral, Minimalis, dsb) yang dapat diatur bersamaan dengan posisi, ukuran, dan warna sorotan.</li>"
+            "<li><b>Terjemahan Lirik Lagu:</b> Fitur khusus untuk video musik/lagu yang dapat menerjemahkan lirik otomatis dan mengekspor file <code>.srt</code> atau <code>.lrc</code>.</li>"
+            "<li><b>Proteksi Anti-Klaim:</b> Opsi percepatan tempo halus 1.03x dan balik horizontal (mirror) untuk membantu video lolos deteksi otomatis hak cipta.</li>"
+            "<li><b>Area Aman HP (Safe Zone):</b> Menampilkan batas aman agar subtitle tidak tertutup oleh tombol navigasi TikTok, Reels, atau Shorts.</li>"
+            "</ul>"
             "</div>"
         )
-        layout.addWidget(content)
+        layout.addWidget(content, 1)
         return page
 
     def set_clipping_mode_quick(self, kind: str) -> None:
@@ -5245,6 +6387,8 @@ class HermesDesktop(QMainWindow):
                 idx = self.mode_combo.findData("smart")
                 if idx >= 0:
                     self.mode_combo.setCurrentIndex(idx)
+        if hasattr(self, "create_subtabs") and self.create_subtabs.currentIndex() != 0:
+            self.create_subtabs.setCurrentIndex(0)
         self.update_mode_settings()
 
     def grab_preview_time_for_manual(self, is_start: bool = True) -> None:
@@ -5264,15 +6408,18 @@ class HermesDesktop(QMainWindow):
         segs = getattr(self, "pre_manual_segments", [])
         if not segs:
             self.pre_manual_list.addItem(
-                "Belum ada rentang klip (Kosongkan jika ingin memotong manual di Timeline Review)"
+                "Belum ada segmen manual · Klik [ Ambil Waktu ] lalu + Tambah Segmen, atau lanjut ke Timeline Review"
             )
         else:
             for idx, item in enumerate(segs, start=1):
                 s_t = format_time(float(item.get("start", 0.0)))
                 e_t = format_time(float(item.get("end", 0.0)))
                 dur_t = max(0.0, float(item.get("end", 0.0)) - float(item.get("start", 0.0)))
-                ttl = str(item.get("title") or f"Klip Manual #{idx:02d}")
-                self.pre_manual_list.addItem(f"✂️ #{idx:02d} · {s_t} – {e_t} ({dur_t:.0f}s) · {ttl}")
+                ttl = str(item.get("title") or f"Segmen Manual #{idx:02d}")
+                self.pre_manual_list.addItem(f"#{idx:02d}   {s_t} → {e_t}  ({dur_t:.0f} dtk)   ·   {ttl}")
+        if hasattr(self, "create_seek_slider") and hasattr(self.create_seek_slider, "set_segments"):
+            is_man = hasattr(self, "mode_combo") and self.mode_combo.currentData() == "manual"
+            self.create_seek_slider.set_segments(segs if is_man else [])
         self.update_segment_estimate()
 
     def add_pre_manual_segment(self) -> None:
@@ -5297,11 +6444,17 @@ class HermesDesktop(QMainWindow):
         self.pre_manual_segments.append({
             "start": round(float(s_val), 2),
             "end": round(float(e_val), 2),
-            "title": ttl or f"Klip Manual #{idx:02d}",
+            "title": ttl or f"Segmen Manual #{idx:02d}",
         })
         if hasattr(self, "pre_manual_title_edit"):
             self.pre_manual_title_edit.clear()
+        if hasattr(self, "pre_manual_start_edit") and hasattr(self, "pre_manual_end_edit"):
+            next_end = min(self.source_duration, float(e_val) + 30.0) if self.source_duration > float(e_val) + 2.0 else float(e_val) + 30.0
+            self.pre_manual_start_edit.setText(format_time(float(e_val)))
+            self.pre_manual_end_edit.setText(format_time(next_end))
         self.refresh_pre_manual_list_ui()
+        if hasattr(self, "pre_manual_list") and self.pre_manual_segments:
+            self.pre_manual_list.setCurrentRow(len(self.pre_manual_segments) - 1)
 
     def add_full_video_manual_segment(self) -> None:
         end_sec = self.source_duration if self.source_duration > 0 else 600.0
@@ -5310,7 +6463,7 @@ class HermesDesktop(QMainWindow):
         self.pre_manual_segments = [{
             "start": 0.0,
             "end": round(max(1.0, float(end_sec)), 2),
-            "title": "Video Utuh (Tanpa Pemotongan)",
+            "title": "Video Utuh (Awal sampai Akhir)",
         }]
         if hasattr(self, "pre_manual_start_edit"):
             self.pre_manual_start_edit.setText("00:00")
@@ -5333,48 +6486,114 @@ class HermesDesktop(QMainWindow):
             return
         mode = self.mode_combo.currentData()
         is_manual = mode == "manual"
-        if hasattr(self, "btn_clip_mode_auto") and hasattr(self, "btn_clip_mode_manual"):
-            self.btn_clip_mode_auto.setStyleSheet(
-                "QPushButton { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1D4ED8, stop:1 #2563EB); "
-                "border: 1.5px solid #60A5FA; border-radius: 9px; color: #FFFFFF; font-size: 12px; font-weight: 800; padding: 8px 10px; }"
-                if not is_manual
-                else "QPushButton { background: #0B1120; border: 1px solid #1E293B; border-radius: 9px; "
-                "color: #94A3B8; font-size: 12px; font-weight: 700; padding: 8px 10px; } "
-                "QPushButton:hover { border-color: #3B82F6; color: #E2E8F0; }"
+        is_smart_ai = mode == "smart"
+        if hasattr(self, "top_clip_mode_cards"):
+            self.top_clip_mode_cards.set_value("manual" if is_manual else "auto", emit=False)
+        if hasattr(self, "auto_submode_widget"):
+            self.auto_submode_widget.setVisible(not is_manual)
+        if hasattr(self, "mode_group_box"):
+            self.mode_group_box.setTitle(
+                "Pemotongan Manual Multi-Segmen" if is_manual else "Pengaturan Pemotongan Mode Otomatis"
             )
-            self.btn_clip_mode_manual.setStyleSheet(
-                "QPushButton { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #B45309, stop:1 #D97706); "
-                "border: 1.5px solid #FBBF24; border-radius: 9px; color: #FFFFFF; font-size: 12px; font-weight: 800; padding: 8px 10px; }"
-                if is_manual
-                else "QPushButton { background: #0B1120; border: 1px solid #1E293B; border-radius: 9px; "
-                "color: #94A3B8; font-size: 12px; font-weight: 700; padding: 8px 10px; } "
-                "QPushButton:hover { border-color: #F59E0B; color: #E2E8F0; }"
-            )
+        if hasattr(self, "top_clip_mode_desc"):
+            if is_manual:
+                self.top_clip_mode_desc.setText(
+                    "<b>Mode Manual (Multi-Segmen):</b> Tandai waktu mulai & selesai bebas dari video. "
+                    "Mesin Analisis AI dimatikan — hanya <b>Suara ke Teks</b> yang aktif untuk membuat subtitle."
+                )
+                self.top_clip_mode_desc.setStyleSheet(
+                    "color: #FDE68A; background: #120E06; border: 1px solid #92400E; border-radius: 7px; padding: 6px 10px; font-size: 11px;"
+                )
+            elif mode == "split_count":
+                self.top_clip_mode_desc.setText(
+                    "<b>Mode Otomatis · Bagi Jumlah Klip:</b> Video dibagi rata menjadi beberapa klip berdurasi sama panjang dari awal sampai akhir."
+                )
+                self.top_clip_mode_desc.setStyleSheet(
+                    "color: #BFDBFE; background: #0B1222; border: 1px solid #1E3A8A; border-radius: 7px; padding: 6px 10px; font-size: 11px;"
+                )
+            elif mode == "split_duration":
+                self.top_clip_mode_desc.setText(
+                    "<b>Mode Otomatis · Bagi Berdasarkan Durasi:</b> Video dipotong otomatis berurutan setiap sekian detik sesuai durasi pilihan Anda."
+                )
+                self.top_clip_mode_desc.setStyleSheet(
+                    "color: #BFDBFE; background: #0B1222; border: 1px solid #1E3A8A; border-radius: 7px; padding: 6px 10px; font-size: 11px;"
+                )
+            else:
+                self.top_clip_mode_desc.setText(
+                    "<b>Mode Otomatis · Otomatis AI:</b> Menganalisis isi pembicaraan & lonjakan suara untuk memilihkan momen terbaik "
+                    "secara otomatis dengan kalimat utuh."
+                )
+                self.top_clip_mode_desc.setStyleSheet(
+                    "color: #D4D4D8; background: #0D0D14; border: 1px solid #2563EB; border-radius: 7px; padding: 6px 10px; font-size: 11px;"
+                )
         self.mode_stack.setCurrentIndex({"smart": 0, "split_count": 1, "split_duration": 2, "manual": 3}.get(mode, 0))
-        if is_manual and hasattr(self, "pre_manual_list") and self.pre_manual_list.count() == 0:
+        self.update_ai_engine_visibility()
+        if hasattr(self, "pre_manual_list") and is_manual and self.pre_manual_list.count() == 0:
             self.refresh_pre_manual_list_ui()
+        if hasattr(self, "create_seek_slider") and hasattr(self.create_seek_slider, "set_segments"):
+            self.create_seek_slider.set_segments(getattr(self, "pre_manual_segments", []) if is_manual else [])
         self.resize_mode_stack()
         self.update_segment_estimate()
+
+    def update_ai_engine_visibility(self) -> None:
+        mode = self.mode_combo.currentData() if hasattr(self, "mode_combo") else "smart"
+        is_smart_ai = mode == "smart"
+        is_gemini_llm = hasattr(self, "ai_provider_combo") and self.ai_provider_combo.currentData() == "gemini"
+        is_gemini_stt = hasattr(self, "whisper_combo") and self.whisper_combo.currentData() == "gemini"
+        if hasattr(self, "ai_analysis_container"):
+            self.ai_analysis_container.setVisible(is_smart_ai)
+        if hasattr(self, "ai_engine_mode_note"):
+            self.ai_engine_mode_note.setVisible(not is_smart_ai)
+            if mode == "manual":
+                self.ai_engine_mode_note.setText(
+                    "💡 <b>Mode Manual Aktif:</b> Mesin Analisis Momen AI tidak digunakan karena Anda menentukan titik potong sendiri. "
+                    "Hanya <b>Mesin Suara ke Teks</b> di bawah ini yang digunakan untuk membuat subtitle."
+                )
+            elif not is_smart_ai:
+                self.ai_engine_mode_note.setText(
+                    "💡 <b>Pemotongan Bagi Rata Aktif:</b> Mesin Analisis Momen AI tidak digunakan karena durasi dibagi rata secara otomatis. "
+                    "Hanya <b>Mesin Suara ke Teks</b> yang digunakan untuk membuat subtitle."
+                )
+        if hasattr(self, "ai_engine_group"):
+            self.ai_engine_group.setTitle(
+                "Mesin Analisis AI && Suara ke Teks" if is_smart_ai else "Mesin Suara ke Teks (Pembuat Subtitle Otomatis)"
+            )
+        if hasattr(self, "local_panel"):
+            self.local_panel.setVisible(is_smart_ai and not is_gemini_llm)
+        if hasattr(self, "gemini_panel"):
+            needs_gemini_key = (is_smart_ai and is_gemini_llm) or is_gemini_stt
+            self.gemini_panel.setVisible(needs_gemini_key)
 
     def update_profile_hint(self) -> None:
         if not hasattr(self, "profile_hint"):
             return
         hints = {
-            "auto": "AI mendeteksi siklus tanya-jawab utuh secara otomatis.",
-            "live": "Fokus pada blunder, reaksi spontan, emosi, kelucuan, dan interaksi.",
-            "standard": "Fokus pada pertanyaan pemicu, insight mendalam, cerita, dan kesimpulan utuh.",
-            "music": "Fokus pada bagian lagu, reff / chorus, bait lirik terbaik, dan otomatis mengaktifkan fitur terjemahan lirik.",
-            "manual": "Transkripsi tetap dibuat, tetapi clip dipilih sendiri melalui tab Review & manual.",
+            "auto": "Universal AI: Menyesuaikan pemilihan klip secara cerdas untuk segala jenis video (vlog, ulasan, obrolan, maupun hiburan).",
+            "podcast": "Podcast & Dialog: Mengutamakan siklus tanya-jawab utuh, argumen kuat, dan kesimpulan pembicara tanpa terpotong.",
+            "standard": "Podcast & Dialog: Mengutamakan siklus tanya-jawab utuh, argumen kuat, dan kesimpulan pembicara tanpa terpotong.",
+            "live": "Gaming & Stream: Menangkap momen aksi puncak, reaksi spontan, tawa, dan highlight gameplay paling seru.",
+            "education": "Edukasi & Tutorial: Mengambil penjelasan konsep inti, langkah praktis, dan tips utuh dari awal hingga solusi.",
+            "music": "Musik & Lirik: Fokus pada bagian reff/chorus dan bait terbaik, sekaligus mengaktifkan opsi terjemahan lirik.",
+            "cinematic": "Vlog & Sinematik: Menjaga kesinambungan cerita, suasana visual, dan narasi emosional tanpa potongan kasar.",
+            "manual": "Transkrip tetap dibuat penuh untuk memudahkan Anda memilih segmen sendiri di tab Review.",
         }
         p_val = self.profile_combo.currentData() if hasattr(self, "profile_combo") else "auto"
-        self.profile_hint.setText(hints.get(p_val, hints["auto"]))
-        if p_val == "music":
-            if hasattr(self, "translate_lyrics_check") and not self.translate_lyrics_check.isChecked():
-                self.translate_lyrics_check.setChecked(True)
-            if hasattr(self, "clip_flavor_combo"):
-                m_idx = self.clip_flavor_combo.findData("music_lyrics")
-                if m_idx >= 0:
-                    self.clip_flavor_combo.setCurrentIndex(m_idx)
+        self.profile_hint.setText(hints.get(str(p_val), hints["auto"]))
+        flavor_map = {
+            "auto": "universal",
+            "podcast": "spicy_drama",
+            "live": "funny_blunder",
+            "education": "deep_meat",
+            "music": "music_lyrics",
+            "cinematic": "cinematic_story",
+        }
+        if p_val == "music" and hasattr(self, "translate_lyrics_check") and not self.translate_lyrics_check.isChecked():
+            self.translate_lyrics_check.setChecked(True)
+        target_flavor = flavor_map.get(str(p_val))
+        if target_flavor and hasattr(self, "clip_flavor_combo"):
+            m_idx = self.clip_flavor_combo.findData(target_flavor)
+            if m_idx >= 0:
+                self.clip_flavor_combo.setCurrentIndex(m_idx)
 
     def update_smart_duration_fields(self) -> None:
         if not hasattr(self, "smart_duration_mode"):
@@ -5390,7 +6609,7 @@ class HermesDesktop(QMainWindow):
         current.adjustSize()
         hint_h = current.sizeHint().height()
         layout_h = current.layout().sizeHint().height() if current.layout() else 0
-        needed = max(185, hint_h, layout_h) + 16
+        needed = max(140, hint_h, layout_h) + 12
         self.mode_stack.setFixedHeight(needed)
 
     def update_subtitle_controls(self) -> None:
@@ -5406,10 +6625,13 @@ class HermesDesktop(QMainWindow):
             "subtitle_color_button",
             "subtitle_color_hex",
             "subtitle_lines_combo",
+            "subtitle_lines_pills",
             "subtitle_size_combo",
+            "subtitle_size_pills",
         ):
-            if hasattr(self, attr):
-                getattr(self, attr).setEnabled(enabled)
+            w_obj = getattr(self, attr, None)
+            if w_obj is not None:
+                w_obj.setEnabled(enabled)
         if hasattr(self, "preview_subtitle_sample") and hasattr(self, "language_combo"):
             self.update_create_preview()
 
@@ -5428,7 +6650,7 @@ class HermesDesktop(QMainWindow):
         else:
             color = PREVIEW_SUBTITLE_COLORS.get(str(selected), "#FFFFFF")
         self.subtitle_color_button.setStyleSheet(
-            f"QPushButton#colorSwatch {{ background: {color}; border: 2px solid #5c9dff; border-radius: 15px; }}"
+            f"QPushButton#colorSwatch {{ background: {color}; border: 2px solid #3B82F6; border-radius: 15px; }}"
         )
 
     def choose_subtitle_color(self) -> None:
@@ -5483,17 +6705,87 @@ class HermesDesktop(QMainWindow):
             PREVIEW_SUBTITLE_COLORS[default_colors.get(style, "white")],
         )
         sz = font_size or 14
-        pad = f"{max(5, int(sz * 0.4))}px {max(10, int(sz * 0.85))}px"
-        style_sheets = {
-            "bold": f"background: rgba(9, 13, 22, 220); color: {accent}; padding: {pad}; border-radius: 8px; border: 1px solid rgba(255,255,255,35); font-family: 'Segoe UI', 'Arial Black'; font-size: {sz}px; font-weight: 900;",
-            "highlight": f"background: rgba(15, 23, 42, 230); color: {accent}; padding: {pad}; border: 1.5px solid #38BDF8; border-radius: 8px; font-family: 'Segoe UI', 'Arial Black'; font-size: {sz}px; font-weight: 900;",
-            "classic": f"background: rgba(0, 0, 0, 185); color: {accent}; padding: {pad}; border-radius: 6px; font-family: 'Segoe UI', Arial; font-size: {sz}px; font-weight: 600;",
-            "minimal": f"background: rgba(0, 0, 0, 135); color: {accent}; padding: {pad}; border-radius: 6px; font-family: 'Segoe UI', Arial; font-size: {sz}px; font-weight: 600;",
-            "neon": f"background: rgba(7, 20, 35, 230); color: {accent}; padding: {pad}; border: 1.5px solid {accent}; border-radius: 12px; font-family: 'Segoe UI', 'Arial Black'; font-size: {sz}px; font-weight: 900;",
-            "karaoke": f"background: rgba(45, 12, 62, 230); color: {accent}; padding: {pad}; border: 1.5px solid {accent}; border-radius: 10px; font-family: 'Segoe UI', 'Arial Black'; font-size: {sz}px; font-weight: 900;",
-            "box": f"background: rgba(9, 13, 22, 235); color: {accent}; padding: {pad}; border-radius: 4px; font-family: 'Segoe UI', Arial; font-size: {sz}px; font-weight: 800;",
+        pad = f"{max(3, int(sz * 0.28))}px {max(8, int(sz * 0.65))}px"
+        style_meta = {
+            "bold": {
+                "font": "'Segoe UI Variable Display', 'Segoe UI', -apple-system, sans-serif",
+                "weight": "800",
+                "italic": False,
+                "uppercase": False,
+                "css": f"background: rgba(0, 0, 0, 165); color: {accent}; padding: {pad}; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.15); font-family: 'Segoe UI Variable Display', 'Segoe UI', sans-serif; font-size: {sz}px; font-weight: 800; letter-spacing: 0.3px;",
+            },
+            "highlight": {
+                "font": "'Montserrat', 'Segoe UI Variable Display', 'Segoe UI', sans-serif",
+                "weight": "800",
+                "italic": False,
+                "uppercase": False,
+                "css": f"background: rgba(0, 0, 0, 150); color: {accent}; padding: {pad}; border-radius: 8px; border: 1px solid rgba(250, 204, 21, 0.25); font-family: 'Montserrat', 'Segoe UI', sans-serif; font-size: {sz}px; font-weight: 800; letter-spacing: 0.2px;",
+            },
+            "karaoke": {
+                "font": "'Segoe UI Variable Display', 'Segoe UI', sans-serif",
+                "weight": "800",
+                "italic": False,
+                "uppercase": False,
+                "css": f"background: rgba(10, 10, 15, 160); color: {accent}; padding: {pad}; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.12); font-family: 'Segoe UI Variable Display', 'Segoe UI', sans-serif; font-size: {sz}px; font-weight: 800;",
+            },
+            "neon": {
+                "font": "'Segoe UI Variable Display', 'Segoe UI', sans-serif",
+                "weight": "800",
+                "italic": False,
+                "uppercase": False,
+                "css": f"background: rgba(4, 20, 32, 180); color: #38BDF8; padding: {pad}; border: 1.5px solid rgba(56, 189, 248, 0.6); border-radius: 8px; font-family: 'Segoe UI Variable Display', 'Segoe UI', sans-serif; font-size: {sz}px; font-weight: 800; letter-spacing: 0.3px;",
+            },
+            "box": {
+                "font": "'Segoe UI Semibold', 'Segoe UI', sans-serif",
+                "weight": "700",
+                "italic": False,
+                "uppercase": False,
+                "css": f"background: rgba(0, 0, 0, 220); color: {accent}; padding: {pad}; border-radius: 5px; border: 1px solid #3F3F46; font-family: 'Segoe UI Semibold', 'Segoe UI', sans-serif; font-size: {sz}px; font-weight: 700;",
+            },
+            "minimal": {
+                "font": "'Segoe UI Variable Text', 'Segoe UI', sans-serif",
+                "weight": "600",
+                "italic": False,
+                "uppercase": False,
+                "css": f"background: rgba(0, 0, 0, 110); color: {accent}; padding: {pad}; border-radius: 6px; border: none; font-family: 'Segoe UI Variable Text', 'Segoe UI', sans-serif; font-size: {max(11, sz - 1)}px; font-weight: 600; letter-spacing: 0.2px;",
+            },
+            "classic": {
+                "font": "'Segoe UI Semibold', 'Segoe UI', sans-serif",
+                "weight": "700",
+                "italic": False,
+                "uppercase": False,
+                "css": f"background: rgba(0, 0, 0, 170); color: #FFFFFF; padding: {pad}; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.15); font-family: 'Segoe UI Semibold', 'Segoe UI', sans-serif; font-size: {sz}px; font-weight: 700;",
+            },
         }
-        label.setStyleSheet(style_sheets.get(style, style_sheets["bold"]))
+        meta = style_meta.get(style, style_meta["bold"])
+        label.setStyleSheet(meta["css"])
+        f_fam = meta["font"]
+        is_up = bool(meta["uppercase"])
+        is_it = bool(meta["italic"])
+
+        def _wrap_style_text(s: str, col: str, is_active_word: bool = False) -> str:
+            t_out = s.upper() if is_up else s
+            fs_use = (sz + 1) if is_active_word else sz
+            wt_use = "900" if is_active_word else meta["weight"]
+            bg_span = ""
+            if is_active_word and style == "highlight":
+                bg_span = "background-color: #FACC15; color: #09090D; padding: 1px 5px; border-radius: 4px;"
+                col = "#09090D"
+            elif is_active_word and style == "neon":
+                col = "#38BDF8"
+                bg_span = "border-bottom: 2px solid #38BDF8;"
+            elif is_active_word and style == "karaoke":
+                col = "#FDE047"
+                bg_span = "font-weight: 900;"
+            elif is_active_word and style == "box":
+                bg_span = "background-color: #2563EB; color: #FFFFFF; padding: 1px 4px; border-radius: 3px;"
+                col = "#FFFFFF"
+            span = (
+                f"<span style=\"font-family:{f_fam}; font-size:{fs_use}px; font-weight:{wt_use}; "
+                f"{'font-style:italic;' if is_it else ''} color:{col}; {bg_span}\">{t_out}</span>"
+            )
+            return span
+
         if sample:
             label.setTextFormat(Qt.TextFormat.RichText)
             sub_mode = self.subtitle_mode_combo.currentData() if hasattr(self, "subtitle_mode_combo") else "active_highlight"
@@ -5505,19 +6797,22 @@ class HermesDesktop(QMainWindow):
             active_col = (
                 self.subtitle_active_color_combo.currentData()
                 if hasattr(self, "subtitle_active_color_combo")
-                else "auto_context"
+                else "#FFDD00"
             )
             use_emoji = hasattr(self, "emoji_subtitles_check") and self.emoji_subtitles_check.isChecked()
-            emoji_prefix = "🔥 " if use_emoji else ""
+            censor_on = hasattr(self, "censor_profanity_checkbox") and self.censor_profanity_checkbox.isChecked()
+            emoji_prefix = "✨ " if use_emoji else ""
 
-            demo_words = ["Ternyata", "rahasia", "sukses", "ini", "bikin", "semua", "kaget!"]
-            demo_colors_ctx = ["#FFFFFF", "#FFDD00", "#00F57A", "#FFFFFF", "#FFFFFF", "#00E5FF", "#FF4D4D"]
+            last_w = "g*la!" if censor_on else "nyata!"
+            demo_words = ["Strategi", "tepat", "ini", "mengubah", "hasil", last_w]
+            demo_colors_ctx = ["#FFDD00", "#38BDF8", "#FFFFFF", "#00F57A", "#FFDD00", "#FF4D4D"]
             w_idx = active_word_idx % len(demo_words)
             preview_active_col = demo_colors_ctx[w_idx] if active_col in ("auto_context", "auto") else active_col
 
+            base_col = "#67E8F9" if style == "neon" else ("#FEF3C7" if style == "classic" else accent)
+
             if sub_mode == "single_word":
-                word_up = demo_words[w_idx].upper()
-                sample_text = f"{emoji_prefix}<font color='{preview_active_col}'><b><span style='font-size:{sz + 3}px;'>{word_up}</span></b></font>"
+                sample_text = emoji_prefix + _wrap_style_text(demo_words[w_idx], preview_active_col, is_active_word=True)
             elif sub_mode == "active_highlight":
                 rendered_words = []
                 limit_w = 4 if lines_val == 1 else len(demo_words)
@@ -5525,34 +6820,41 @@ class HermesDesktop(QMainWindow):
                 for idx_w, w_str in enumerate(demo_words[:limit_w]):
                     if idx_w == w_idx_clamped:
                         c_hex = demo_colors_ctx[idx_w] if active_col in ("auto_context", "auto") else active_col
-                        rendered_words.append(
-                            f"<font color='{c_hex}'><b><span style='font-size:{sz + 2}px;'>{w_str.upper()}</span></b></font>"
-                        )
+                        rendered_words.append(_wrap_style_text(w_str, c_hex, is_active_word=True))
                     else:
-                        rendered_words.append(f"<font color='{accent}'>{w_str}</font>")
-                if lines_val >= 2 and len(rendered_words) > 4:
-                    sample_text = emoji_prefix + " ".join(rendered_words[:4]) + "<br>" + " ".join(rendered_words[4:])
+                        rendered_words.append(_wrap_style_text(w_str, base_col, is_active_word=False))
+                if lines_val >= 2 and len(rendered_words) >= 6:
+                    mid = len(rendered_words) // 2
+                    sample_text = emoji_prefix + " ".join(rendered_words[:mid]) + "<br>" + " ".join(rendered_words[mid:])
                 else:
                     sample_text = emoji_prefix + " ".join(rendered_words)
             elif lines_val == 1:
-                sample_text = f"{emoji_prefix}Ternyata rahasia sukses ini bikin kaget!"
+                sample_text = emoji_prefix + _wrap_style_text(f"Strategi tepat ini mengubah {last_w}", base_col, False)
             else:
-                sample_text = f"{emoji_prefix}Ternyata rahasia sukses ini<br>bikin semua orang kaget!"
+                sample_text = (
+                    emoji_prefix
+                    + _wrap_style_text("Strategi tepat ini", base_col, False)
+                    + "<br>"
+                    + _wrap_style_text(f"mengubah hasil {last_w}", base_col, False)
+                )
 
             if hasattr(self, "translate_lyrics_check") and self.translate_lyrics_check.isChecked():
                 lyr_mode = self.lyrics_display_mode_combo.currentData() if hasattr(self, "lyrics_display_mode_combo") else "dual"
+                lang_code = str(self.lyrics_target_lang_combo.currentData() or "id") if hasattr(self, "lyrics_target_lang_combo") else "id"
+                trans_samples = {
+                    "id": "Kupikir kaulah satu-satunya tujuanku",
+                    "en": "I thought you were my only destination",
+                    "ja": "君だけが僕の目的地だと思っていた",
+                    "ko": "너만이 나의 유일한 목적지라고 생각했어",
+                }
+                tr_line = trans_samples.get(lang_code, trans_samples["id"])
                 if lyr_mode == "dual":
-                    sub_fs = max(10, int(sz * 0.78))
-                    sample_text = f"{sample_text}<br><font color='#7DD3FC' style='font-size:{sub_fs}px;'><i>(Kupikir kaulah satu-satunya tujuanku)</i></font>"
+                    sub_fs = max(10, int(sz * 0.80))
+                    sample_text = f"{sample_text}<br><font color='#93C5FD' style='font-size:{sub_fs}px;'><i>{tr_line}</i></font>"
                 elif lyr_mode == "translated_only":
-                    sample_text = f"🎵 Kupikir kaulah satu-satunya tujuanku"
+                    sample_text = f"♪ {tr_line}"
 
-            if style == "neon":
-                label.setText(f"✦ {sample_text} ✦")
-            elif style == "karaoke" and sub_mode != "active_highlight":
-                label.setText(f"♪ {sample_text} ♪")
-            else:
-                label.setText(sample_text)
+            label.setText(sample_text)
         else:
             if "<font" in text or "</font>" in text or "<b>" in text or "<br>" in text:
                 label.setTextFormat(Qt.TextFormat.RichText)
@@ -5599,7 +6901,7 @@ class HermesDesktop(QMainWindow):
     def detect_faces_in_current_preview_frame(self) -> None:
         frame_img = getattr(self.create_preview_video, "current_frame", None)
         if frame_img is None or frame_img.isNull():
-            self.smart_detected_badge.setText("Status: Muat dan putar video terlebih dahulu untuk melihat deteksi wajah real-time.")
+            self.smart_detected_badge.setText("Putar atau geser video terlebih dahulu untuk memindai subjek secara langsung.")
             return
         try:
             self.create_preview_video._last_face_detect_ts = 0.0
@@ -5609,29 +6911,29 @@ class HermesDesktop(QMainWindow):
             num_faces = len(boxes)
             if num_faces == 0:
                 mode_code = "0"
-                status_text = "✅ Real-Time: 0 Wajah -> Mode Sinema Utuh (Latar Blur 9:16 + Subtitle Bawah)"
+                status_text = "Deteksi Live: 0 Wajah → Tampilan Sinematik Utuh (Tanpa Kotak Palsu)"
             elif num_faces == 1:
                 mode_code = "1"
-                status_text = "✅ Real-Time: 1 Pembicara -> Auto-Focus Portrait 9:16 (Chest-Up Aman)"
+                status_text = "Deteksi Live: 1 Subjek → Fokus Potret 9:16 Presisi"
             else:
                 mode_code = "2"
-                status_text = f"✅ Real-Time: {num_faces} Pembicara -> Split 2 Panel Atas-Bawah Otomatis"
+                status_text = f"Deteksi Live: {num_faces} Subjek → Split 2 Panel Atas-Bawah"
             idx = self.smart_preview_sim_combo.findData(mode_code)
             if idx >= 0:
                 self.smart_preview_sim_combo.setCurrentIndex(idx)
             self.smart_detected_badge.setText(status_text)
             self.update_create_preview()
         except Exception as exc:
-            self.smart_detected_badge.setText(f"Gagal menganalisis frame: {exc}")
+            self.smart_detected_badge.setText(f"Gagal memindai frame: {exc}")
 
     def update_create_preview(self) -> None:
         if not hasattr(self, "preview_summary") or not hasattr(self, "create_preview_frame"):
             return
-        aspect = self.aspect_combo.currentData()
-        framing = self.framing_combo.currentText()
-        layout = self.layout_combo.currentText()
+        aspect = str(self.aspect_combo.currentData() or "9:16")
         mode_state = getattr(self, "framing_mode_state", "auto")
-        if mode_state == "manual" and hasattr(self, "manual_style_combo"):
+        if mode_state == "none" or aspect == "original":
+            unified_mode = "original_native"
+        elif mode_state == "manual" and hasattr(self, "manual_style_combo"):
             m_style = str(self.manual_style_combo.currentData() or "manual_fit")
             if m_style == "manual_ambient":
                 unified_mode = "manual_ambient"
@@ -5645,13 +6947,13 @@ class HermesDesktop(QMainWindow):
                 unified_mode = "manual_fit"
         else:
             unified_mode = (
-                self.unified_format_combo.currentData()
+                str(self.unified_format_combo.currentData() or "auto_universal_9_16")
                 if hasattr(self, "unified_format_combo")
-                else "auto_podcast_9_16"
+                else "auto_universal_9_16"
             )
 
         if hasattr(self, "create_preview_video"):
-            self.create_preview_video.set_preview_mode(str(unified_mode or "auto_podcast_9_16"))
+            self.create_preview_video.set_preview_mode(str(unified_mode))
             if hasattr(self, "manual_crop_x_slider"):
                 self.create_preview_video.set_manual_crop_x(self.manual_crop_x_slider.value() / 100.0)
             if hasattr(self, "manual_crop_y_slider"):
@@ -5662,11 +6964,21 @@ class HermesDesktop(QMainWindow):
                 self.create_preview_video.set_show_face_boxes(
                     mode_state == "auto" and self.realtime_face_box_check.isChecked()
                 )
+            if hasattr(self, "mirror_video_check"):
+                self.create_preview_video.mirror_horizontal = self.mirror_video_check.isChecked()
+            if hasattr(self, "color_boost_check"):
+                self.create_preview_video.color_boost_enabled = self.color_boost_check.isChecked()
+            self.create_preview_video.update()
+
+        if hasattr(self, "create_preview_player") and hasattr(self, "speed_shift_check"):
+            target_rate = 1.03 if self.speed_shift_check.isChecked() else 1.0
+            if abs(self.create_preview_player.playbackRate() - target_rate) > 0.005:
+                self.create_preview_player.setPlaybackRate(target_rate)
 
         tabs_h = self.tabs.height() if hasattr(self, "tabs") and self.tabs.height() > 100 else max(400, self.height() - 70)
-        max_canvas_h = max(160, tabs_h - 165)
+        max_canvas_h = max(170, tabs_h - 160)
         if self.isMaximized() or self.isFullScreen():
-            max_canvas_h = min(max_canvas_h, int(tabs_h * 0.74))
+            max_canvas_h = min(max_canvas_h, int(tabs_h * 0.75))
 
         if (
             hasattr(self, "create_splitter")
@@ -5674,14 +6986,19 @@ class HermesDesktop(QMainWindow):
             and len(self.create_splitter.sizes()) > 1
             and self.create_splitter.sizes()[1] > 100
         ):
-            avail_w = max(200, self.create_splitter.sizes()[1] - 32)
+            avail_w = max(210, self.create_splitter.sizes()[1] - 32)
         else:
-            avail_w = max(200, int((self.width() - 40) * 0.50) - 24)
+            avail_w = max(210, int((self.width() - 40) * 0.45) - 24)
 
-        def _parse_ar(ar_str: Any) -> float:
+        def _parse_ar(ar_str: str) -> float:
+            if ar_str == "original":
+                f_img = getattr(self.create_preview_video, "current_frame", None)
+                if f_img is not None and not f_img.isNull() and f_img.height() > 0:
+                    return f_img.width() / f_img.height()
+                return 16 / 9
             try:
-                if ":" in str(ar_str):
-                    parts = str(ar_str).split(":")
+                if ":" in ar_str:
+                    parts = ar_str.split(":")
                     w_ar, h_ar = float(parts[0]), float(parts[1])
                     if w_ar > 0 and h_ar > 0:
                         return w_ar / h_ar
@@ -5702,20 +7019,22 @@ class HermesDesktop(QMainWindow):
         canvas_height = max(130, min(max_canvas_h, canvas_height))
 
         badge_short_map = {
-            "auto_podcast_9_16": "🤖 9:16 Auto-Podcast AI",
-            "ambient_9_16": f"✋ {aspect} Cinema Blur",
-            "split_2_9_16": "🤖 9:16 AI Split 2 Panel",
-            "crop_9_16": "🤖 9:16 AI Fokus 1 Orang",
-            "manual_crop": f"✋ {aspect} Manual Crop",
-            "manual_fit": f"✋ {aspect} Manual Fit",
-            "manual_ambient": f"✋ {aspect} Cinema Blur",
-            "manual_split": f"✋ {aspect} Manual Split",
-            "facecam_9_16": f"✋ {aspect} Streamer Facecam",
-            "standard_16_9": f"✋ {aspect} Fit Utuh",
+            "original_native": "Asli · Tanpa Framing",
+            "auto_universal_9_16": "9:16 · Adaptif Universal",
+            "auto_podcast_9_16": "9:16 · Podcast AI",
+            "ambient_9_16": f"{aspect} · Sinematik Blur",
+            "split_2_9_16": "9:16 · Split 2 Panel",
+            "crop_9_16": "9:16 · Fokus Subjek",
+            "manual_crop": f"{aspect} · Bebas Zoom & Geser",
+            "manual_fit": f"{aspect} · Fit Utuh",
+            "manual_ambient": f"{aspect} · Blur Sinematik",
+            "manual_split": f"{aspect} · Split 2 Panel",
+            "facecam_9_16": "9:16 · Gaming Facecam",
+            "standard_16_9": f"{aspect} · Fit Utuh",
         }
         short_badge = badge_short_map.get(
             str(unified_mode or ""),
-            f"✋ {aspect} Manual" if mode_state == "manual" else f"🤖 {aspect} Auto AI",
+            f"{aspect} · Manual" if mode_state == "manual" else f"{aspect} · Otomatis AI",
         )
 
         self.create_preview_frame.setFixedSize(canvas_width, canvas_height)
@@ -5733,8 +7052,9 @@ class HermesDesktop(QMainWindow):
             and not self.create_preview_video.current_frame.isNull()
         )
         is_smart_mode = (
-            self.layout_combo.currentData() in ("auto_smart", "podcast_split", "standard")
-            and self.aspect_combo.currentData() == "9:16"
+            mode_state == "auto"
+            and self.layout_combo.currentData() in ("auto_universal", "auto_smart", "podcast_split", "auto_split", "auto_single")
+            and aspect == "9:16"
         )
         show_smart_canvas = is_smart_mode and not has_live_frame
         if hasattr(self, "smart_layout_overlay"):
@@ -5746,25 +7066,23 @@ class HermesDesktop(QMainWindow):
         if hasattr(self, "preview_placeholder"):
             self.preview_placeholder.setVisible(not has_live_frame and not show_smart_canvas)
 
-        is_facecam = self.layout_combo.currentData() == "facecam_top"
+        is_facecam = self.layout_combo.currentData() in ("facecam_top", "auto_gaming")
         if hasattr(self, "facecam_box"):
-            self.facecam_box.setVisible(is_facecam)
-            if is_facecam:
+            self.facecam_box.setVisible(is_facecam and mode_state == "manual")
+            if is_facecam and mode_state == "manual":
                 self.facecam_box.update_geometry_from_parent()
 
-        if is_facecam:
-            self.preview_layout_overlay.setText("🎮 Mode Streamer · Geser kotak biru di atas wajah")
+        if is_facecam and mode_state == "manual":
+            self.preview_layout_overlay.setText("Mode Facecam · Geser kotak biru ke posisi kamera wajah")
             self.preview_layout_overlay.setVisible(True)
-            self.preview_facecam_top.setVisible(False)
-            self.preview_facecam_main.setVisible(False)
         else:
             self.preview_layout_overlay.setVisible(False)
-            self.preview_facecam_top.setVisible(False)
-            self.preview_facecam_main.setVisible(False)
+        self.preview_facecam_top.setVisible(False)
+        self.preview_facecam_main.setVisible(False)
 
         if self.subtitle_enabled.isChecked():
             language = self.language_combo.currentText() if hasattr(self, "language_combo") else "Indonesia"
-            style = self.subtitle_combo.currentText().split("(")[0].strip()
+            style = self.subtitle_combo.currentText().strip()
             font_sz = self.subtitle_size_combo.currentData() if hasattr(self, "subtitle_size_combo") else 14
             lines_limit = self.subtitle_lines_combo.currentData() if hasattr(self, "subtitle_lines_combo") else 2
             word_tick = getattr(self, "_preview_word_tick", 2)
@@ -5778,17 +7096,21 @@ class HermesDesktop(QMainWindow):
                 max_lines=lines_limit,
                 active_word_idx=word_tick,
             )
-            subtitle_summary = f"Subtitle: {style}"
+            subtitle_summary = f"Subtitle {style}"
         else:
             self.apply_subtitle_preview_style(self.preview_subtitle_sample, "none")
-            subtitle_summary = "Subtitle: Nonaktif"
+            subtitle_summary = "Tanpa Subtitle"
         self.update_create_subtitle_position()
-        position_summary = self.subtitle_position_combo.currentText().split("(")[0].strip()
-        if self.subtitle_position_combo.currentData() == "free":
-            position_summary += " (seret di layar)"
-        self.preview_summary.setText(
-            f"{short_badge}  ·  {subtitle_summary}  ·  Posisi: {position_summary}"
-        )
+
+        fx_tags: list[str] = []
+        if hasattr(self, "mirror_video_check") and self.mirror_video_check.isChecked():
+            fx_tags.append("Mirror")
+        if hasattr(self, "color_boost_check") and self.color_boost_check.isChecked():
+            fx_tags.append("Warna+")
+        if hasattr(self, "speed_shift_check") and self.speed_shift_check.isChecked():
+            fx_tags.append("1.03x")
+        fx_suffix = f"  ·  Efek: {', '.join(fx_tags)}" if fx_tags else ""
+        self.preview_summary.setText(f"{short_badge}  ·  {subtitle_summary}{fx_suffix}")
 
         pw = max(1, self.create_preview_video.width())
         ph = max(1, self.create_preview_video.height())
@@ -5796,22 +7118,19 @@ class HermesDesktop(QMainWindow):
             hb_on = hasattr(self, "hook_banner_toggle") and self.hook_banner_toggle.isChecked()
             if hb_on:
                 raw_custom = self.hook_banner_edit.text().strip() if hasattr(self, "hook_banner_edit") else ""
-                if raw_custom:
-                    hb_html = f"🔥 <span style='color:#FFFFFF;'>{raw_custom.upper()}</span>"
-                else:
-                    hb_html = (
-                        "🔥 <span style='color:#FFFFFF;'>ALASAN </span>"
-                        "<span style='color:#38BDF8;'>RAHASIA INI </span>"
-                        "<span style='color:#FBBF24;'>BIKIN GEGER!</span>"
-                    )
-                hb_font_sz = max(9, min(12, int(pw * 0.040)))
+                hb_html = (
+                    f"<span style='color:#FFFFFF;'>{raw_custom.upper()}</span>"
+                    if raw_custom
+                    else "<span style='color:#FFFFFF;'>JUDUL SOROTAN UTAMA</span>"
+                )
+                hb_font_sz = max(9, min(12, int(pw * 0.038)))
                 self.preview_hook_banner.setTextFormat(Qt.TextFormat.RichText)
                 self.preview_hook_banner.setText(hb_html)
                 self.preview_hook_banner.setStyleSheet(
-                    f"background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(15, 23, 42, 235), stop:1 rgba(23, 37, 84, 235)); "
-                    f"color: #FFFFFF; font-family: 'Segoe UI', 'Arial Black'; "
-                    f"font-size: {hb_font_sz}px; font-weight: 800; padding: 6px 12px; border-radius: 10px; "
-                    f"border: 1px solid rgba(56, 189, 248, 170);"
+                    f"background: rgba(10, 10, 16, 230); color: #FFFFFF; "
+                    f"font-family: 'Segoe UI Variable Display', 'Segoe UI', sans-serif; "
+                    f"font-size: {hb_font_sz}px; font-weight: 800; padding: 6px 12px; border-radius: 8px; "
+                    f"border: 1px solid rgba(59, 130, 246, 180);"
                 )
                 self.preview_hook_banner.setMaximumWidth(int(pw * 0.88))
                 self.preview_hook_banner.adjustSize()
@@ -5825,18 +7144,12 @@ class HermesDesktop(QMainWindow):
                 if hb_pos_mode == "free":
                     hx = int(pw * getattr(self, "hook_banner_free_x", 0.5) - lw_hb / 2.0)
                     hy = int(ph * getattr(self, "hook_banner_free_y", 0.11) - lh_hb / 2.0)
-                elif hb_pos_mode == "upper_mid":
-                    hx = (pw - lw_hb) // 2
-                    hy = int(ph * 0.28 - lh_hb / 2.0)
                 elif hb_pos_mode == "center":
                     hx = (pw - lw_hb) // 2
                     hy = int(ph * 0.45 - lh_hb / 2.0)
-                elif hb_pos_mode == "bottom_above_sub":
-                    hx = (pw - lw_hb) // 2
-                    hy = int(ph * 0.65 - lh_hb / 2.0)
                 else:
                     hx = (pw - lw_hb) // 2
-                    hy = max(28, int(ph * (0.11 if ph > pw else 0.14) - lh_hb / 2.0))
+                    hy = max(22, int(ph * (0.11 if ph > pw else 0.14) - lh_hb / 2.0))
                 hx = max(4, min(max(4, pw - lw_hb - 4), hx))
                 hy = max(4, min(max(4, ph - lh_hb - 4), hy))
                 self.preview_hook_banner.move(hx, hy)
@@ -5849,26 +7162,48 @@ class HermesDesktop(QMainWindow):
         if hasattr(self, "preview_watermark_label"):
             wm_txt = self.watermark_edit.text().strip() if hasattr(self, "watermark_edit") else ""
             wm_img = self.watermark_image_edit.text().strip() if hasattr(self, "watermark_image_edit") else ""
-            display_wm = wm_txt or (f"🖼️ {Path(wm_img).name}" if wm_img else "")
-            if display_wm:
-                op_alpha = (
-                    int((self.watermark_opacity_slider.value() / 100.0) * 255)
-                    if hasattr(self, "watermark_opacity_slider")
-                    else 180
-                )
+            op_ratio = (
+                (self.watermark_opacity_slider.value() / 100.0)
+                if hasattr(self, "watermark_opacity_slider")
+                else 0.75
+            )
+            op_alpha = int(op_ratio * 255)
+            has_wm = False
+            if wm_img and Path(wm_img).is_file():
+                pix = QPixmap(wm_img)
+                if not pix.isNull():
+                    target_w = max(36, min(110, int(pw * 0.22)))
+                    scaled_pix = pix.scaledToWidth(target_w, Qt.TransformationMode.SmoothTransformation)
+                    out_pix = QPixmap(scaled_pix.size())
+                    out_pix.fill(Qt.GlobalColor.transparent)
+                    p_wm = QPainter(out_pix)
+                    p_wm.setOpacity(op_ratio)
+                    p_wm.drawPixmap(0, 0, scaled_pix)
+                    p_wm.end()
+                    self.preview_watermark_label.setText("")
+                    self.preview_watermark_label.setPixmap(out_pix)
+                    self.preview_watermark_label.setStyleSheet("background: transparent; border: 0; padding: 0;")
+                    self.preview_watermark_label.resize(out_pix.size())
+                    has_wm = True
+            if not has_wm and (wm_txt or wm_img):
+                display_wm = wm_txt or Path(wm_img).name
+                self.preview_watermark_label.setPixmap(QPixmap())
                 self.preview_watermark_label.setText(display_wm)
                 self.preview_watermark_label.setStyleSheet(
-                    f"background: rgba(0, 0, 0, 95); color: rgba(255, 255, 255, {op_alpha}); "
-                    f"font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 3px;"
+                    f"background: rgba(0, 0, 0, 110); color: rgba(255, 255, 255, {op_alpha}); "
+                    f"font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px;"
                 )
                 self.preview_watermark_label.adjustSize()
+                has_wm = True
+
+            if has_wm:
                 lw, lh = self.preview_watermark_label.width(), self.preview_watermark_label.height()
-                wm_pos = self.watermark_pos_combo.currentData() if hasattr(self, "watermark_pos_combo") else "bottom_right"
+                wm_pos = self.watermark_pos_combo.currentData() if hasattr(self, "watermark_pos_combo") else "top_right"
                 if wm_pos == "free":
-                    avail_w = max(0, pw - lw)
-                    avail_h = max(0, ph - lh)
-                    wx = int(avail_w * self.watermark_free_x)
-                    wy = int(avail_h * self.watermark_free_y)
+                    avail_w_wm = max(0, pw - lw)
+                    avail_h_wm = max(0, ph - lh)
+                    wx = int(avail_w_wm * self.watermark_free_x)
+                    wy = int(avail_h_wm * self.watermark_free_y)
                 else:
                     pos_coords = {
                         "top_left": (10, 10),
@@ -5877,15 +7212,19 @@ class HermesDesktop(QMainWindow):
                         "bottom_right": (max(4, pw - lw - 10), max(4, ph - lh - 14)),
                         "center": (max(0, (pw - lw) // 2), max(0, (ph - lh) // 2)),
                     }
-                    wx, wy = pos_coords.get(wm_pos, (max(4, pw - lw - 10), max(4, ph - lh - 14)))
+                    wx, wy = pos_coords.get(str(wm_pos), (max(4, pw - lw - 10), 10))
                 self.preview_watermark_label.move(wx, wy)
                 self.preview_watermark_label.setVisible(True)
                 self.preview_watermark_label.raise_()
             else:
+                self.preview_watermark_label.setPixmap(QPixmap())
                 self.preview_watermark_label.setVisible(False)
 
     def resizeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         super().resizeEvent(event)
+        self.ensure_splitter_balanced()
+        if hasattr(self, "review_lock_overlay") and hasattr(self, "review_outer_wrapper"):
+            self.review_lock_overlay.setGeometry(self.review_outer_wrapper.rect())
         if hasattr(self, "create_preview_frame"):
             self.update_create_preview()
 
@@ -5925,7 +7264,7 @@ class HermesDesktop(QMainWindow):
             label.move(int(available_width * fx), int(available_height * fy))
         elif position == "top":
             x = (pw - lw) // 2
-            y = int(ph * 0.16)
+            y = int(ph * 0.14)
             label.move(max(0, x), max(0, y))
         elif position == "center":
             x = (pw - lw) // 2
@@ -5937,11 +7276,15 @@ class HermesDesktop(QMainWindow):
             unified_mode = (
                 self.unified_format_combo.currentData()
                 if hasattr(self, "unified_format_combo")
-                else "auto_podcast_9_16"
+                else "auto_universal_9_16"
             )
+            mode_state = getattr(self, "framing_mode_state", "auto")
             is_split_active = (
-                unified_mode == "split_2_9_16"
-                or (unified_mode == "auto_podcast_9_16" and live_faces >= 2)
+                mode_state == "auto"
+                and (
+                    (unified_mode == "split_2_9_16" and live_faces >= 1)
+                    or (unified_mode in ("auto_podcast_9_16", "auto_universal_9_16") and live_faces >= 2)
+                )
             )
             if is_split_active and ph > pw:
                 y = (ph - lh) // 2
@@ -5982,14 +7325,21 @@ class HermesDesktop(QMainWindow):
                 self.lyrics_y_slider.blockSignals(False)
             if hasattr(self, "lyrics_y_val_lbl"):
                 self.lyrics_y_val_lbl.setText(f"{int(self.lyrics_free_y * 100)}%")
+        else:
+            if hasattr(self, "subtitle_position_combo") and self.subtitle_position_combo.currentData() != "free":
+                idx_free = self.subtitle_position_combo.findData("free")
+                if idx_free >= 0:
+                    self.subtitle_position_combo.blockSignals(True)
+                    self.subtitle_position_combo.setCurrentIndex(idx_free)
+                    self.subtitle_position_combo.blockSignals(False)
         if hasattr(self, "preview_summary"):
             if hasattr(self, "translate_lyrics_check") and self.translate_lyrics_check.isChecked() and hasattr(self, "lyrics_pos_combo") and self.lyrics_pos_combo.currentData() == "free":
                 self.preview_summary.setText(
-                    f"Lirik bebas · posisi {self.lyrics_free_x:.0%} kiri, {self.lyrics_free_y:.0%} atas · seret lirik langsung di layar"
+                    f"Lirik bebas · X {self.lyrics_free_x:.0%}, Y {self.lyrics_free_y:.0%}"
                 )
             elif self.subtitle_position_combo.currentData() == "free":
                 self.preview_summary.setText(
-                    f"Subtitle bebas · posisi {self.subtitle_free_x:.0%} kiri, {self.subtitle_free_y:.0%} atas · seret teks langsung di layar"
+                    f"Subtitle bebas · X {self.subtitle_free_x:.0%}, Y {self.subtitle_free_y:.0%}"
                 )
 
     def on_hook_banner_dur_combo_changed(self) -> None:
@@ -6019,7 +7369,7 @@ class HermesDesktop(QMainWindow):
                 self.hook_banner_pos_combo.blockSignals(False)
         if hasattr(self, "preview_summary"):
             self.preview_summary.setText(
-                f"🔥 Hook bebas · posisi {self.hook_banner_free_x:.0%} horizontal, {self.hook_banner_free_y:.0%} vertikal (tersinkron ke Auto-Clipper)"
+                f"Banner judul bebas · X {self.hook_banner_free_x:.0%}, Y {self.hook_banner_free_y:.0%}"
             )
         self.save_studio_hook_settings()
 
@@ -6058,11 +7408,11 @@ class HermesDesktop(QMainWindow):
             self.watermark_y_val_lbl.setText(f"{int(self.watermark_free_y * 100)}%")
         if hasattr(self, "preview_summary"):
             self.preview_summary.setText(
-                f"Watermark bebas · posisi {self.watermark_free_x:.0%} kiri, {self.watermark_free_y:.0%} atas"
+                f"Watermark bebas · X {self.watermark_free_x:.0%}, Y {self.watermark_free_y:.0%}"
             )
 
     def on_watermark_pos_changed(self) -> None:
-        pos = self.watermark_pos_combo.currentData() if hasattr(self, "watermark_pos_combo") else "bottom_right"
+        pos = self.watermark_pos_combo.currentData() if hasattr(self, "watermark_pos_combo") else "top_right"
         if hasattr(self, "watermark_free_pos_widget"):
             self.watermark_free_pos_widget.setVisible(pos == "free")
         self.update_create_preview()
@@ -6083,7 +7433,7 @@ class HermesDesktop(QMainWindow):
         if getattr(self, "_loading_hook_settings", False):
             return
         try:
-            hook_cfg_path = ROOT / "Core_Data" / "studio_hook_settings.json"
+            hook_cfg_path = core.DATA_DIR / "studio_hook_settings.json"
             hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
             dur_val = (
                 int(self.hook_banner_dur_combo.currentData() or 0)
@@ -6096,7 +7446,8 @@ class HermesDesktop(QMainWindow):
                 else "top"
             )
             payload = {
-                "hook_banner_enabled": bool(self.hook_banner_toggle.isChecked()) if hasattr(self, "hook_banner_toggle") else True,
+                "schema_v": 2,
+                "hook_banner_enabled": bool(self.hook_banner_toggle.isChecked()) if hasattr(self, "hook_banner_toggle") else False,
                 "hook_banner_text": self.hook_banner_edit.text().strip() if hasattr(self, "hook_banner_edit") else "",
                 "hook_banner_duration": dur_val,
                 "hook_banner_position": pos_val,
@@ -6108,19 +7459,19 @@ class HermesDesktop(QMainWindow):
             pass
 
     def load_studio_hook_settings(self) -> None:
-        hook_cfg_path = ROOT / "Core_Data" / "studio_hook_settings.json"
+        hook_cfg_path = core.DATA_DIR / "studio_hook_settings.json"
         if not hook_cfg_path.exists():
             self.save_studio_hook_settings()
             return
         self._loading_hook_settings = True
         try:
             data = json.loads(hook_cfg_path.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
+            if isinstance(data, dict) and int(data.get("schema_v", 1)) >= 2:
                 if hasattr(self, "hook_banner_toggle") and "hook_banner_enabled" in data:
                     self.hook_banner_toggle.setChecked(bool(data["hook_banner_enabled"]))
                 if hasattr(self, "hook_banner_edit") and "hook_banner_text" in data:
                     self.hook_banner_edit.setText(str(data.get("hook_banner_text") or ""))
-                dur_v = int(data.get("hook_banner_duration", 0))
+                dur_v = int(data.get("hook_banner_duration", 5))
                 if hasattr(self, "hook_banner_dur_combo"):
                     idx_d = self.hook_banner_dur_combo.findData(dur_v)
                     if idx_d >= 0:
@@ -6149,29 +7500,30 @@ class HermesDesktop(QMainWindow):
             if mode == "manual":
                 m_cnt = len(getattr(self, "pre_manual_segments", []))
                 if m_cnt > 0:
-                    self.start_button.setText(f"✂️ Proses && Buat {m_cnt} Klip Manual Sekarang")
+                    self.start_button.setText(f"Proses && Render {m_cnt} Segmen Manual")
                 else:
-                    self.start_button.setText("✂️ Lanjut ke Timeline Review (Clipping Manual)")
+                    self.start_button.setText("Lanjut ke Timeline Review Manual")
             else:
-                self.start_button.setText("🚀 Analisis && Buat Klip Sekarang")
+                self.start_button.setText("Mulai Analisis && Buat Klip AI")
 
         if mode == "manual":
             m_cnt = len(getattr(self, "pre_manual_segments", []))
             if self.source_duration > 0:
                 self.duration_info.setText(f"Durasi video sumber: {format_time(self.source_duration)}")
             if m_cnt > 0:
+                total_sel = sum(max(0.0, float(s.get("end", 0)) - float(s.get("start", 0))) for s in getattr(self, "pre_manual_segments", []))
                 self.segment_estimate.setText(
-                    f"✂️ Mode Clipping Manual Aktif: {m_cnt} klip manual siap dirender (Tanpa Pemotongan Otomatis AI)."
+                    f"Mode Manual Multi-Segmen: {m_cnt} segmen siap diproses (total durasi terpilih {format_time(total_sel)})."
                 )
             else:
                 self.segment_estimate.setText(
-                    "✂️ Mode Clipping Manual Aktif: Tanpa pemotongan otomatis AI. Tambah rentang di atas atau potong langsung di Timeline Review."
+                    "Mode Manual Aktif: Tambahkan satu atau banyak segmen di atas, atau langsung potong bebas di Timeline Review."
                 )
             return
 
         if self.source_duration <= 0:
             self.duration_info.setText("Durasi sumber: belum dimuat")
-            self.segment_estimate.setText("Estimasi jumlah klip akan tampil setelah video siap.")
+            self.segment_estimate.setText("Estimasi jumlah klip akan tampil setelah video dipilih.")
             return
         total = self.source_duration
         self.duration_info.setText(f"Durasi video sumber: {format_time(total)}")
@@ -6179,29 +7531,29 @@ class HermesDesktop(QMainWindow):
             count = max(1, self.split_count.value())
             per_clip = total / count
             self.segment_estimate.setText(
-                f"Hasil: {count} klip · sekitar {format_time(per_clip)} per klip · total {format_time(total)}."
+                f"Bagi Rata: {count} klip · sekitar {format_time(per_clip)} per klip."
             )
         elif mode == "split_duration":
             duration = max(1, self.segment_duration.value())
             count = max(1, int((total + duration - 1) // duration))
             self.segment_estimate.setText(
-                f"Hasil: sekitar {count} klip · {format_time(duration)} per klip."
+                f"Bagi Durasi: sekitar {count} klip · masing-masing {format_time(duration)}."
             )
         elif self.smart_duration_mode.currentData() == "fixed":
             duration = max(1, self.smart_fixed_duration.value())
             count = min(self.max_clips.value(), max(1, int((total + duration - 1) // duration)))
             self.segment_estimate.setText(
-                f"Otomatis: maksimal {count} klip · target {format_time(duration)} per klip."
+                f"Otomatis AI: maksimal {count} klip · target {format_time(duration)} per klip."
             )
         else:
             requested = self.clip_count.value()
             limit = self.max_clips.value() if requested == 0 else min(requested, self.max_clips.value())
             self.segment_estimate.setText(
-                f"AI otomatis memilih sampai {limit} momen terbaik · "
+                f"Otomatis AI: memilih hingga {limit} momen terbaik · "
                 + (
-                    "durasi tanya-jawab utuh (45–125 detik)."
+                    "durasi adaptif mengikuti alur kalimat utuh."
                     if self.min_duration.value() == 0 and self.max_duration.value() == 0
-                    else f"rentang {self.min_duration.value() or '45'}–{self.max_duration.value() or '125'} detik per klip."
+                    else f"rentang {self.min_duration.value() or 'otomatis'}–{self.max_duration.value() or 'otomatis'} detik."
                 )
             )
 
@@ -6221,7 +7573,6 @@ class HermesDesktop(QMainWindow):
         if hasattr(self, "create_preview_pos_time"):
             self.create_preview_pos_time.setText(time_str)
 
-        # Animasi kata aktif subtitle secara real-time saat video diputar / digeser
         new_tick = int(position / 420)
         if new_tick != getattr(self, "_preview_word_tick", -1):
             self._preview_word_tick = new_tick
@@ -6229,18 +7580,17 @@ class HermesDesktop(QMainWindow):
                 self.refresh_subtitle_preview_style()
                 self.update_create_subtitle_position()
 
-        # Update status deteksi wajah secara real-time di panel kiri
         if hasattr(self, "create_preview_video") and hasattr(self, "smart_detected_badge"):
             boxes = getattr(self.create_preview_video, "live_face_boxes", [])
             n_faces = len(boxes)
             if getattr(self, "_last_live_face_count", -1) != n_faces:
                 self._last_live_face_count = n_faces
                 if n_faces == 0:
-                    self.smart_detected_badge.setText("🎯 Live AI: 0 Wajah -> Mode Sinema Utuh (Latar Blur 9:16)")
+                    self.smart_detected_badge.setText("Live AI: 0 Wajah → Tampilan Sinematik Utuh")
                 elif n_faces == 1:
-                    self.smart_detected_badge.setText("🎯 Live AI: 1 Pembicara -> Auto-Focus Portrait 9:16")
+                    self.smart_detected_badge.setText("Live AI: 1 Subjek → Fokus Potret 9:16")
                 else:
-                    self.smart_detected_badge.setText(f"🎯 Live AI: {n_faces} Pembicara -> Split 2 Panel Atas-Bawah")
+                    self.smart_detected_badge.setText(f"Live AI: {n_faces} Subjek → Split 2 Panel")
                 if hasattr(self, "smart_layout_overlay") and self.smart_layout_overlay.isVisible():
                     self.smart_layout_overlay.setVisible(False)
                 self.update_create_subtitle_position()
@@ -6256,13 +7606,13 @@ class HermesDesktop(QMainWindow):
     def on_create_playback_state_changed(self, state: QMediaPlayer.PlaybackState) -> None:
         if hasattr(self, "create_preview_play"):
             if state == QMediaPlayer.PlaybackState.PlayingState:
-                self.create_preview_play.setIcon(make_vector_icon("pause", "#FFFFFF", 20))
-                self.create_preview_play.setToolTip("Jeda Video (Spasi)")
+                self.create_preview_play.setIcon(make_vector_icon("pause", "#FFFFFF", 18))
+                self.create_preview_play.setToolTip("Jeda Pratinjau")
                 if hasattr(self, "bgm_preview_player") and getattr(self, "bgm_file_path", ""):
                     self.bgm_preview_player.play()
             else:
-                self.create_preview_play.setIcon(make_vector_icon("play", "#FFFFFF", 20))
-                self.create_preview_play.setToolTip("Putar Video (Spasi)")
+                self.create_preview_play.setIcon(make_vector_icon("play", "#FFFFFF", 18))
+                self.create_preview_play.setToolTip("Putar Pratinjau")
                 if hasattr(self, "bgm_preview_player"):
                     self.bgm_preview_player.pause()
 
@@ -6284,13 +7634,13 @@ class HermesDesktop(QMainWindow):
             self.bgm_preview_audio.setMuted(is_muted)
         if hasattr(self, "create_preview_mute_btn"):
             self.create_preview_mute_btn.setIcon(
-                make_vector_icon("volume_mute" if is_muted else "volume_on", "#CBD5E1", 18)
+                make_vector_icon("volume_mute" if is_muted else "volume_on", "#D4D4D8", 16)
             )
-            self.create_preview_mute_btn.setToolTip("Aktifkan Audio" if is_muted else "Bisukan Audio")
+            self.create_preview_mute_btn.setToolTip("Aktifkan Suara" if is_muted else "Bisukan Suara")
 
     def choose_bgm_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Pilih Background Music", str(Path.home()), "Audio (*.mp3 *.wav *.m4a *.aac *.flac *.ogg)"
+            self, "Pilih Musik Latar", str(Path.home()), "Audio (*.mp3 *.wav *.m4a *.aac *.flac *.ogg)"
         )
         if not path:
             return
@@ -6302,7 +7652,7 @@ class HermesDesktop(QMainWindow):
 
     def clear_bgm_file(self) -> None:
         self.bgm_file_path = ""
-        self.bgm_path_label.setText("Tidak ada musik latar (opsional)")
+        self.bgm_path_label.setText("Belum ada musik latar dipilih (opsional)")
         self.btn_clear_bgm.setEnabled(False)
         if hasattr(self, "bgm_preview_player"):
             self.bgm_preview_player.stop()
@@ -6324,12 +7674,12 @@ class HermesDesktop(QMainWindow):
             self.safe_zone_overlay.setVisible(is_vis)
             if hasattr(self, "btn_safe_zone"):
                 self.btn_safe_zone.setText(
-                    "👁️ Sembunyikan Area Aman HP" if is_vis else "👁️ Panduan Area Aman HP (Safe Zone)"
+                    "Sembunyikan Area HP" if is_vis else "Panduan Area HP"
                 )
                 self.btn_safe_zone.setStyleSheet(
-                    "background: #1D4ED8; color: #FFFFFF; font-weight: 600; border-radius: 6px; padding: 4px 10px;"
+                    "background: #172554; border: 1px solid #3B82F6; color: #FFFFFF; font-weight: 700; border-radius: 7px; padding: 0 10px;"
                     if is_vis
-                    else "background: #182234; border: 1px solid #2C3C56; color: #38BDF8; font-weight: 600; border-radius: 6px; padding: 4px 10px;"
+                    else ""
                 )
 
     def reset_facecam_to_auto(self) -> None:
@@ -6479,8 +7829,6 @@ class HermesDesktop(QMainWindow):
 
     def on_ai_provider_changed(self) -> None:
         is_gemini = self.ai_provider_combo.currentData() == "gemini"
-        self.gemini_panel.setVisible(is_gemini)
-        self.local_panel.setVisible(not is_gemini)
         if is_gemini:
             self.active_model_key = "gemini"
             self.use_llm.setChecked(True)
@@ -6493,6 +7841,7 @@ class HermesDesktop(QMainWindow):
                 idx = self.whisper_combo.findData("small")
                 if idx >= 0:
                     self.whisper_combo.setCurrentIndex(idx)
+        self.update_ai_engine_visibility()
 
     def on_gemini_key_changed(self, text: str) -> None:
         clean = text.strip()
@@ -6646,16 +7995,15 @@ class HermesDesktop(QMainWindow):
         top_review_bar = QHBoxLayout()
         title_box = QVBoxLayout()
         title_box.setSpacing(2)
-        step3_title = QLabel("STEP 3: REVIEW & EDIT KLIP")
-        step3_title.setStyleSheet("font-size: 16px; font-weight: 800; color: #F8FAFC; letter-spacing: 0.4px;")
+        step3_title = QLabel("Review & Rapikan Klip")
+        step3_title.setStyleSheet("font-size: 18px; font-weight: 800; color: #FAFAFA; letter-spacing: 0.2px;")
         title_box.addWidget(step3_title)
 
-        preview_header = QLabel("Klik salah satu klip di kanan untuk memutar, mengedit subtitle, atau mengecek framing secara langsung.")
-        preview_header.setStyleSheet("font-size: 12px; font-weight: 500; color: #94A3B8;")
+        preview_header = QLabel("Klik segmen klip di kanan untuk meninjau hasil potongan, teks subtitle, dan tata letak kamera.")
+        preview_header.setStyleSheet("font-size: 12px; font-weight: 500; color: #71717A;")
         title_box.addWidget(preview_header)
         top_review_bar.addLayout(title_box, 1)
 
-        # 1 Kontrol Rasio & Framing Terpadu di Menu Review (Tidak ada lagi banyak tombol rasio/zoom yang membingungkan)
         format_box = QVBoxLayout()
         format_box.setSpacing(2)
         fmt_lbl = QLabel("Format & Framing Klip:")
@@ -6664,19 +8012,24 @@ class HermesDesktop(QMainWindow):
 
         self.review_format_combo = self.combo(
             [
-                ("🤖 [Otomatis AI] 9:16 Auto-Podcast (1 & 2 Orang)", "auto_podcast_9_16"),
-                ("🤖 [Otomatis AI] 9:16 Fokus 1 Pembicara Aktif", "crop_9_16"),
-                ("🤖 [Otomatis AI] 9:16 Split 2 Pembicara AI", "split_2_9_16"),
-                ("✋ [Manual] 9:16 Cinema Blur (Utuh Anti-Potong)", "ambient_9_16"),
-                ("✋ [Manual] 9:16 Crop Penuh (Posisi Manual)", "manual_crop"),
-                ("✋ [Manual] 9:16 Split 2 Panel Statis (Kiri/Kanan)", "manual_split"),
-                ("✋ [Manual] 9:16 Streamer Facecam Atas", "facecam_9_16"),
-                ("✋ [Manual] 1:1 Kotak Instagram", "square_1_1"),
-                ("✋ [Manual] 16:9 Landscape YouTube", "fit_16_9"),
+                ("🎞️ [Tanpa Framing] Rasio Asli Utuh 1:1", "original_native"),
+                ("✨ [Otomatis AI] 9:16 Adaptif Universal", "auto_universal_9_16"),
+                ("🎙️ [Otomatis AI] 9:16 Podcast & Dialog", "auto_podcast_9_16"),
+                ("🎯 [Otomatis AI] 9:16 Fokus 1 Subjek", "crop_9_16"),
+                ("👥 [Otomatis AI] 9:16 Split 2 Panel", "split_2_9_16"),
+                ("🎮 [Otomatis AI] 9:16 Gaming & Stream", "auto_gaming_9_16"),
+                ("🎬 [Otomatis AI] 9:16 Sinematik Utuh", "auto_cinema_9_16"),
+                ("⬛ [Manual] 9:16 Fit Utuh Standar", "fit_9_16"),
+                ("🌫️ [Manual] 9:16 Latar Blur Sinematik", "ambient_9_16"),
+                ("🔍 [Manual] 9:16 Crop & Zoom Bebas", "manual_crop"),
+                ("⏸️ [Manual] 9:16 Split 2 Panel Statis", "manual_split"),
+                ("🎥 [Manual] 9:16 Facecam Atas + Konten", "facecam_9_16"),
+                ("🟦 [Manual] 1:1 Kotak Persegi", "square_1_1"),
+                ("🖥️ [Manual] 16:9 Landscape Lebar", "fit_16_9"),
             ],
-            selected=0,
+            selected=1,
         )
-        self.review_format_combo.setMinimumWidth(290)
+        self.review_format_combo.setMinimumWidth(285)
         self.review_format_combo.currentIndexChanged.connect(self.on_review_format_changed)
         format_box.addWidget(self.review_format_combo)
         top_review_bar.addLayout(format_box)
@@ -6732,8 +8085,8 @@ class HermesDesktop(QMainWindow):
         player_controls.addWidget(self.play_button)
 
         ctrl_btn_style = (
-            "QPushButton { background: #1E293B; border: 1px solid #334155; border-radius: 8px; padding: 0px 10px; color: #E2E8F0; font-size: 12px; font-weight: 600; } "
-            "QPushButton:hover { background: #334155; color: #FFFFFF; } QPushButton:pressed { background: #0F172A; }"
+            "QPushButton { background: #101018; border: 1px solid #242432; border-radius: 8px; padding: 0px 10px; color: #E4E4E7; font-size: 12px; font-weight: 600; } "
+            "QPushButton:hover { background: #1A1A28; color: #FFFFFF; border-color: #3B82F6; } QPushButton:pressed { background: #09090E; }"
         )
         btn_rew = QPushButton("⏪ -5d")
         btn_rew.setToolTip("Mundur 5 Detik")
@@ -6826,18 +8179,63 @@ class HermesDesktop(QMainWindow):
         btn_row1.addWidget(self.add_manual_button)
         right_col.addLayout(btn_row1)
 
-        btn_row2 = QHBoxLayout()
-        btn_back_review = QPushButton("← Kembali ke Pengaturan")
-        btn_back_review.setMinimumHeight(44)
-        btn_back_review.setMinimumWidth(175)
-        btn_back_review.setStyleSheet(
-            "QPushButton { background: #1e293b; border: 1px solid #334155; color: #f1f5f9; font-weight: 600; border-radius: 10px; } "
-            "QPushButton:hover { background: #334155; color: #ffffff; }"
+        self.review_export_progress_card = QFrame()
+        self.review_export_progress_card.setObjectName("reviewExportCard")
+        self.review_export_progress_card.setStyleSheet(
+            "QFrame#reviewExportCard { background: #090D18; border: 1.5px solid #2563EB; border-radius: 12px; padding: 10px 12px; }"
         )
-        btn_back_review.clicked.connect(self.cancel_to_edit_step2)
-        btn_row2.addWidget(btn_back_review)
+        rep_lay = QVBoxLayout(self.review_export_progress_card)
+        rep_lay.setContentsMargins(10, 8, 10, 8)
+        rep_lay.setSpacing(6)
+        rep_top = QHBoxLayout()
+        self.review_export_status_lbl = QLabel("⏳ Mengekspor klip video final...")
+        self.review_export_status_lbl.setStyleSheet("font-weight: 800; font-size: 12px; color: #FAFAFA; border: 0; background: transparent;")
+        self.review_export_pct_lbl = QLabel("0%")
+        self.review_export_pct_lbl.setStyleSheet("font-family: 'Cascadia Mono', monospace; font-weight: 800; font-size: 13px; color: #38BDF8; border: 0; background: transparent;")
+        rep_top.addWidget(self.review_export_status_lbl, 1)
+        rep_top.addWidget(self.review_export_pct_lbl)
+        rep_lay.addLayout(rep_top)
 
-        self.render_button = QPushButton("🚀 Render Semua Klip Sekarang")
+        self.review_export_bar = QProgressBar()
+        self.review_export_bar.setRange(0, 100)
+        self.review_export_bar.setValue(0)
+        self.review_export_bar.setTextVisible(False)
+        self.review_export_bar.setFixedHeight(7)
+        self.review_export_bar.setStyleSheet(
+            "QProgressBar { background: #141824; border-radius: 3px; border: 0; } "
+            "QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563EB, stop:1 #10B981); border-radius: 3px; }"
+        )
+        rep_lay.addWidget(self.review_export_bar)
+
+        rep_sub_row = QHBoxLayout()
+        self.review_export_detail_lbl = QLabel("Menyiapkan render video & subtitle...")
+        self.review_export_detail_lbl.setStyleSheet("font-size: 11px; color: #94A3B8; border: 0; background: transparent;")
+        self.btn_cancel_review_export = QPushButton("Batalkan Ekspor")
+        self.btn_cancel_review_export.setFixedHeight(28)
+        self.btn_cancel_review_export.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_cancel_review_export.setStyleSheet(
+            "QPushButton { background: #2A0A10; border: 1px solid #EF4444; border-radius: 6px; color: #FCA5A5; font-size: 11px; font-weight: 700; padding: 0 12px; } "
+            "QPushButton:hover { background: #450A0A; color: #FFFFFF; }"
+        )
+        self.btn_cancel_review_export.clicked.connect(self.cancel_current_process)
+        rep_sub_row.addWidget(self.review_export_detail_lbl, 1)
+        rep_sub_row.addWidget(self.btn_cancel_review_export)
+        rep_lay.addLayout(rep_sub_row)
+        self.review_export_progress_card.setVisible(False)
+        right_col.addWidget(self.review_export_progress_card)
+
+        btn_row2 = QHBoxLayout()
+        self.btn_back_review = QPushButton("← Kembali ke Studio Klip")
+        self.btn_back_review.setMinimumHeight(44)
+        self.btn_back_review.setMinimumWidth(175)
+        self.btn_back_review.setStyleSheet(
+            "QPushButton { background: #101018; border: 1px solid #242432; color: #E4E4E7; font-weight: 700; border-radius: 10px; } "
+            "QPushButton:hover { background: #1A1A28; color: #FFFFFF; border-color: #3B82F6; }"
+        )
+        self.btn_back_review.clicked.connect(self.cancel_to_edit_step2)
+        btn_row2.addWidget(self.btn_back_review)
+
+        self.render_button = QPushButton("🚀 Ekspor Semua Klip Sekarang")
         self.render_button.setObjectName("primary")
         self.render_button.setMinimumHeight(44)
         self.render_button.setStyleSheet("font-weight: 800; font-size: 13px; padding: 0 24px; border-radius: 10px;")
@@ -6857,7 +8255,96 @@ class HermesDesktop(QMainWindow):
 
         main_layout.addLayout(right_col, 42)
         scroll.setWidget(page)
-        return scroll
+
+        class _ReviewWrapper(QWidget):
+            def __init__(self, inner_scroll: QScrollArea, owner: Any) -> None:
+                super().__init__()
+                self._owner = owner
+                lay = QVBoxLayout(self)
+                lay.setContentsMargins(0, 0, 0, 0)
+                lay.setSpacing(0)
+                lay.addWidget(inner_scroll)
+
+            def resizeEvent(self, ev: Any) -> None:
+                super().resizeEvent(ev)
+                if hasattr(self._owner, "review_lock_overlay"):
+                    self._owner.review_lock_overlay.setGeometry(self.rect())
+
+        wrapper = _ReviewWrapper(scroll, self)
+        wrapper.setObjectName("pageContent")
+        wrapper.setStyleSheet("QWidget#pageContent { background: #000000; }")
+        self.review_outer_wrapper = wrapper
+        self.review_inner_scroll = scroll
+
+        self.review_lock_overlay = QFrame(wrapper)
+        self.review_lock_overlay.setObjectName("reviewLockOverlay")
+        self.review_lock_overlay.setStyleSheet(
+            "QFrame#reviewLockOverlay { background: rgba(3, 3, 7, 195); border: none; }"
+        )
+        lock_lay = QVBoxLayout(self.review_lock_overlay)
+        lock_lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        lock_card = QFrame()
+        lock_card.setObjectName("reviewLockCard")
+        lock_card.setFixedWidth(480)
+        lock_card.setStyleSheet(
+            "QFrame#reviewLockCard { background: #0B0D16; border: 1.5px solid #2563EB; border-radius: 16px; padding: 22px; }"
+        )
+        lc_lay = QVBoxLayout(lock_card)
+        lc_lay.setSpacing(10)
+
+        lock_badge = QLabel("🔒 PRATINJAU MENU REVIEW & TRIM (TERKUNCI SEMENTARA)")
+        lock_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lock_badge.setStyleSheet(
+            "color: #60A5FA; background: rgba(37, 99, 235, 0.16); border: 1px solid rgba(59, 130, 246, 0.45); "
+            "border-radius: 8px; padding: 4px 10px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.6px;"
+        )
+        lc_lay.addWidget(lock_badge)
+
+        lock_title = QLabel("Selesaikan Pengaturan di Studio Klip Terlebih Dahulu")
+        lock_title.setWordWrap(True)
+        lock_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lock_title.setStyleSheet("font-size: 16px; font-weight: 800; color: #FFFFFF; background: transparent; border: 0;")
+        lc_lay.addWidget(lock_title)
+
+        self.review_lock_desc = QLabel(
+            "Di halaman ini nantinya Anda dapat memutar ulang setiap potongan klip, menggeser batas awal/akhir di Garis Waktu (Timeline), "
+            "dan mengedit teks subtitle sebelum diekspor.\n\n"
+            "Saat ini halaman digelapkan karena Anda masih berada di tahap pengaturan Studio Klip."
+        )
+        self.review_lock_desc.setWordWrap(True)
+        self.review_lock_desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.review_lock_desc.setStyleSheet("font-size: 12px; color: #A1A1AA; line-height: 1.5; background: transparent; border: 0;")
+        lc_lay.addWidget(self.review_lock_desc)
+
+        btn_go_studio = QPushButton("← Kembali ke 2 · Studio Klip")
+        btn_go_studio.setObjectName("primary")
+        btn_go_studio.setFixedHeight(40)
+        btn_go_studio.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_go_studio.setStyleSheet("font-size: 12.5px; font-weight: 800; border-radius: 10px; padding: 0 20px;")
+        btn_go_studio.clicked.connect(lambda: self.switch_tab(2))
+        lc_lay.addWidget(btn_go_studio)
+
+        lock_lay.addWidget(lock_card)
+        self.set_review_unlocked(False)
+        return wrapper
+
+    def set_review_unlocked(self, unlocked: bool) -> None:
+        self.review_is_unlocked = unlocked
+        if hasattr(self, "review_lock_overlay") and hasattr(self, "review_outer_wrapper"):
+            self.review_lock_overlay.setGeometry(self.review_outer_wrapper.rect())
+            self.review_lock_overlay.setVisible(not unlocked)
+            if not unlocked:
+                self.review_lock_overlay.raise_()
+        if hasattr(self, "review_inner_scroll"):
+            eff = self.review_inner_scroll.graphicsEffect()
+            if not unlocked:
+                if not isinstance(eff, QGraphicsOpacityEffect):
+                    eff = QGraphicsOpacityEffect(self.review_inner_scroll)
+                    self.review_inner_scroll.setGraphicsEffect(eff)
+                eff.setOpacity(0.38)
+            else:
+                self.review_inner_scroll.setGraphicsEffect(None)
 
     def build_results_tab(self) -> QWidget:
         scroll = QScrollArea()
@@ -6889,7 +8376,7 @@ class HermesDesktop(QMainWindow):
         header_row.addLayout(left_stat, 1)
 
         summary_card = QFrame()
-        summary_card.setStyleSheet("background: #131926; border: 1px solid #233148; border-radius: 10px; padding: 10px 16px;")
+        summary_card.setStyleSheet("background: #09090E; border: 1px solid #1C1C26; border-radius: 12px; padding: 10px 16px;")
         summary_layout = QVBoxLayout(summary_card)
         summary_layout.setContentsMargins(10, 8, 10, 8)
         summary_layout.setSpacing(4)
@@ -6965,8 +8452,8 @@ class HermesDesktop(QMainWindow):
         self.btn_login_yt.setMinimumHeight(46)
         self.btn_login_yt.setStyleSheet("""
             QPushButton {
-                background: #1E293B;
-                border: 1px solid #334155;
+                background: #101018;
+                border: 1px solid #242432;
                 border-radius: 10px;
                 color: #F87171;
                 font-size: 13px;
@@ -7039,7 +8526,7 @@ class HermesDesktop(QMainWindow):
             clip_mode=self.mode_combo.currentData(),
             clip_profile="manual" if self.mode_combo.currentData() == "manual" else self.profile_combo.currentData(),
             manual_segments=list(getattr(self, "pre_manual_segments", [])) if self.mode_combo.currentData() == "manual" else [],
-            clip_flavor=self.clip_flavor_combo.currentData() if hasattr(self, "clip_flavor_combo") else "spicy_drama",
+            clip_flavor=self.clip_flavor_combo.currentData() if hasattr(self, "clip_flavor_combo") else "universal",
             use_audio_energy=self.use_audio_energy_check.isChecked() if hasattr(self, "use_audio_energy_check") else True,
             snap_sentence_bounds=self.snap_sentence_check.isChecked() if hasattr(self, "snap_sentence_check") else True,
             trim_opening_filler=self.trim_filler_check.isChecked() if hasattr(self, "trim_filler_check") else False,
@@ -7061,7 +8548,7 @@ class HermesDesktop(QMainWindow):
             subtitle_style=self.subtitle_combo.currentData() if self.subtitle_enabled.isChecked() else "none",
             subtitle_position=self.subtitle_position_combo.currentData() if self.subtitle_enabled.isChecked() else "auto",
             subtitle_color=self.selected_subtitle_color() if self.subtitle_enabled.isChecked() else "auto",
-            subtitle_active_color=self.subtitle_active_color_combo.currentData() if hasattr(self, "subtitle_active_color_combo") else "auto_context",
+            subtitle_active_color=self.subtitle_active_color_combo.currentData() if hasattr(self, "subtitle_active_color_combo") else "#FFDD00",
             subtitle_x=self.subtitle_free_x,
             subtitle_y=self.subtitle_free_y,
             subtitle_max_lines=self.subtitle_lines_combo.currentData() if hasattr(self, "subtitle_lines_combo") else 2,
@@ -7069,31 +8556,32 @@ class HermesDesktop(QMainWindow):
             subtitle_mode=self.subtitle_mode_combo.currentData() if hasattr(self, "subtitle_mode_combo") else "active_highlight",
             skip_if_has_subtitles=self.skip_if_has_subtitles_toggle.isChecked() if hasattr(self, "skip_if_has_subtitles_toggle") else True,
             bgm_path=getattr(self, "bgm_file_path", "").strip(),
-            bgm_volume=self.bgm_vol_slider.value() / 100.0 if hasattr(self, "bgm_vol_slider") else 0.18,
+            bgm_volume=self.bgm_vol_slider.value() / 100.0 if hasattr(self, "bgm_vol_slider") else 0.08,
             voice_volume=self.voice_vol_slider.value() / 100.0 if hasattr(self, "voice_vol_slider") else 1.0,
             bgm_autoduck=self.bgm_duck_checkbox.isChecked() if hasattr(self, "bgm_duck_checkbox") else True,
             audio_loudnorm=self.loudnorm_checkbox.isChecked() if hasattr(self, "loudnorm_checkbox") else False,
             censor_profanity=self.censor_profanity_checkbox.isChecked() if hasattr(self, "censor_profanity_checkbox") else False,
             watermark_text=self.watermark_edit.text().strip() if hasattr(self, "watermark_edit") else "",
             watermark_image_path=self.watermark_image_edit.text().strip() if hasattr(self, "watermark_image_edit") else "",
-            watermark_position=self.watermark_pos_combo.currentData() if hasattr(self, "watermark_pos_combo") else "bottom_right",
-            watermark_opacity=self.watermark_opacity_slider.value() / 100.0 if hasattr(self, "watermark_opacity_slider") else 0.7,
+            watermark_position=self.watermark_pos_combo.currentData() if hasattr(self, "watermark_pos_combo") else "top_right",
+            watermark_opacity=self.watermark_opacity_slider.value() / 100.0 if hasattr(self, "watermark_opacity_slider") else 0.75,
             watermark_x=self.watermark_free_x if hasattr(self, "watermark_free_x") else 0.85,
             watermark_y=self.watermark_free_y if hasattr(self, "watermark_free_y") else 0.08,
-            hook_banner_enabled=self.hook_banner_toggle.isChecked() if hasattr(self, "hook_banner_toggle") else True,
+            hook_banner_enabled=self.hook_banner_toggle.isChecked() if hasattr(self, "hook_banner_toggle") else False,
             hook_banner_text=self.hook_banner_edit.text().strip() if hasattr(self, "hook_banner_edit") else "",
             hook_banner_duration=hb_dur_val,
             hook_banner_position=hb_pos_val,
             hook_banner_x=self.hook_banner_free_x,
             hook_banner_y=self.hook_banner_free_y,
+            outro_cta_enabled=self.outro_cta_check.isChecked() if hasattr(self, "outro_cta_check") else False,
             facecam_crop=self.get_active_facecam_crop(),
             mirror_video=self.mirror_video_check.isChecked() if hasattr(self, "mirror_video_check") else False,
             speed_shift=self.speed_shift_check.isChecked() if hasattr(self, "speed_shift_check") else False,
             color_boost=self.color_boost_check.isChecked() if hasattr(self, "color_boost_check") else False,
-            emoji_subtitles=self.emoji_subtitles_check.isChecked() if hasattr(self, "emoji_subtitles_check") else True,
-            dynamic_micro_zoom=self.micro_zoom_check.isChecked() if hasattr(self, "micro_zoom_check") else True,
+            emoji_subtitles=self.emoji_subtitles_check.isChecked() if hasattr(self, "emoji_subtitles_check") else False,
+            dynamic_micro_zoom=self.micro_zoom_check.isChecked() if hasattr(self, "micro_zoom_check") else False,
             auto_broll=self.auto_broll_check.isChecked() if hasattr(self, "auto_broll_check") else False,
-            broll_folder="",
+            broll_folder=self.broll_folder_edit.text().strip() if hasattr(self, "broll_folder_edit") else "",
             translate_lyrics=self.translate_lyrics_check.isChecked() if hasattr(self, "translate_lyrics_check") else False,
             lyrics_target_lang=self.lyrics_target_lang_combo.currentData() if hasattr(self, "lyrics_target_lang_combo") else "id",
             lyrics_display_mode=self.lyrics_display_mode_combo.currentData() if hasattr(self, "lyrics_display_mode_combo") else "dual",
@@ -7172,7 +8660,10 @@ class HermesDesktop(QMainWindow):
         for widget in self.clip_stage_widgets:
             widget.setVisible(True)
         self.set_create_inputs_locked(False)
+        if hasattr(self, "set_review_unlocked"):
+            self.set_review_unlocked(False)
         self.switch_tab(2)
+        QTimer.singleShot(40, self.ensure_splitter_balanced)
 
     def start_process(self) -> None:
         if not self.current_job_id:
@@ -7193,18 +8684,22 @@ class HermesDesktop(QMainWindow):
         if gemini_key:
             persist_gemini_key_to_env(gemini_key)
 
-        if self.ai_provider_combo.currentData() == "gemini" or self.whisper_combo.currentData() == "gemini":
+        needs_ai_analysis = (options.clip_mode == "smart")
+        ai_prov = self.ai_provider_combo.currentData() if needs_ai_analysis else "none"
+        stt_prov = self.whisper_combo.currentData()
+
+        if ai_prov == "gemini" or stt_prov == "gemini":
             if not gemini_key:
                 QMessageBox.warning(
                     self,
                     "API Key Kosong",
-                    "Masukkan Gemini API Key kamu terlebih dahulu di bagian Otak AI (dapatkan gratis di aistudio.google.com).",
+                    "Masukkan Gemini API Key kamu terlebih dahulu di bagian Mesin Suara ke Teks / AI (dapatkan gratis di aistudio.google.com).",
                 )
                 return
-            if self.ai_provider_combo.currentData() == "gemini":
+            if ai_prov == "gemini":
                 self.active_model_key = "gemini"
                 options.local_model = "gemini"
-        elif self.use_llm.isChecked():
+        elif needs_ai_analysis and self.use_llm.isChecked():
             current_model = self.model_file_combo.currentData()
             if not current_model:
                 QMessageBox.warning(self, "Pilih model GGUF", "Pilih salah satu file .gguf dari dropdown Model aktif terlebih dahulu.")
@@ -7220,15 +8715,22 @@ class HermesDesktop(QMainWindow):
         with core.JOBS_LOCK:
             core.JOB_OPTIONS[self.current_job_id] = options
         self.set_create_inputs_locked(True)
-        self.tabs.setTabEnabled(3, False)
+        self.tabs.setTabEnabled(3, True)
+        if hasattr(self, "set_review_unlocked"):
+            self.set_review_unlocked(False)
+        if hasattr(self, "review_lock_desc"):
+            self.review_lock_desc.setText(
+                "⏳ <b>Sedang Memproses Pembuatan Klip di Studio Klip...</b><br>"
+                "Tunggu sebentar hingga proses pemotongan & pembuatan subtitle selesai, lalu halaman Review & Trim ini akan otomatis terbuka penuh."
+            )
         self.tabs.setTabEnabled(4, False)
         self.set_progress_panel_visible(True)
         self.progress.setValue(0)
         self.total_percent_label.setText("0%")
         self.sub_progress.setValue(0)
         self.sub_percent_label.setText("0%")
-        self.status_label.setText("Memulai proses...")
-        self.sub_status_label.setText("Menyiapkan tahapan ekstraksi audio...")
+        self.status_label.setText("Memulai proses pembuatan klip...")
+        self.sub_status_label.setText("Menyiapkan tahapan ekstraksi audio & pemotongan...")
         self.log_terminal(f"Memulai proses clip video (Job ID: {self.current_job_id})...")
         self.worker = JobWorker(self.current_job_id, options, source_path=source_path)
         self.worker.finished_job.connect(self.refresh_job)
@@ -7256,6 +8758,13 @@ class HermesDesktop(QMainWindow):
         self.sub_percent_label.setText(f"{sub_pct}%")
         self.sub_status_label.setText(sub_msg or msg)
 
+        if hasattr(self, "review_export_progress_card") and self.review_export_progress_card.isVisible():
+            eff_export_pct = overall_pct if overall_pct > 0 else sub_pct
+            self.animate_progress_bar(self.review_export_bar, eff_export_pct)
+            self.review_export_pct_lbl.setText(f"{eff_export_pct}%")
+            self.review_export_status_lbl.setText(f"⏳ {msg}")
+            self.review_export_detail_lbl.setText(sub_msg or f"Progress render video: {eff_export_pct}% — Mohon tunggu hingga selesai...")
+
         if hasattr(self, "dl_progress_card") and self.dl_progress_card.isVisible():
             effective_pct = sub_pct if sub_pct > 0 else overall_pct
             self.animate_progress_bar(self.dl_progress_bar, effective_pct)
@@ -7280,24 +8789,48 @@ class HermesDesktop(QMainWindow):
             self.show_review(snapshot)
         elif snapshot["status"] == "completed":
             self.poll_timer.stop()
+            if hasattr(self, "review_export_progress_card"):
+                self.review_export_progress_card.setVisible(False)
+            self.set_progress_panel_visible(False)
+            self.set_create_inputs_locked(False)
+            self.render_button.setEnabled(True)
+            if hasattr(self, "edit_text_button"):
+                self.edit_text_button.setEnabled(True)
+            if hasattr(self, "btn_back_review"):
+                self.btn_back_review.setEnabled(True)
+            self.add_manual_button.setEnabled(True)
             self.show_results(snapshot)
         elif snapshot["status"] == "canceled":
             if hasattr(self, "dl_progress_card"):
                 self.dl_progress_card.setVisible(False)
+            if hasattr(self, "review_export_progress_card"):
+                self.review_export_progress_card.setVisible(False)
             self.set_progress_panel_visible(False)
             self.poll_timer.stop()
             self.set_create_inputs_locked(False)
+            self.render_button.setEnabled(True)
+            if hasattr(self, "edit_text_button"):
+                self.edit_text_button.setEnabled(True)
+            if hasattr(self, "btn_back_review"):
+                self.btn_back_review.setEnabled(True)
+            self.add_manual_button.setEnabled(True)
             self.status_label.setText("Proses dibatalkan.")
             self.sub_status_label.setText("Pengaturan klip telah dibuka kembali.")
             self.log_terminal("Proses render telah dibatalkan.")
         elif snapshot["status"] == "failed":
             if hasattr(self, "dl_progress_card"):
                 self.dl_progress_card.setVisible(False)
+            if hasattr(self, "review_export_progress_card"):
+                self.review_export_progress_card.setVisible(False)
             self.poll_timer.stop()
             self.download_button.setEnabled(True)
             self.local_file_button.setEnabled(True)
             self.set_create_inputs_locked(False)
             self.render_button.setEnabled(True)
+            if hasattr(self, "edit_text_button"):
+                self.edit_text_button.setEnabled(True)
+            if hasattr(self, "btn_back_review"):
+                self.btn_back_review.setEnabled(True)
             self.add_manual_button.setEnabled(True)
             err_msg = str(snapshot.get("error") or snapshot.get("message") or "")
             if "dibatalkan" in err_msg.lower():
@@ -7338,19 +8871,54 @@ class HermesDesktop(QMainWindow):
     def show_review(self, job: dict[str, Any]) -> None:
         self.current_review_job = job
         self.selected_review_clip_index = 0
+        self.set_progress_panel_visible(False)
+        self.set_create_inputs_locked(False)
+        if hasattr(self, "set_review_unlocked"):
+            self.set_review_unlocked(True)
+        if hasattr(self, "review_export_progress_card"):
+            self.review_export_progress_card.setVisible(False)
+        self.render_button.setEnabled(True)
+        if hasattr(self, "edit_text_button"):
+            self.edit_text_button.setEnabled(True)
+        if hasattr(self, "btn_back_review"):
+            self.btn_back_review.setEnabled(True)
+        self.add_manual_button.setEnabled(True)
         if not self.current_options:
             try:
                 self.current_options = core.JOB_OPTIONS.get(job.get("id")) or self.build_options()
             except Exception:
                 self.current_options = None
-        if hasattr(self, "review_format_combo") and hasattr(self, "unified_format_combo"):
+        studio_prev_mode = (
+            getattr(self.create_preview_video, "preview_mode", "auto_universal_9_16")
+            if hasattr(self, "create_preview_video")
+            else "auto_universal_9_16"
+        )
+        if hasattr(self, "review_format_combo"):
             self.review_format_combo.blockSignals(True)
-            self.review_format_combo.setCurrentIndex(self.unified_format_combo.currentIndex())
+            idx_rf = self.review_format_combo.findData(studio_prev_mode)
+            if idx_rf >= 0:
+                self.review_format_combo.setCurrentIndex(idx_rf)
             self.review_format_combo.blockSignals(False)
-        if hasattr(self, "video_widget") and hasattr(self, "review_format_combo"):
-            self.video_widget.set_preview_mode(str(self.review_format_combo.currentData() or "auto_podcast_9_16"))
+        if hasattr(self, "video_widget"):
+            self.video_widget.set_preview_mode(studio_prev_mode)
+            if hasattr(self, "create_preview_video"):
+                self.video_widget.set_manual_crop(
+                    self.create_preview_video.manual_crop_x,
+                    self.create_preview_video.manual_crop_y,
+                    self.create_preview_video.manual_zoom,
+                )
+            if hasattr(self, "mirror_video_check"):
+                self.video_widget.mirror_horizontal = self.mirror_video_check.isChecked()
+            if hasattr(self, "color_boost_check"):
+                self.video_widget.color_boost_enabled = self.color_boost_check.isChecked()
             if hasattr(self, "realtime_face_box_check"):
                 self.video_widget.set_show_face_boxes(self.realtime_face_box_check.isChecked())
+            self.video_widget.update()
+        if hasattr(self, "player") and hasattr(self, "speed_shift_check"):
+            try:
+                self.player.setPlaybackRate(1.03 if self.speed_shift_check.isChecked() else 1.0)
+            except Exception:
+                pass
 
         ai_count = sum(1 for clip in job["clips"] if clip.get("source") == "ai")
         manual_count = sum(1 for clip in job["clips"] if clip.get("source") == "manual")
@@ -7508,8 +9076,17 @@ class HermesDesktop(QMainWindow):
     def on_review_format_changed(self) -> None:
         if not hasattr(self, "review_format_combo"):
             return
-        mode = str(self.review_format_combo.currentData() or "auto_podcast_9_16")
-        if mode in ("auto_podcast_9_16", "crop_9_16", "split_2_9_16"):
+        mode = str(self.review_format_combo.currentData() or "auto_universal_9_16")
+        if mode == "original_native":
+            self.set_framing_mode("none")
+        elif mode in (
+            "auto_universal_9_16",
+            "auto_podcast_9_16",
+            "crop_9_16",
+            "split_2_9_16",
+            "auto_gaming_9_16",
+            "auto_cinema_9_16",
+        ):
             self.set_framing_mode("auto")
             if hasattr(self, "unified_format_combo"):
                 idx = self.unified_format_combo.findData(mode)
@@ -7518,6 +9095,7 @@ class HermesDesktop(QMainWindow):
         else:
             self.set_framing_mode("manual")
             review_to_manual = {
+                "fit_9_16": ("9:16", "manual_fit"),
                 "ambient_9_16": ("9:16", "manual_ambient"),
                 "manual_crop": ("9:16", "manual_crop"),
                 "manual_split": ("9:16", "manual_split"),
@@ -7525,7 +9103,7 @@ class HermesDesktop(QMainWindow):
                 "square_1_1": ("1:1", "manual_crop"),
                 "fit_16_9": ("16:9", "manual_fit"),
             }
-            asp_v, sty_v = review_to_manual.get(mode, ("9:16", "manual_ambient"))
+            asp_v, sty_v = review_to_manual.get(mode, ("9:16", "manual_fit"))
             if hasattr(self, "manual_aspect_combo"):
                 idx_a = self.manual_aspect_combo.findData(asp_v)
                 if idx_a >= 0:
@@ -7552,7 +9130,7 @@ class HermesDesktop(QMainWindow):
             )
         self.update_review_subtitle_position()
         if hasattr(self, "review_status"):
-            self.review_status.setText(f"✅ Format diubah ke: {self.review_format_combo.currentText()}")
+            self.review_status.setText(f"Format klip diubah ke: {self.review_format_combo.currentText()}")
 
     def cycle_review_ratio(self) -> None:
         if hasattr(self, "review_format_combo"):
@@ -7716,20 +9294,29 @@ class HermesDesktop(QMainWindow):
         if not self.current_job_id:
             return
         try:
-            latest_opts = self.build_options()
-            if self.current_options:
-                latest_opts.aspect_ratio = self.current_options.aspect_ratio
-                latest_opts.framing = self.current_options.framing
-                latest_opts.layout = self.current_options.layout
-            self.current_options = latest_opts
+            self.current_options = self.build_options()
         except Exception:
             if not self.current_options:
                 return
         with core.JOBS_LOCK:
             core.JOB_OPTIONS[self.current_job_id] = self.current_options
         self.render_button.setEnabled(False)
-        self.add_manual_button.setEnabled(True)
-        self.preview_status.setText("Menyiapkan render final semua clip...")
+        if hasattr(self, "edit_text_button"):
+            self.edit_text_button.setEnabled(False)
+        if hasattr(self, "btn_back_review"):
+            self.btn_back_review.setEnabled(False)
+        self.add_manual_button.setEnabled(False)
+        if hasattr(self, "review_export_progress_card"):
+            self.review_export_bar.setValue(0)
+            self.review_export_pct_lbl.setText("0%")
+            self.review_export_status_lbl.setText("⏳ Menyiapkan Ekspor & Render Video Final...")
+            self.review_export_detail_lbl.setText("Menggabungkan pemotongan klip, framing kamera, dan subtitle ke file MP4...")
+            self.review_export_progress_card.setVisible(True)
+        self.set_create_inputs_locked(True)
+        self.set_progress_panel_visible(True)
+        self.status_label.setText("Mengekspor & merender klip final...")
+        self.sub_status_label.setText("Sedang memproses video final dari menu Review & Trim...")
+        self.preview_status.setText("Menyiapkan render final semua klip terpilih...")
         self.worker = JobWorker(self.current_job_id, self.current_options, render=True)
         self.worker.finished_job.connect(self.refresh_job)
         self.worker.start()
@@ -7882,7 +9469,7 @@ class HermesDesktop(QMainWindow):
 
     def update_realtime_subtitle(self, seconds: float) -> None:
         if hasattr(self, "review_hook_banner_overlay") and hasattr(self, "video_widget"):
-            hb_on = getattr(self.current_options, "hook_banner_enabled", True) if self.current_options else (self.hook_banner_toggle.isChecked() if hasattr(self, "hook_banner_toggle") else True)
+            hb_on = getattr(self.current_options, "hook_banner_enabled", False) if self.current_options else (self.hook_banner_toggle.isChecked() if hasattr(self, "hook_banner_toggle") else False)
             hb_dur = float(getattr(self.current_options, "hook_banner_duration", 0.0)) if self.current_options else (
                 float(self.hook_banner_dur_combo.currentData() or 0)
                 if hasattr(self, "hook_banner_dur_combo")
@@ -7916,28 +9503,17 @@ class HermesDesktop(QMainWindow):
                 is_landscape = vw_w >= vw_h
                 headline = core.build_thumbnail_hook_headline(hb_text) if hasattr(core, "build_thumbnail_hook_headline") else hb_text.upper()
                 hb_words = headline.split()
-                colored_tokens = []
-                has_spec = False
-                for idx_w, hw in enumerate(hb_words):
-                    _, w_hex, is_sp = core.detect_word_context_color(hw, headline, "auto_context") if hasattr(core, "detect_word_context_color") else ("", "#FFFFFF", False)
-                    if is_sp:
-                        has_spec = True
-                        colored_tokens.append(f"<font color='{w_hex}'>{hw}</font>")
-                    elif not has_spec and idx_w >= len(hb_words) - 2:
-                        colored_tokens.append(f"<font color='#FBBF24'>{hw}</font>")
-                    else:
-                        colored_tokens.append(f"<font color='#FFFFFF'>{hw}</font>")
-
+                colored_tokens = [f"<font color='#FFFFFF'>{hw}</font>" for hw in hb_words]
                 max_per_line = 5 if is_landscape else 4
                 hb_lines = [" ".join(colored_tokens[i:i+max_per_line]) for i in range(0, len(colored_tokens), max_per_line)]
-                rich_hb = "🔥 " + "<br>".join(hb_lines[:2])
+                rich_hb = "<br>".join(hb_lines[:2])
 
                 self.review_hook_banner_overlay.setTextFormat(Qt.TextFormat.RichText)
                 self.review_hook_banner_overlay.setText(rich_hb)
                 self.review_hook_banner_overlay.setStyleSheet(
-                    "background: rgba(15, 23, 42, 230); color: #FFFFFF; font-family: 'Segoe UI', 'Arial Black'; "
-                    "font-size: 12px; font-weight: 900; padding: 6px 14px; border-radius: 10px; "
-                    "border: 1.5px solid rgba(251, 191, 36, 210);"
+                    "background: rgba(10, 10, 16, 230); color: #FFFFFF; font-family: 'Segoe UI Variable Display', 'Segoe UI', sans-serif; "
+                    "font-size: 12px; font-weight: 800; padding: 6px 14px; border-radius: 8px; "
+                    "border: 1px solid rgba(59, 130, 246, 190);"
                 )
                 self.review_hook_banner_overlay.setMaximumWidth(int(vw_w * 0.88))
                 self.review_hook_banner_overlay.adjustSize()
@@ -7985,7 +9561,7 @@ class HermesDesktop(QMainWindow):
             self.source_subtitle_overlay.setVisible(False)
             return
 
-        active_col_opt = getattr(self.current_options, "subtitle_active_color", "auto_context")
+        active_col_opt = getattr(self.current_options, "subtitle_active_color", "#FFDD00")
         sub_mode = getattr(self.current_options, "subtitle_mode", "active_highlight")
         c_start = float(current.get("start", 0.0))
         c_end = max(c_start + 0.1, float(current.get("end", c_start + 1.0)))
@@ -8011,7 +9587,7 @@ class HermesDesktop(QMainWindow):
                             act_hex = w_hex
                         rich_tokens.append(f"<font color='{act_hex}'><b><span style='font-size:15px;'>{tok.upper()}</span></b></font>")
                     else:
-                        rich_tokens.append(tok.upper())
+                        rich_tokens.append(tok)
                 if len(rich_tokens) >= 5:
                     mid = len(rich_tokens) // 2
                     rich_text = " ".join(rich_tokens[:mid]) + "<br>" + " ".join(rich_tokens[mid:])
@@ -8057,7 +9633,7 @@ class HermesDesktop(QMainWindow):
             )
         elif position == "top":
             x = (pw - lw) // 2
-            y = int(ph * 0.16)
+            y = int(ph * 0.14)
             label.move(max(0, x), max(0, y))
         elif position == "center":
             x = (pw - lw) // 2
@@ -8066,8 +9642,8 @@ class HermesDesktop(QMainWindow):
         else:
             x = (pw - lw) // 2
             live_faces = len(getattr(self.video_widget, "live_face_boxes", []))
-            mode = getattr(self.video_widget, "preview_mode", "auto_podcast_9_16")
-            if mode == "split_2_9_16" or (mode == "auto_podcast_9_16" and live_faces >= 2):
+            mode = getattr(self.video_widget, "preview_mode", "auto_universal_9_16")
+            if (mode == "split_2_9_16" and live_faces >= 1) or (mode in ("auto_podcast_9_16", "auto_universal_9_16") and live_faces >= 2):
                 y = (ph - lh) // 2
             elif ph > pw:
                 y = min(ph - lh - 18, max(24, int(ph * 0.74)))
@@ -8082,30 +9658,42 @@ class HermesDesktop(QMainWindow):
         current_idx = self.tabs.currentIndex()
         for button_index, button in self.nav_buttons.items():
             button.setChecked(button_index == index)
+        if hasattr(self, "nav_setup_btn"):
+            self.nav_setup_btn.setChecked(index == 0)
+        if hasattr(self, "nav_models_btn"):
+            self.nav_models_btn.setChecked(index == 5)
 
         if current_idx == index:
             return
 
-        self.animate_tab_transition(self.tabs, current_idx, index, duration_ms=220)
+        self.animate_tab_transition(self.tabs, current_idx, index, duration_ms=160)
 
         if index == 2 and hasattr(self, "create_preview_frame"):
             self.update_create_preview()
+            QTimer.singleShot(25, self.ensure_splitter_balanced)
+        elif index == 3 and hasattr(self, "review_lock_overlay") and hasattr(self, "review_outer_wrapper"):
+            QTimer.singleShot(
+                10,
+                lambda: self.review_lock_overlay.setGeometry(self.review_outer_wrapper.rect())
+                if not getattr(self, "review_is_unlocked", False)
+                else None,
+            )
 
-    def animate_tab_transition(self, tab_widget: QTabWidget, from_idx: int, to_idx: int, duration_ms: int = 220) -> None:
+    def animate_tab_transition(self, tab_widget: QTabWidget, from_idx: int, to_idx: int, duration_ms: int = 160) -> None:
         if from_idx == to_idx or from_idx < 0 or to_idx < 0:
             tab_widget.setCurrentIndex(to_idx)
             return
 
         old_w = tab_widget.widget(from_idx)
         new_w = tab_widget.widget(to_idx)
-        if old_w is None or new_w is None or not old_w.isVisible() or old_w.width() <= 0:
+        if old_w is None or new_w is None:
             tab_widget.setCurrentIndex(to_idx)
             return
 
         if not hasattr(self, "_tab_anim_state"):
             self._tab_anim_state = {}
         if tab_widget in self._tab_anim_state:
-            prev_group, prev_overlay, prev_new = self._tab_anim_state.pop(tab_widget, (None, None, None))
+            prev_group, prev_overlay, prev_w = self._tab_anim_state.pop(tab_widget, (None, None, None))
             if prev_group is not None:
                 try:
                     prev_group.stop()
@@ -8116,12 +9704,17 @@ class HermesDesktop(QMainWindow):
                     prev_overlay.deleteLater()
                 except Exception:
                     pass
-            if prev_new is not None:
+            if prev_w is not None:
                 try:
-                    prev_new.setGraphicsEffect(None)
+                    prev_w.setGraphicsEffect(None)
                 except Exception:
                     pass
 
+        if not old_w.isVisible() or old_w.width() <= 0 or old_w.height() <= 0:
+            tab_widget.setCurrentIndex(to_idx)
+            return
+
+        parent_w = old_w.parentWidget() or tab_widget
         try:
             geom = old_w.geometry()
             pm = old_w.grab()
@@ -8129,40 +9722,35 @@ class HermesDesktop(QMainWindow):
             tab_widget.setCurrentIndex(to_idx)
             return
 
-        overlay = QLabel(tab_widget)
+        overlay = QLabel(parent_w)
         overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         overlay.setPixmap(pm)
         overlay.setGeometry(geom)
         overlay.show()
         overlay.raise_()
 
+        # Switch to target tab immediately at natural layout position (zero layout fighting / zero gempa)
         tab_widget.setCurrentIndex(to_idx)
 
-        effect_old = QGraphicsOpacityEffect(overlay)
-        overlay.setGraphicsEffect(effect_old)
+        eff_old = QGraphicsOpacityEffect(overlay)
+        overlay.setGraphicsEffect(eff_old)
 
-        anim_group = QParallelAnimationGroup(tab_widget)
+        eff_new = QGraphicsOpacityEffect(new_w)
+        eff_new.setOpacity(0.08)
+        new_w.setGraphicsEffect(eff_new)
 
-        anim_fade_old = QPropertyAnimation(effect_old, b"opacity", anim_group)
+        anim_group = QParallelAnimationGroup(parent_w)
+
+        anim_fade_old = QPropertyAnimation(eff_old, b"opacity", anim_group)
         anim_fade_old.setDuration(duration_ms)
         anim_fade_old.setStartValue(1.0)
         anim_fade_old.setEndValue(0.0)
         anim_fade_old.setEasingCurve(QEasingCurve.Type.OutCubic)
         anim_group.addAnimation(anim_fade_old)
 
-        delta_x = -24 if to_idx > from_idx else 24
-        anim_pos_old = QPropertyAnimation(overlay, b"pos", anim_group)
-        anim_pos_old.setDuration(duration_ms)
-        anim_pos_old.setStartValue(geom.topLeft())
-        anim_pos_old.setEndValue(geom.topLeft() + QPoint(delta_x, 0))
-        anim_pos_old.setEasingCurve(QEasingCurve.Type.OutCubic)
-        anim_group.addAnimation(anim_pos_old)
-
-        effect_new = QGraphicsOpacityEffect(new_w)
-        new_w.setGraphicsEffect(effect_new)
-        anim_fade_new = QPropertyAnimation(effect_new, b"opacity", anim_group)
+        anim_fade_new = QPropertyAnimation(eff_new, b"opacity", anim_group)
         anim_fade_new.setDuration(duration_ms)
-        anim_fade_new.setStartValue(0.25)
+        anim_fade_new.setStartValue(0.08)
         anim_fade_new.setEndValue(1.0)
         anim_fade_new.setEasingCurve(QEasingCurve.Type.OutCubic)
         anim_group.addAnimation(anim_fade_new)
@@ -8222,7 +9810,7 @@ class HermesDesktop(QMainWindow):
                 self.progress_panel.setGraphicsEffect(eff)
             eff.setOpacity(0.0)
             anim = QPropertyAnimation(eff, b"opacity", self)
-            anim.setDuration(240)
+            anim.setDuration(220)
             anim.setStartValue(0.0)
             anim.setEndValue(1.0)
             anim.setEasingCurve(QEasingCurve.Type.OutCubic)
@@ -8238,7 +9826,7 @@ class HermesDesktop(QMainWindow):
                 self.progress_panel.setGraphicsEffect(eff)
             start_op = eff.opacity() if eff.opacity() > 0.05 else 1.0
             anim = QPropertyAnimation(eff, b"opacity", self)
-            anim.setDuration(200)
+            anim.setDuration(180)
             anim.setStartValue(start_op)
             anim.setEndValue(0.0)
             anim.setEasingCurve(QEasingCurve.Type.OutCubic)
@@ -8254,8 +9842,8 @@ class HermesDesktop(QMainWindow):
 
     def apply_theme(self, light: bool) -> None:
         self.current_theme = "light" if light else "dark"
-        self.theme_button.setText("Tema: Gelap" if light else "Tema: Terang")
-        self.theme_button.setToolTip("Ganti ke tema gelap" if light else "Ganti ke tema terang")
+        if hasattr(self, "theme_button"):
+            self.theme_button.setText("Tema: Gelap" if light else "Tema: Terang")
         self.setStyleSheet(self.stylesheet(self.current_theme))
         self.refresh_subtitle_preview_style()
         QSettings("ENCLip", "ENCLip").setValue("theme", self.current_theme)
@@ -8264,80 +9852,88 @@ class HermesDesktop(QMainWindow):
     def stylesheet(theme: str = "dark") -> str:
         if theme == "light":
             return (
-                "QWidget { color: #0f172a; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; } "
-                "QMainWindow, QDialog, QScrollArea, QWidget#pageContent, QTabWidget::pane { background: #f8fafc; } "
-                "QLabel { background: transparent; color: #334155; padding: 2px 6px; } "
-                "QToolBar { background: #ffffff; border-bottom: 1px solid #e2e8f0; spacing: 8px; padding: 8px 16px; } "
-                "QFrame#navPillTrack { background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 10px; } "
-                "QPushButton#navButton { background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 6px 13px; color: #64748b; font-weight: 600; font-size: 12px; } "
-                "QPushButton#navButton:hover { background: #e2e8f0; border-color: #cbd5e1; color: #0f172a; } "
-                "QPushButton#navButton:pressed { background: #cbd5e1; } "
-                "QPushButton#navButton:checked { background: #2563eb; border: 1px solid #1d4ed8; color: #ffffff; font-weight: 700; } "
-                "QGroupBox { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 14px; margin-top: 0px; padding: 40px 16px 14px 16px; } "
-                "QGroupBox::title { subcontrol-origin: padding; subcontrol-position: top left; left: 14px; top: 10px; padding: 4px 10px; color: #1e40af; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 7px; font-weight: 800; font-size: 12px; } "
-                "QLineEdit, QComboBox, QSpinBox, QTextEdit { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 12px; min-height: 24px; color: #0f172a; } "
-                "QPushButton { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 16px; color: #334155; font-weight: 600; } "
-                "QPushButton#primary { background: #2563eb; color: #ffffff; font-weight: 700; border: 1px solid #2563eb; border-radius: 10px; padding: 10px 24px; } "
-                "QPushButton#primary:hover { background: #1d4ed8; border-color: #1e40af; } "
-                "QPushButton#primary:pressed { background: #1e40af; } "
-                "QScrollBar:vertical { background: transparent; width: 7px; margin: 2px 1px; } "
-                "QScrollBar::handle:vertical { background: #94a3b8; min-height: 28px; border-radius: 3px; } "
-                "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; } "
-                "QScrollBar:horizontal { background: transparent; height: 7px; margin: 1px 2px; } "
-                "QScrollBar::handle:horizontal { background: #94a3b8; min-width: 28px; border-radius: 3px; } "
-                "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0px; }"
+                "QWidget { color: #09090B; font-family: 'Segoe UI Variable Text', 'Segoe UI', sans-serif; font-size: 13px; } "
+                "QMainWindow, QDialog, QScrollArea, QWidget#pageContent, QTabWidget::pane { background: #F8FAFC; } "
+                "QLabel { background: transparent; color: #27272A; padding: 1px 2px; } "
+                "QToolBar { background: #FFFFFF; border-bottom: 1px solid #E4E4E7; spacing: 8px; padding: 6px 14px; } "
+                "QFrame#navPillTrack { background: #F4F4F5; border: 1px solid #E4E4E7; border-radius: 10px; } "
+                "QPushButton#navButton { background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 6px 13px; color: #52525B; font-weight: 600; font-size: 12px; } "
+                "QPushButton#navButton:hover { background: #E4E4E7; color: #09090B; } "
+                "QPushButton#navButton:checked { background: #2563EB; border: 1px solid #1D4ED8; color: #FFFFFF; font-weight: 700; } "
+                "QPushButton#navUtilButton { background: #F4F4F5; border: 1px solid #E4E4E7; border-radius: 8px; padding: 5px 10px; color: #3F3F46; font-weight: 600; font-size: 11px; } "
+                "QGroupBox { background: #FFFFFF; border: 1px solid #E4E4E7; border-radius: 12px; margin-top: 0px; padding: 36px 14px 12px 14px; } "
+                "QGroupBox::title { subcontrol-origin: padding; subcontrol-position: top left; left: 12px; top: 9px; padding: 3px 10px; color: #1E40AF; background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 6px; font-weight: 800; font-size: 11px; } "
+                "QLineEdit, QComboBox, QSpinBox, QTextEdit { background: #FFFFFF; border: 1px solid #D4D4D8; border-radius: 8px; padding: 5px 10px; min-height: 22px; color: #09090B; } "
+                "QPushButton { background: #FFFFFF; border: 1px solid #D4D4D8; border-radius: 8px; padding: 6px 12px; color: #18181B; font-weight: 600; } "
+                "QPushButton#primary { background: #2563EB; color: #FFFFFF; font-weight: 700; border: 1px solid #2563EB; border-radius: 10px; padding: 8px 20px; } "
+                "QScrollBar:vertical { background: transparent; width: 6px; margin: 2px 1px; } "
+                "QScrollBar::handle:vertical { background: #A1A1AA; min-height: 28px; border-radius: 3px; } "
+                "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
             )
         return (
-            "QWidget { color: #f1f5f9; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; } "
-            "QMainWindow, QDialog, QScrollArea, QWidget#pageContent, QTabWidget::pane { background: #070B12; } "
-            "QLabel { background: transparent; color: #cbd5e1; padding: 2px 4px; } "
-            "QToolBar { background: #0A0F1A; border-bottom: 1px solid #1E293B; spacing: 6px; padding: 6px 14px; } "
-            "QLabel#brand { color: #f8fafc; font-size: 17px; font-weight: 900; padding-right: 4px; letter-spacing: 0.3px; } "
-            "QFrame#navPillTrack { background: #0E1525; border: 1px solid #1E293B; border-radius: 10px; } "
-            "QPushButton#navButton { background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 6px 13px; color: #94a3b8; font-weight: 600; font-size: 12px; } "
-            "QPushButton#navButton:hover { background: rgba(56, 189, 248, 0.09); border-color: rgba(56, 189, 248, 0.28); color: #f8fafc; } "
-            "QPushButton#navButton:pressed { background: rgba(37, 99, 235, 0.25); } "
-            "QPushButton#navButton:checked { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563EB, stop:1 #1D4ED8); border: 1px solid #60A5FA; color: #FFFFFF; font-weight: 700; } "
-            "QGroupBox { background: #0E1525; border: 1px solid #1E293B; border-radius: 14px; margin-top: 0px; padding: 40px 14px 14px 14px; } "
-            "QGroupBox::title { subcontrol-origin: padding; subcontrol-position: top left; left: 14px; top: 10px; padding: 4px 12px; color: #E0F2FE; background: #172554; border: 1px solid #2563EB; border-radius: 7px; font-size: 12px; font-weight: 800; } "
-            "QLabel#title { color: #f8fafc; font-size: 24px; font-weight: 800; } "
-            "QLabel#eyebrow { color: #38bdf8; font-size: 11px; font-weight: 700; letter-spacing: 0.6px; } "
-            "QLabel#muted, QLabel#status { color: #94a3b8; font-size: 12px; } "
-            "QLineEdit, QComboBox, QSpinBox, QTextEdit { background: #090E1A; border: 1px solid #263449; border-radius: 8px; padding: 5px 12px; min-height: 24px; color: #f8fafc; font-weight: 500; } "
-            "QLineEdit:hover, QComboBox:hover, QSpinBox:hover { border-color: #38BDF8; background: #0C1322; } "
-            "QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border: 1.5px solid #38BDF8; background: #0F172A; } "
-            "QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: top right; width: 28px; border: 0; } "
-            "QComboBox QAbstractItemView { background: #0F172A; border: 1px solid #334155; border-radius: 8px; color: #f1f5f9; selection-background-color: #2563eb; selection-color: #ffffff; padding: 4px; } "
-            "QPushButton { background: #162032; border: 1px solid #2C3E58; border-radius: 8px; padding: 7px 14px; color: #e2e8f0; font-weight: 600; } "
-            "QPushButton:hover { background: #1E2D45; border-color: #475569; color: #ffffff; } "
-            "QPushButton:pressed { background: #111A29; } "
-            "QPushButton#primary { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563eb, stop:1 #4f46e5); color: #ffffff; font-weight: 800; border: 1px solid #60a5fa; border-radius: 10px; padding: 10px 24px; } "
-            "QPushButton#primary:hover { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1d4ed8, stop:1 #4338ca); border-color: #93c5fd; } "
-            "QPushButton#primary:pressed { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1e40af, stop:1 #3730a3); border-color: #60a5fa; } "
-            "QPushButton:disabled { color: #475569; background: #0B0F18; border-color: #161F2E; } "
-            "QCheckBox { spacing: 10px; padding: 4px 4px; color: #f1f5f9; font-weight: 500; } "
-            "QCheckBox::indicator { width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid #3B4C68; background: #090D16; } "
-            "QCheckBox::indicator:hover { border-color: #38BDF8; } "
-            "QCheckBox::indicator:checked { background: #2563eb; border-color: #60A5FA; } "
-            "QSlider::groove:horizontal { height: 6px; background: #1E293B; border-radius: 3px; } "
-            "QSlider::sub-page:horizontal { background: #38BDF8; border-radius: 3px; } "
-            "QSlider::handle:horizontal { width: 16px; height: 16px; margin: -5px 0; background: #FFFFFF; border: 2px solid #0284C7; border-radius: 8px; } "
-            "QFrame#previewCanvas { background: #060A12; border: 1.5px solid #263449; border-radius: 16px; } "
-            "QSplitter::handle:horizontal { background: #162032; width: 4px; margin: 4px 3px; border-radius: 2px; } "
-            "QSplitter::handle:horizontal:hover { background: #38BDF8; } "
-            "QScrollBar:vertical { background: transparent; width: 7px; margin: 4px 1px; border-radius: 3px; } "
-            "QScrollBar::handle:vertical { background: #334155; min-height: 30px; border-radius: 3px; } "
-            "QScrollBar::handle:vertical:hover { background: #38BDF8; } "
+            "QWidget { color: #F4F4F5; font-family: 'Segoe UI Variable Text', 'Segoe UI', sans-serif; font-size: 12px; } "
+            "QMainWindow, QDialog, QScrollArea, QWidget#pageContent, QTabWidget::pane { background: #000000; } "
+            "QLabel { background: transparent; color: #D4D4D8; padding: 1px 2px; } "
+            "QToolBar { background: #030305; border-bottom: 1px solid #181820; spacing: 6px; padding: 6px 14px; } "
+            "QLabel#brand { color: #FFFFFF; font-family: 'Segoe UI Variable Display', 'Segoe UI', sans-serif; font-size: 16px; font-weight: 900; padding-right: 4px; letter-spacing: 0.4px; } "
+            "QFrame#navPillTrack { background: #09090E; border: 1px solid #1C1C26; border-radius: 10px; } "
+            "QPushButton#navButton { background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 6px 13px; color: #A1A1AA; font-weight: 600; font-size: 12px; } "
+            "QPushButton#navButton:hover { background: #14141E; border-color: #272736; color: #FAFAFA; } "
+            "QPushButton#navButton:pressed { background: #1D4ED8; color: #FFFFFF; } "
+            "QPushButton#navButton:checked { background: #2563EB; border: 1px solid #60A5FA; color: #FFFFFF; font-weight: 700; } "
+            "QPushButton#navButton:disabled { color: #3F3F46; background: transparent; border-color: transparent; } "
+            "QPushButton#navUtilButton { background: #09090E; border: 1px solid #1E1E2A; border-radius: 8px; padding: 5px 10px; color: #A1A1AA; font-weight: 600; font-size: 11px; } "
+            "QPushButton#navUtilButton:hover { background: #14141F; border-color: #3B82F6; color: #FFFFFF; } "
+            "QPushButton#navUtilButton:checked { background: #172554; border: 1px solid #3B82F6; color: #FFFFFF; font-weight: 700; } "
+            "QGroupBox { background: #08080C; border: 1px solid #1A1A24; border-radius: 12px; margin-top: 0px; padding: 36px 12px 12px 12px; } "
+            "QGroupBox::title { subcontrol-origin: padding; subcontrol-position: top left; left: 12px; top: 8px; padding: 3px 10px; color: #F4F4F5; background: #12121B; border: 1px solid #272736; border-radius: 6px; font-family: 'Segoe UI Variable Display', 'Segoe UI', sans-serif; font-size: 11px; font-weight: 800; } "
+            "QLabel#title { color: #FAFAFA; font-family: 'Segoe UI Variable Display', 'Segoe UI', sans-serif; font-size: 22px; font-weight: 800; } "
+            "QLabel#eyebrow { color: #60A5FA; font-size: 10px; font-weight: 800; letter-spacing: 0.8px; } "
+            "QLabel#muted, QLabel#status { color: #A1A1AA; font-size: 12px; } "
+            "QLineEdit, QComboBox, QSpinBox, QTextEdit { background: #0D0D14; border: 1px solid #222230; border-radius: 8px; padding: 4px 10px; min-height: 22px; color: #FAFAFA; font-weight: 500; } "
+            "QComboBox { padding-right: 26px; } "
+            "QSpinBox { padding-right: 56px; font-weight: 700; } "
+            "QLineEdit:hover, QComboBox:hover, QSpinBox:hover { border-color: #3B82F6; background: #12121C; } "
+            "QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border: 1.5px solid #3B82F6; background: #12121C; } "
+            "QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: top right; width: 24px; border: 0; background: transparent; } "
+            "QComboBox::down-arrow { image: none; width: 0px; height: 0px; border: 0; } "
+            "QComboBox QAbstractItemView { background: #0C0C14; border: 1px solid #272736; border-radius: 8px; color: #FAFAFA; selection-background-color: #2563EB; selection-color: #FFFFFF; padding: 4px; outline: 0; } "
+            "QPushButton { background: #101018; border: 1px solid #242432; border-radius: 8px; padding: 6px 12px; color: #E4E4E7; font-weight: 600; } "
+            "QPushButton:hover { background: #181824; border-color: #3B82F6; color: #FFFFFF; } "
+            "QPushButton:pressed { background: #0A0A10; } "
+            "QPushButton#secondary { background: #0E0E16; border: 1px solid #252534; border-radius: 8px; padding: 5px 11px; color: #E4E4E7; font-weight: 600; font-size: 11px; } "
+            "QPushButton#secondary:hover { background: #181826; border-color: #3B82F6; color: #FFFFFF; } "
+            "QPushButton#primary { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563EB, stop:1 #1D4ED8); color: #FFFFFF; font-weight: 800; border: 1px solid #60A5FA; border-radius: 10px; padding: 8px 20px; } "
+            "QPushButton#primary:hover { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3B82F6, stop:1 #2563EB); border-color: #93C5FD; } "
+            "QPushButton#primary:pressed { background: #1E40AF; border-color: #60A5FA; } "
+            "QPushButton:disabled { color: #52525B; background: #07070B; border-color: #16161F; } "
+            "QCheckBox { spacing: 8px; padding: 2px 4px; color: #F4F4F5; font-weight: 500; } "
+            "QCheckBox::indicator { width: 17px; height: 17px; border-radius: 5px; border: 1.5px solid #3F3F4E; background: #09090E; } "
+            "QCheckBox::indicator:hover { border-color: #3B82F6; } "
+            "QCheckBox::indicator:checked { background: #2563EB; border: 1.5px solid #60A5FA; } "
+            "QSlider::groove:horizontal { height: 5px; background: #1E1E2A; border-radius: 2px; } "
+            "QSlider::sub-page:horizontal { background: #3B82F6; border-radius: 2px; } "
+            "QSlider::handle:horizontal { width: 14px; height: 14px; margin: -5px 0; background: #FFFFFF; border: 2px solid #2563EB; border-radius: 7px; } "
+            "QSlider::handle:horizontal:hover { background: #DBEAFE; border-color: #60A5FA; } "
+            "QFrame#previewCanvas { background: #000000; border: 1px solid #242432; border-radius: 10px; } "
+            "QSplitter::handle:horizontal { background: #14141E; width: 3px; margin: 6px 3px; border-radius: 1px; } "
+            "QSplitter::handle:horizontal:hover { background: #3B82F6; } "
+            "QMessageBox { background: #09090E; } "
+            "QScrollBar:vertical { background: transparent; width: 6px; margin: 4px 1px; border-radius: 3px; } "
+            "QScrollBar::handle:vertical { background: #272736; min-height: 28px; border-radius: 3px; } "
+            "QScrollBar::handle:vertical:hover { background: #3B82F6; } "
             "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; background: none; } "
             "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; } "
-            "QScrollBar:horizontal { background: transparent; height: 7px; margin: 1px 4px; border-radius: 3px; } "
-            "QScrollBar::handle:horizontal { background: #334155; min-width: 30px; border-radius: 3px; } "
-            "QScrollBar::handle:horizontal:hover { background: #38BDF8; } "
+            "QScrollBar:horizontal { background: transparent; height: 6px; margin: 1px 4px; border-radius: 3px; } "
+            "QScrollBar::handle:horizontal { background: #272736; min-width: 28px; border-radius: 3px; } "
+            "QScrollBar::handle:horizontal:hover { background: #3B82F6; } "
             "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0px; background: none; } "
             "QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }"
         )
 
     def set_create_inputs_locked(self, locked: bool) -> None:
+        if hasattr(self, "top_clip_mode_cards"):
+            self.top_clip_mode_cards.setEnabled(not locked)
         if hasattr(self, "create_subtabs"):
             self.create_subtabs.setEnabled(not locked)
         if hasattr(self, "settings_group"):
@@ -8366,13 +9962,21 @@ class HermesDesktop(QMainWindow):
             core.reset_canceled_job(self.current_job_id)
         self.set_create_inputs_locked(False)
         self.set_progress_panel_visible(False)
+        if hasattr(self, "review_export_progress_card"):
+            self.review_export_progress_card.setVisible(False)
+        self.render_button.setEnabled(True)
+        if hasattr(self, "edit_text_button"):
+            self.edit_text_button.setEnabled(True)
+        if hasattr(self, "btn_back_review"):
+            self.btn_back_review.setEnabled(True)
+        self.add_manual_button.setEnabled(True)
         self.status_label.setText("Proses dibatalkan.")
-        self.sub_status_label.setText("Pengaturan klip telah dibuka kembali.")
+        self.sub_status_label.setText("Pengaturan siap digunakan kembali.")
         self.progress.setValue(0)
         self.total_percent_label.setText("0%")
         self.sub_progress.setValue(0)
         self.sub_percent_label.setText("0%")
-        self.log_terminal("Proses dibatalkan oleh pengguna. Pengaturan klip dibuka kembali.")
+        self.log_terminal("Proses dibatalkan oleh pengguna. Studio siap digunakan kembali.")
 
     def cancel_to_edit_step2(self) -> None:
         self.cancel_current_process()
@@ -8383,22 +9987,22 @@ class HermesDesktop(QMainWindow):
         drawer.setObjectName("terminalDrawer")
         drawer.setMaximumHeight(170)
         drawer.setMinimumHeight(0)
-        drawer.setStyleSheet("QFrame#terminalDrawer { background: #090d16; border-top: 1px solid #1e293b; }")
+        drawer.setStyleSheet("QFrame#terminalDrawer { background: #050508; border-top: 1px solid #1C1C26; }")
         layout = QVBoxLayout(drawer)
         layout.setContentsMargins(12, 6, 12, 8)
         layout.setSpacing(4)
 
         header = QHBoxLayout()
         header.setContentsMargins(0, 0, 0, 0)
-        lbl = QLabel("Terminal & Log Sistem")
-        lbl.setStyleSheet("font-size: 11px; font-weight: 700; color: #94a3b8; background: transparent;")
+        lbl = QLabel("Log & Aktivitas Sistem")
+        lbl.setStyleSheet("font-size: 11px; font-weight: 700; color: #A1A1AA; background: transparent;")
         header.addWidget(lbl)
         header.addStretch()
 
         btn_clear = QPushButton("Bersihkan")
         btn_clear.setFixedHeight(22)
         btn_clear.setStyleSheet(
-            "background: #1e293b; color: #cbd5e1; border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: 600;"
+            "background: #12121A; border: 1px solid #242432; color: #D4D4D8; border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: 600;"
         )
         btn_clear.clicked.connect(lambda: self.terminal_box.clear() if hasattr(self, "terminal_box") else None)
         header.addWidget(btn_clear)
@@ -8406,7 +10010,7 @@ class HermesDesktop(QMainWindow):
         btn_close = QPushButton("Tutup")
         btn_close.setFixedHeight(22)
         btn_close.setStyleSheet(
-            "background: #1e293b; color: #cbd5e1; border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: 600;"
+            "background: #12121A; border: 1px solid #242432; color: #D4D4D8; border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: 600;"
         )
         btn_close.clicked.connect(self.toggle_terminal_drawer)
         header.addWidget(btn_close)
@@ -8414,12 +10018,12 @@ class HermesDesktop(QMainWindow):
 
         self.terminal_box = QPlainTextEdit()
         self.terminal_box.setReadOnly(True)
-        self.terminal_box.setFont(QFont("Consolas", 10))
+        self.terminal_box.setFont(QFont("Cascadia Mono", 10))
         self.terminal_box.setStyleSheet(
-            "QPlainTextEdit { background: #050811; color: #38bdf8; border: 1px solid #172554; "
-            "border-radius: 6px; padding: 6px; font-family: Consolas, 'Cascadia Code', monospace; }"
+            "QPlainTextEdit { background: #000000; color: #60A5FA; border: 1px solid #1C1C26; "
+            "border-radius: 6px; padding: 6px; font-family: 'Cascadia Mono', Consolas, monospace; }"
         )
-        self.terminal_box.appendPlainText("[SYSTEM] ENCLip Terminal siap. Log proses akan muncul di sini...")
+        self.terminal_box.appendPlainText("[SISTEM] ENCLip Studio siap. Log aktivitas akan tampil di sini.")
         layout.addWidget(self.terminal_box, 1)
         return drawer
 
@@ -8438,19 +10042,19 @@ class HermesDesktop(QMainWindow):
             self.terminal_drawer.setMaximumHeight(0)
             self.terminal_drawer.setVisible(True)
             anim = QPropertyAnimation(self.terminal_drawer, b"maximumHeight", self)
-            anim.setDuration(220)
+            anim.setDuration(200)
             anim.setStartValue(0)
             anim.setEndValue(target_height)
-            anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            anim.setEasingCurve(QEasingCurve.Type.OutQuart)
             self._drawer_anim = anim
             anim.start()
         else:
             current_h = self.terminal_drawer.height()
             anim = QPropertyAnimation(self.terminal_drawer, b"maximumHeight", self)
-            anim.setDuration(180)
+            anim.setDuration(170)
             anim.setStartValue(current_h)
             anim.setEndValue(0)
-            anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            anim.setEasingCurve(QEasingCurve.Type.OutQuart)
             def on_drawer_closed() -> None:
                 self.terminal_drawer.setVisible(False)
                 self.terminal_drawer.setMaximumHeight(target_height)
@@ -8467,6 +10071,14 @@ class HermesDesktop(QMainWindow):
             if sb:
                 sb.setValue(sb.maximum())
 
+    def _writable_models_dir(self) -> Path:
+        cand = ROOT / "models"
+        if core.is_path_writable(cand):
+            return cand
+        fallback = core.DATA_DIR / "models"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
+
     def build_models_tab(self) -> QWidget:
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -8477,78 +10089,75 @@ class HermesDesktop(QMainWindow):
         page.setObjectName("pageContent")
         layout = QVBoxLayout(page)
         layout.setContentsMargins(28, 20, 28, 24)
-        layout.setSpacing(14)
+        layout.setSpacing(12)
 
         header_row = QHBoxLayout()
         header_text = QVBoxLayout()
-        eyebrow = QLabel("DOWNLOAD & KELOLA AI OFFLINE")
+        eyebrow = QLabel("MANAJEMEN MODEL AI LOKAL")
         eyebrow.setObjectName("eyebrow")
         header_text.addWidget(eyebrow)
 
-        title = QLabel("Katalog Model AI Lokal")
+        title = QLabel("Katalog Model Offline")
         title.setObjectName("title")
         header_text.addWidget(title)
 
-        subtitle = QLabel("Unduh model AI lokal untuk transkripsi audio dan deteksi klip 100% offline tanpa kuota internet.")
-        subtitle.setStyleSheet("color: #94a3b8; font-size: 13px;")
+        subtitle = QLabel("Unduh model Whisper & GGUF agar proses transkripsi serta analisis berjalan penuh secara offline.")
+        subtitle.setStyleSheet("color: #A1A1AA; font-size: 12px;")
         header_text.addWidget(subtitle)
         header_row.addLayout(header_text, 1)
 
+        models_dir = self._writable_models_dir()
+
         btn_open_folder = QPushButton("Buka Folder Model")
+        btn_open_folder.setObjectName("secondary")
         btn_open_folder.setFixedHeight(36)
-        btn_open_folder.setStyleSheet(
-            "QPushButton { background: #1e293b; border: 1px solid #334155; color: #e2e8f0; border-radius: 8px; padding: 6px 14px; font-weight: 600; } "
-            "QPushButton:hover { background: #334155; color: #ffffff; }"
-        )
-        btn_open_folder.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(ROOT / "models"))))
+        btn_open_folder.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(models_dir))))
         header_row.addWidget(btn_open_folder)
         layout.addLayout(header_row)
 
         self.model_cards: dict[str, dict[str, Any]] = {}
-        models_dir = ROOT / "models"
-        models_dir.mkdir(parents=True, exist_ok=True)
 
         for m in MODELS_CATALOG:
             card = QFrame()
             card.setStyleSheet(
-                "QFrame { background: #0d121c; border: 1px solid #1e293b; border-radius: 10px; padding: 12px; } "
-                "QFrame:hover { border-color: #2563eb; }"
+                "QFrame { background: #09090E; border: 1px solid #1C1C26; border-radius: 12px; padding: 10px; } "
+                "QFrame:hover { border-color: #3B82F6; }"
             )
             card_layout = QVBoxLayout(card)
             card_layout.setContentsMargins(12, 10, 12, 10)
-            card_layout.setSpacing(8)
+            card_layout.setSpacing(6)
 
             top_row = QHBoxLayout()
             m_title = QLabel(m["name"])
-            m_title.setStyleSheet("font-size: 15px; font-weight: 700; color: #f8fafc;")
+            m_title.setStyleSheet("font-size: 14px; font-weight: 800; color: #FAFAFA; border: 0;")
             top_row.addWidget(m_title)
 
             m_badge = QLabel(m["badge"])
             m_badge.setStyleSheet(
-                "background: #1e293b; color: #38bdf8; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 600;"
+                "background: #14141F; color: #60A5FA; border: 1px solid #272736; border-radius: 5px; padding: 2px 8px; font-size: 10px; font-weight: 700;"
             )
             top_row.addWidget(m_badge)
             top_row.addStretch()
 
             status_lbl = QLabel("")
-            status_lbl.setStyleSheet("font-size: 12px; font-weight: 600;")
+            status_lbl.setStyleSheet("font-size: 11px; font-weight: 700; border: 0;")
             top_row.addWidget(status_lbl)
 
-            btn_dl = QPushButton("⬇ Unduh Model")
+            btn_dl = QPushButton("Unduh Model")
             btn_dl.setFixedHeight(32)
             btn_dl.setStyleSheet(
-                "QPushButton { background: #2563eb; color: #ffffff; border-radius: 6px; padding: 4px 14px; font-weight: 600; font-size: 12px; } "
-                "QPushButton:hover { background: #1d4ed8; } QPushButton:disabled { background: #1e293b; color: #64748b; }"
+                "QPushButton { background: #2563EB; border: 1px solid #60A5FA; color: #FFFFFF; border-radius: 7px; padding: 0 14px; font-weight: 700; font-size: 11px; } "
+                "QPushButton:hover { background: #1D4ED8; } QPushButton:disabled { background: #14141D; color: #52525B; border-color: #222230; }"
             )
             top_row.addWidget(btn_dl)
             card_layout.addLayout(top_row)
 
             m_desc = QLabel(m["desc"])
-            m_desc.setStyleSheet("color: #cbd5e1; font-size: 12px;")
+            m_desc.setStyleSheet("color: #A1A1AA; font-size: 12px; border: 0;")
             card_layout.addWidget(m_desc)
 
             m_specs = QLabel(m["specs"])
-            m_specs.setStyleSheet("color: #fbbf24; font-size: 11px; font-weight: 600;")
+            m_specs.setStyleSheet("color: #FBBF24; font-size: 11px; font-weight: 600; border: 0;")
             card_layout.addWidget(m_specs)
 
             prog_row = QHBoxLayout()
@@ -8558,22 +10167,25 @@ class HermesDesktop(QMainWindow):
             prog_bar.setFixedHeight(6)
             prog_bar.setTextVisible(False)
             prog_bar.setStyleSheet(
-                "QProgressBar { background: #1e293b; border-radius: 3px; border: 0; } "
-                "QProgressBar::chunk { background: #38bdf8; border-radius: 3px; }"
+                "QProgressBar { background: #181822; border-radius: 3px; border: 0; } "
+                "QProgressBar::chunk { background: #3B82F6; border-radius: 3px; }"
             )
             prog_bar.setVisible(False)
             prog_row.addWidget(prog_bar, 1)
 
             prog_info = QLabel("")
-            prog_info.setStyleSheet("color: #94a3b8; font-size: 11px;")
+            prog_info.setStyleSheet("color: #A1A1AA; font-size: 11px; border: 0;")
             prog_info.setVisible(False)
             prog_row.addWidget(prog_info)
             card_layout.addLayout(prog_row)
 
             is_installed = False
             if m["type"] == "gguf":
-                target_p = models_dir / m["filename"]
-                is_installed = target_p.exists() and target_p.stat().st_size > 1024 * 1024
+                for check_dir in (models_dir, ROOT / "models"):
+                    target_p = check_dir / m["filename"]
+                    if target_p.exists() and target_p.stat().st_size > 1024 * 1024:
+                        is_installed = True
+                        break
             elif m["type"] == "whisper":
                 try:
                     import huggingface_hub
@@ -8587,11 +10199,11 @@ class HermesDesktop(QMainWindow):
                     is_installed = False
 
             if is_installed:
-                status_lbl.setText("Sudah Terpasang")
-                status_lbl.setStyleSheet("color: #10b981; font-weight: 700; font-size: 12px;")
+                status_lbl.setText("Terpasang")
+                status_lbl.setStyleSheet("color: #10B981; font-weight: 700; font-size: 11px; border: 0;")
                 btn_dl.setText("Pasang Ulang")
                 btn_dl.setStyleSheet(
-                    "background: #1e293b; color: #94a3b8; border: 1px solid #334155; border-radius: 6px; padding: 4px 10px; font-size: 11px;"
+                    "background: #12121A; color: #A1A1AA; border: 1px solid #272736; border-radius: 7px; padding: 0 12px; font-size: 11px;"
                 )
 
             btn_dl.clicked.connect(lambda checked=False, info=m: self.start_model_download(info))
@@ -8615,7 +10227,7 @@ class HermesDesktop(QMainWindow):
         if not card:
             return
 
-        target_file = (ROOT / "models") / info["filename"]
+        target_file = self._writable_models_dir() / info["filename"]
         worker = ModelDownloadWorker(m_id, info["type"], info["url"], target_file)
         worker.progress_signal.connect(self.on_model_download_progress)
         worker.finished_signal.connect(self.on_model_download_finished)
@@ -8624,7 +10236,7 @@ class HermesDesktop(QMainWindow):
         card["btn_dl"].setEnabled(False)
         card["btn_dl"].setText("Mengunduh...")
         card["status_lbl"].setText("Mengunduh...")
-        card["status_lbl"].setStyleSheet("color: #38bdf8; font-weight: 600; font-size: 12px;")
+        card["status_lbl"].setStyleSheet("color: #60A5FA; font-weight: 600; font-size: 11px; border: 0;")
         card["prog_bar"].setVisible(True)
         card["prog_bar"].setValue(0)
         card["prog_info"].setVisible(True)
@@ -8649,23 +10261,23 @@ class HermesDesktop(QMainWindow):
         card["btn_dl"].setEnabled(True)
 
         if success:
-            card["status_lbl"].setText("Sudah Terpasang")
-            card["status_lbl"].setStyleSheet("color: #10b981; font-weight: 700; font-size: 12px;")
+            card["status_lbl"].setText("Terpasang")
+            card["status_lbl"].setStyleSheet("color: #10B981; font-weight: 700; font-size: 11px; border: 0;")
             card["btn_dl"].setText("Pasang Ulang")
             card["btn_dl"].setStyleSheet(
-                "background: #1e293b; color: #94a3b8; border: 1px solid #334155; border-radius: 6px; padding: 4px 10px; font-size: 11px;"
+                "background: #12121A; color: #A1A1AA; border: 1px solid #272736; border-radius: 7px; padding: 0 12px; font-size: 11px;"
             )
             self.log_terminal(f"Model {card['info']['name']} berhasil diunduh dan siap digunakan.")
             self.scan_project_models()
             QMessageBox.information(
-                self, "Model Terpasang", f"Model {card['info']['name']} berhasil diunduh dan telah ditambahkan ke daftar model aktif!"
+                self, "Model Terpasang", f"Model {card['info']['name']} berhasil diunduh dan siap digunakan."
             )
         else:
             card["status_lbl"].setText("Gagal")
-            card["status_lbl"].setStyleSheet("color: #ef4444; font-weight: 700; font-size: 12px;")
+            card["status_lbl"].setStyleSheet("color: #EF4444; font-weight: 700; font-size: 11px; border: 0;")
             card["btn_dl"].setText("Coba Lagi")
             card["btn_dl"].setStyleSheet(
-                "background: #2563eb; color: #ffffff; border-radius: 6px; padding: 4px 14px; font-weight: 600; font-size: 12px;"
+                "background: #2563EB; color: #FFFFFF; border-radius: 7px; padding: 0 14px; font-weight: 700; font-size: 11px;"
             )
             self.log_terminal(f"Unduhan model {card['info']['name']} gagal: {msg}")
             QMessageBox.warning(self, "Unduhan Gagal", f"Gagal mengunduh model: {msg}")
@@ -8681,7 +10293,9 @@ def main() -> int:
         pass
     application = QApplication(sys.argv)
     application.setApplicationName("ENCLip")
-    application.setFont(QFont("Segoe UI", 10))
+    app_font = QFont("Segoe UI Variable Text", 10)
+    app_font.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
+    application.setFont(app_font)
     icon = get_app_icon()
     if icon:
         application.setWindowIcon(icon)
