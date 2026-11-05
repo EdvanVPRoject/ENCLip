@@ -4,7 +4,7 @@ cd /d "%~dp0"
 
 echo Menutup aplikasi ENCLip yang mungkin masih berjalan...
 taskkill /IM ENCLip.exe /F >nul 2>&1
-timeout /t 1 /nobreak >nul
+ping 127.0.0.1 -n 2 >nul
 
 echo [1/3] Mempaketkan aplikasi Portable terbaru (PyInstaller)...
 python -m PyInstaller --noconfirm --clean VanClipper.spec

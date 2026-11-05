@@ -836,7 +836,7 @@ class ReviewClipCardWidget(QFrame):
 
         score_val = int(float(clip_data.get("score", 0)))
         if score_val > 0:
-            score_badge = QLabel(f"🔥 {score_val}%")
+            score_badge = QLabel(f"{score_val}%")
             score_col = "#F87171" if score_val >= 88 else "#FBBF24"
             score_bg = "#2D1215" if score_val >= 88 else "#2A1E0D"
             score_badge.setStyleSheet(
@@ -996,8 +996,8 @@ class ResultClipCardWidget(QFrame):
         play_btn.clicked.connect(self.play_clip)
         action_row.addWidget(play_btn, 1)
 
-        folder_btn = QPushButton("📁")
-        folder_btn.setFixedSize(36, 32)
+        folder_btn = QPushButton("Folder")
+        folder_btn.setMinimumHeight(32)
         folder_btn.setToolTip("Buka folder berkas ini")
         folder_btn.setStyleSheet("""
             QPushButton {
@@ -1005,7 +1005,9 @@ class ResultClipCardWidget(QFrame):
                 border: 1px solid #242432;
                 border-radius: 7px;
                 color: #A1A1AA;
-                font-size: 13px;
+                font-size: 11px;
+                font-weight: 600;
+                padding: 4px 8px;
             }
             QPushButton:hover {
                 background: #1A1A26;
@@ -1040,7 +1042,7 @@ class ResultClipCardWidget(QFrame):
         self.copy_btn = copy_btn
         action_row.addWidget(copy_btn)
 
-        yt_btn = QPushButton("🔴 Shorts")
+        yt_btn = QPushButton("Shorts")
         yt_btn.setMinimumHeight(32)
         yt_btn.setToolTip("Upload klip ini langsung ke YouTube Shorts")
         yt_btn.setStyleSheet("""
@@ -1063,7 +1065,7 @@ class ResultClipCardWidget(QFrame):
         self.yt_btn = yt_btn
         action_row.addWidget(yt_btn)
 
-        tt_btn = QPushButton("🎵 TikTok")
+        tt_btn = QPushButton("TikTok")
         tt_btn.setMinimumHeight(32)
         tt_btn.setToolTip("Upload klip ini ke TikTok (Pilih: Upload Sekarang atau Jadwalkan Jam Ramai FYP)")
         tt_btn.setStyleSheet("""
@@ -1124,13 +1126,13 @@ class ResultClipCardWidget(QFrame):
             )
             if ans == QMessageBox.StandardButton.Yes:
                 self.yt_btn.setEnabled(False)
-                self.yt_btn.setText("⏳ Login...")
+                self.yt_btn.setText("Login...")
                 self._login_worker = YouTubeLoginWorker()
                 def on_done(ok: bool, msg: str):
                     self.yt_btn.setEnabled(True)
-                    self.yt_btn.setText("🔴 Shorts")
+                    self.yt_btn.setText("Shorts")
                     if ok:
-                        QMessageBox.information(self, "Sesi Tersimpan", msg + "\n\nSilakan klik tombol '🔴 Shorts' lagi untuk mengunggah klip.")
+                        QMessageBox.information(self, "Sesi Tersimpan", msg + "\n\nSilakan klik tombol 'Shorts' lagi untuk mengunggah klip.")
                     else:
                         QMessageBox.warning(self, "Login Gagal", msg)
                 self._login_worker.finished_login.connect(on_done)
@@ -1154,16 +1156,16 @@ class ResultClipCardWidget(QFrame):
             return
 
         self.yt_btn.setEnabled(False)
-        self.yt_btn.setText("⏳ Uploading...")
+        self.yt_btn.setText("Uploading...")
         self._upload_worker = YouTubeUploadWorker(self.clip_path, title, desc)
         def on_upload_done(ok: bool, msg: str):
             self.yt_btn.setEnabled(True)
             if ok:
-                self.yt_btn.setText("✅ Terunggah!")
+                self.yt_btn.setText("Terunggah!")
                 self.yt_btn.setStyleSheet("background: #064E3B; border: 1px solid #059669; color: #6EE7B7; border-radius: 6px; font-weight: 700; font-size: 11px;")
                 QMessageBox.information(self, "Sukses", msg)
             else:
-                self.yt_btn.setText("🔴 Shorts")
+                self.yt_btn.setText("Shorts")
                 QMessageBox.warning(self, "Upload Gagal", msg)
         self._upload_worker.finished_upload.connect(on_upload_done)
         self._upload_worker.start()
@@ -1177,18 +1179,18 @@ class ResultClipCardWidget(QFrame):
         if not self.clip_path.is_file():
             QMessageBox.warning(self, "Berkas Tidak Ditemukan", "File video klip belum tersedia.")
             return
-        title = str(self.clip_data.get("title", "")).strip() or "Klip Podcast Viral"
+        title = str(self.clip_data.get("title", "")).strip() or "Klip Podcast"
         caption = str(self.clip_data.get("caption", "") or self.clip_data.get("summary", "")).strip()
 
         msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("Auto-Upload TikTok FYP")
-        msg_box.setText(f"Pilih metode publikasi TikTok untuk klip:\n\n🎬 {title}")
+        msg_box.setWindowTitle("Upload TikTok")
+        msg_box.setText(f"Pilih metode publikasi TikTok untuk klip:\n\n{title}")
         msg_box.setInformativeText(
             "• Upload Sekarang: Langsung unggah ke TikTok Studio (otomatis pilih sampul detik 1.8s + sound viral + 5 hashtag SEO).\n"
             "• Masuk Antrean Jam Ramai: Disimpan ke antrean pintar untuk diunggah otomatis pada jam aktif FYP (Siang/Sore/Malam)."
         )
-        btn_now = msg_box.addButton("🚀 Upload Sekarang", QMessageBox.ButtonRole.AcceptRole)
-        btn_queue = msg_box.addButton("📅 Antrean Jam Ramai", QMessageBox.ButtonRole.ActionRole)
+        btn_now = msg_box.addButton("Upload Sekarang", QMessageBox.ButtonRole.AcceptRole)
+        btn_queue = msg_box.addButton("Antrean Jam Ramai", QMessageBox.ButtonRole.ActionRole)
         msg_box.addButton("Batal", QMessageBox.ButtonRole.RejectRole)
         msg_box.exec()
 
@@ -1205,7 +1207,7 @@ class ResultClipCardWidget(QFrame):
                     clip_title=title,
                     score=float(self.clip_data.get("score", 88)),
                 )
-                self.tt_btn.setText("📅 Di Antrean")
+                self.tt_btn.setText("Di Antrean")
                 QMessageBox.information(
                     self,
                     "Masuk Antrean Jam Ramai",
@@ -1217,18 +1219,18 @@ class ResultClipCardWidget(QFrame):
 
         if clicked == btn_now:
             self.tt_btn.setEnabled(False)
-            self.tt_btn.setText("⏳ Uploading...")
+            self.tt_btn.setText("Uploading...")
             self._tt_worker = TikTokUploadWorker(self.clip_path, title, caption, self.clip_data.get("hashtags", []))
             def on_tt_done(ok: bool, msg: str) -> None:
                 self.tt_btn.setEnabled(True)
                 if ok:
-                    self.tt_btn.setText("✅ FYP Live!")
+                    self.tt_btn.setText("Terunggah")
                     self.tt_btn.setStyleSheet(
                         "background: #064E3B; border: 1px solid #059669; color: #6EE7B7; border-radius: 6px; font-weight: 700; font-size: 11px;"
                     )
                     QMessageBox.information(self, "TikTok Upload Sukses", msg)
                 else:
-                    self.tt_btn.setText("🎵 TikTok")
+                    self.tt_btn.setText("TikTok")
                     QMessageBox.warning(self, "TikTok Upload", msg)
             self._tt_worker.finished_upload.connect(on_tt_done)
             self._tt_worker.start()
@@ -3184,7 +3186,7 @@ class DependencyInstallWorker(QThread):
 class HermesDesktop(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("ENCLip Studio")
+        self.setWindowTitle("ENCLip Studio v3.0")
         icon = get_app_icon()
         if icon:
             self.setWindowIcon(icon)
@@ -4871,9 +4873,9 @@ class HermesDesktop(QMainWindow):
         auto_sub_lay.setSpacing(5)
         auto_sub_lay.addWidget(section_lbl("Pilih Cara Pemotongan Otomatis (3 Opsi Mode Otomatis)"))
         self.mode_pills = SegmentedPillBar([
-            ("✨ Otomatis AI (Momen Terbaik)", "smart"),
-            ("🔢 Bagi Jumlah Klip", "split_count"),
-            ("⏱️ Bagi Berdasarkan Durasi", "split_duration"),
+            ("Otomatis AI (Momen Terbaik)", "smart"),
+            ("Bagi Jumlah Klip", "split_count"),
+            ("Bagi Berdasarkan Durasi", "split_duration"),
         ], accent="#3B82F6")
         self.mode_pills.bind_combo(self.mode_combo)
         auto_sub_lay.addWidget(self.mode_pills)
@@ -5197,7 +5199,7 @@ class HermesDesktop(QMainWindow):
         ai_layout.setSpacing(8)
 
         self.ai_engine_mode_note = QLabel(
-            "💡 <b>Mode Manual Aktif:</b> Mesin Analisis Momen AI dinonaktifkan karena Anda menentukan titik potong sendiri. "
+            "<b>Mode Manual Aktif:</b> Mesin Analisis Momen AI dinonaktifkan karena Anda menentukan titik potong sendiri. "
             "Hanya <b>Mesin Suara ke Teks</b> yang digunakan untuk membuat teks subtitle otomatis."
         )
         self.ai_engine_mode_note.setWordWrap(True)
@@ -6320,7 +6322,7 @@ class HermesDesktop(QMainWindow):
         content.setHtml(
             "<div style='font-family: \"Segoe UI Variable Text\", \"Segoe UI\", Arial, sans-serif; line-height: 1.6; color: #D4D4D8; font-size: 13px;'>"
             "<div style='background: #0B132B; border: 1px solid #1D4ED8; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;'>"
-            "<b style='color: #60A5FA; font-size: 14px;'>🔑 Cara Mendapatkan Google Gemini API Key (100% Gratis &amp; Resmi)</b><br>"
+            "<b style='color: #60A5FA; font-size: 14px;'>Cara Mendapatkan Google Gemini API Key (100% Gratis &amp; Resmi)</b><br>"
             "<span style='color: #94A3B8; font-size: 12px;'>Gemini API digunakan untuk analisis momen viral otomatis dan penyusunan judul serta deskripsi. Google menyediakan kuota gratis yang sangat melimpah tanpa perlu kartu kredit.</span>"
             "<ol style='margin-top: 8px; margin-bottom: 4px; padding-left: 20px; line-height: 1.7;'>"
             "<li>Buka browser Anda dan kunjungi situs resmi: <b style='color: #38BDF8;'>https://aistudio.google.com</b></li>"
@@ -6332,7 +6334,7 @@ class HermesDesktop(QMainWindow):
             "<li>Tempelkan (Paste) kode API Key Anda ke kolom yang tersedia, lalu klik <b>Uji Koneksi</b>. Status akan berubah hijau: <b style='color: #34D399;'>Terhubung (Gemini Aktif)</b>. Kunci otomatis tersimpan secara aman di komputer Anda.</li>"
             "</ol>"
             "</div>"
-            "<h3 style='color: #38BDF8; margin-top: 10px; margin-bottom: 6px;'>🚀 Alur 4 Tahap Pembuatan Klip</h3>"
+            "<h3 style='color: #38BDF8; margin-top: 10px; margin-bottom: 6px;'>Alur 4 Tahap Pembuatan Klip</h3>"
             "<ol style='margin-top: 4px; padding-left: 20px; line-height: 1.65;'>"
             "<li><b>1 · Pilih Video:</b> Masukkan video dari komputer Anda (drag &amp; drop file MP4/MKV/MOV) atau unduh langsung dari tautan YouTube/TikTok.</li>"
             "<li><b>2 · Studio Klip:</b> Atur metode pemotongan, rasio layar (9:16 vertikal), gaya font subtitle, dan musik latar. Pratinjau video di sebelah kanan langsung mencerminkan setiap perubahan secara real-time.</li>"
@@ -6340,7 +6342,7 @@ class HermesDesktop(QMainWindow):
             "<li><b>4 · Hasil Ekspor:</b> Tonton hasil video akhir beresolusi tinggi, salin caption otomatis, atau buka foldernya untuk diunggah ke TikTok, Instagram Reels, atau YouTube Shorts.</li>"
             "</ol>"
             "<hr style='border: 0; border-top: 1px solid #1F1F2B; margin: 14px 0;'>"
-            "<h3 style='color: #60A5FA; margin-bottom: 6px;'>✂️ Pilihan Metode Pemotongan Video</h3>"
+            "<h3 style='color: #60A5FA; margin-bottom: 6px;'>Pilihan Metode Pemotongan Video</h3>"
             "<ul style='padding-left: 20px; line-height: 1.65;'>"
             "<li><b style='color: #93C5FD;'>Mode Otomatis (3 Opsi Pemotongan):</b>"
             "<ul>"
@@ -6356,20 +6358,28 @@ class HermesDesktop(QMainWindow):
             "</ul></li>"
             "</ul>"
             "<hr style='border: 0; border-top: 1px solid #1F1F2B; margin: 14px 0;'>"
-            "<h3 style='color: #34D399; margin-bottom: 6px;'>📐 Rasio Kanvas &amp; Framing Kamera</h3>"
+            "<h3 style='color: #34D399; margin-bottom: 6px;'>Rasio Kanvas &amp; Framing Kamera</h3>"
             "<ul style='padding-left: 20px; line-height: 1.65;'>"
             "<li><b>Tanpa Framing:</b> Mempertahankan rasio dan resolusi asli video tanpa pemotongan maupun blur.</li>"
             "<li><b>Framing Otomatis AI (9:16):</b> Kamera pintar adaptif yang otomatis mengikuti pembicara, membuat split screen 2 panel atas-bawah saat ada 2 pembicara, atau menambahkan blur sinematik halus pada video lanskap.</li>"
             "<li><b>Framing Manual Bebas:</b> Pilih rasio (9:16, 16:9, 1:1, 4:5, 21:9, atau Rasio Kustom) serta geser posisi X, Y, dan perbesar skala zoom langsung di layar pratinjau.</li>"
             "</ul>"
             "<hr style='border: 0; border-top: 1px solid #1F1F2B; margin: 14px 0;'>"
-            "<h3 style='color: #F59E0B; margin-bottom: 6px;'>💬 Subtitle, Audio &amp; Proteksi Konten</h3>"
+            "<h3 style='color: #F59E0B; margin-bottom: 6px;'>Subtitle, Audio &amp; Proteksi Konten</h3>"
             "<ul style='padding-left: 20px; line-height: 1.65;'>"
             "<li><b>Gaya Desain Huruf (Dropdown):</b> Pilihan font modern yang nyaman di mata (Modern Bersih, CapCut Viral, Minimalis, dsb) yang dapat diatur bersamaan dengan posisi, ukuran, dan warna sorotan.</li>"
             "<li><b>Terjemahan Lirik Lagu:</b> Fitur khusus untuk video musik/lagu yang dapat menerjemahkan lirik otomatis dan mengekspor file <code>.srt</code> atau <code>.lrc</code>.</li>"
             "<li><b>Proteksi Anti-Klaim:</b> Opsi percepatan tempo halus 1.03x dan balik horizontal (mirror) untuk membantu video lolos deteksi otomatis hak cipta.</li>"
             "<li><b>Area Aman HP (Safe Zone):</b> Menampilkan batas aman agar subtitle tidak tertutup oleh tombol navigasi TikTok, Reels, atau Shorts.</li>"
             "</ul>"
+            "<hr style='border: 0; border-top: 1px solid #1F1F2B; margin: 14px 0;'>"
+            "<h3 style='color: #60A5FA; margin-bottom: 6px;'>Lisensi &amp; Ketentuan Pengembangan</h3>"
+            "<p style='color: #94A3B8; margin-top: 2px; margin-bottom: 4px; line-height: 1.6;'>"
+            "ENCLip Studio dikembangkan dan dimiliki secara eksklusif oleh <b>Edvan</b>. "
+            "Pihak mana pun yang ingin menggunakan, mengadaptasi, memodifikasi, atau mengembangkan lebih lanjut "
+            "(fork / karya turunan) <b>wajib mencantumkan nama Edvan secara jelas sebagai pencipta orisinal</b> "
+            "di dalam kode sumber, dokumentasi, dan antarmuka aplikasi."
+            "</p>"
             "</div>"
         )
         layout.addWidget(content, 1)
@@ -6546,12 +6556,12 @@ class HermesDesktop(QMainWindow):
             self.ai_engine_mode_note.setVisible(not is_smart_ai)
             if mode == "manual":
                 self.ai_engine_mode_note.setText(
-                    "💡 <b>Mode Manual Aktif:</b> Mesin Analisis Momen AI tidak digunakan karena Anda menentukan titik potong sendiri. "
+                    "<b>Mode Manual Aktif:</b> Mesin Analisis Momen AI tidak digunakan karena Anda menentukan titik potong sendiri. "
                     "Hanya <b>Mesin Suara ke Teks</b> di bawah ini yang digunakan untuk membuat subtitle."
                 )
             elif not is_smart_ai:
                 self.ai_engine_mode_note.setText(
-                    "💡 <b>Pemotongan Bagi Rata Aktif:</b> Mesin Analisis Momen AI tidak digunakan karena durasi dibagi rata secara otomatis. "
+                    "<b>Pemotongan Bagi Rata Aktif:</b> Mesin Analisis Momen AI tidak digunakan karena durasi dibagi rata secara otomatis. "
                     "Hanya <b>Mesin Suara ke Teks</b> yang digunakan untuk membuat subtitle."
                 )
         if hasattr(self, "ai_engine_group"):
@@ -8012,20 +8022,20 @@ class HermesDesktop(QMainWindow):
 
         self.review_format_combo = self.combo(
             [
-                ("🎞️ [Tanpa Framing] Rasio Asli Utuh 1:1", "original_native"),
-                ("✨ [Otomatis AI] 9:16 Adaptif Universal", "auto_universal_9_16"),
-                ("🎙️ [Otomatis AI] 9:16 Podcast & Dialog", "auto_podcast_9_16"),
-                ("🎯 [Otomatis AI] 9:16 Fokus 1 Subjek", "crop_9_16"),
-                ("👥 [Otomatis AI] 9:16 Split 2 Panel", "split_2_9_16"),
-                ("🎮 [Otomatis AI] 9:16 Gaming & Stream", "auto_gaming_9_16"),
-                ("🎬 [Otomatis AI] 9:16 Sinematik Utuh", "auto_cinema_9_16"),
-                ("⬛ [Manual] 9:16 Fit Utuh Standar", "fit_9_16"),
-                ("🌫️ [Manual] 9:16 Latar Blur Sinematik", "ambient_9_16"),
-                ("🔍 [Manual] 9:16 Crop & Zoom Bebas", "manual_crop"),
-                ("⏸️ [Manual] 9:16 Split 2 Panel Statis", "manual_split"),
-                ("🎥 [Manual] 9:16 Facecam Atas + Konten", "facecam_9_16"),
-                ("🟦 [Manual] 1:1 Kotak Persegi", "square_1_1"),
-                ("🖥️ [Manual] 16:9 Landscape Lebar", "fit_16_9"),
+                ("[Tanpa Framing] Rasio Asli Utuh 1:1", "original_native"),
+                ("[Otomatis AI] 9:16 Adaptif Universal", "auto_universal_9_16"),
+                ("[Otomatis AI] 9:16 Podcast & Dialog", "auto_podcast_9_16"),
+                ("[Otomatis AI] 9:16 Fokus 1 Subjek", "crop_9_16"),
+                ("[Otomatis AI] 9:16 Split 2 Panel", "split_2_9_16"),
+                ("[Otomatis AI] 9:16 Gaming & Stream", "auto_gaming_9_16"),
+                ("[Otomatis AI] 9:16 Sinematik Utuh", "auto_cinema_9_16"),
+                ("[Manual] 9:16 Fit Utuh Standar", "fit_9_16"),
+                ("[Manual] 9:16 Latar Blur Sinematik", "ambient_9_16"),
+                ("[Manual] 9:16 Crop & Zoom Bebas", "manual_crop"),
+                ("[Manual] 9:16 Split 2 Panel Statis", "manual_split"),
+                ("[Manual] 9:16 Facecam Atas + Konten", "facecam_9_16"),
+                ("[Manual] 1:1 Kotak Persegi", "square_1_1"),
+                ("[Manual] 16:9 Landscape Lebar", "fit_16_9"),
             ],
             selected=1,
         )
@@ -8088,21 +8098,21 @@ class HermesDesktop(QMainWindow):
             "QPushButton { background: #101018; border: 1px solid #242432; border-radius: 8px; padding: 0px 10px; color: #E4E4E7; font-size: 12px; font-weight: 600; } "
             "QPushButton:hover { background: #1A1A28; color: #FFFFFF; border-color: #3B82F6; } QPushButton:pressed { background: #09090E; }"
         )
-        btn_rew = QPushButton("⏪ -5d")
+        btn_rew = QPushButton("-5d")
         btn_rew.setToolTip("Mundur 5 Detik")
         btn_rew.setFixedHeight(34)
         btn_rew.setStyleSheet(ctrl_btn_style)
         btn_rew.clicked.connect(lambda: self.seek_review_video(max(0, self.player.position() - 5000)))
         player_controls.addWidget(btn_rew)
 
-        btn_ff = QPushButton("+5d ⏩")
+        btn_ff = QPushButton("+5d")
         btn_ff.setToolTip("Maju 5 Detik")
         btn_ff.setFixedHeight(34)
         btn_ff.setStyleSheet(ctrl_btn_style)
         btn_ff.clicked.connect(lambda: self.seek_review_video(min(self.player.duration(), self.player.position() + 5000)))
         player_controls.addWidget(btn_ff)
 
-        btn_reset_clip = QPushButton("⏮ Awal Klip")
+        btn_reset_clip = QPushButton("Awal Klip")
         btn_reset_clip.setToolTip("Kembalikan putaran ke detik awal klip yang sedang dipilih")
         btn_reset_clip.setFixedHeight(34)
         btn_reset_clip.setStyleSheet(ctrl_btn_style)
@@ -8166,13 +8176,13 @@ class HermesDesktop(QMainWindow):
 
         btn_row1 = QHBoxLayout()
         btn_row1.setSpacing(10)
-        self.edit_text_button = QPushButton("✏️ Edit Judul, Caption && Subtitle")
+        self.edit_text_button = QPushButton("Edit Judul, Caption && Subtitle")
         self.edit_text_button.setMinimumHeight(40)
         self.edit_text_button.setToolTip("Ubah judul klip, caption, atau perbaiki teks subtitle klip yang sedang dipilih")
         self.edit_text_button.clicked.connect(self.open_edit_text_dialog)
         btn_row1.addWidget(self.edit_text_button)
 
-        self.add_manual_button = QPushButton("✂️ Tambah Klip Manual")
+        self.add_manual_button = QPushButton("Tambah Klip Manual")
         self.add_manual_button.setMinimumHeight(40)
         self.add_manual_button.setToolTip("Buat potongan klip tambahan sendiri berdasarkan menit/detik yang kamu inginkan")
         self.add_manual_button.clicked.connect(self.open_manual_clip_dialog)
@@ -8188,7 +8198,7 @@ class HermesDesktop(QMainWindow):
         rep_lay.setContentsMargins(10, 8, 10, 8)
         rep_lay.setSpacing(6)
         rep_top = QHBoxLayout()
-        self.review_export_status_lbl = QLabel("⏳ Mengekspor klip video final...")
+        self.review_export_status_lbl = QLabel("Mengekspor klip video final...")
         self.review_export_status_lbl.setStyleSheet("font-weight: 800; font-size: 12px; color: #FAFAFA; border: 0; background: transparent;")
         self.review_export_pct_lbl = QLabel("0%")
         self.review_export_pct_lbl.setStyleSheet("font-family: 'Cascadia Mono', monospace; font-weight: 800; font-size: 13px; color: #38BDF8; border: 0; background: transparent;")
@@ -8235,7 +8245,7 @@ class HermesDesktop(QMainWindow):
         self.btn_back_review.clicked.connect(self.cancel_to_edit_step2)
         btn_row2.addWidget(self.btn_back_review)
 
-        self.render_button = QPushButton("🚀 Ekspor Semua Klip Sekarang")
+        self.render_button = QPushButton("Ekspor Semua Klip Sekarang")
         self.render_button.setObjectName("primary")
         self.render_button.setMinimumHeight(44)
         self.render_button.setStyleSheet("font-weight: 800; font-size: 13px; padding: 0 24px; border-radius: 10px;")
@@ -8293,7 +8303,7 @@ class HermesDesktop(QMainWindow):
         lc_lay = QVBoxLayout(lock_card)
         lc_lay.setSpacing(10)
 
-        lock_badge = QLabel("🔒 PRATINJAU MENU REVIEW & TRIM (TERKUNCI SEMENTARA)")
+        lock_badge = QLabel("MENU REVIEW & TRIM (TERKUNCI SEMENTARA)")
         lock_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lock_badge.setStyleSheet(
             "color: #60A5FA; background: rgba(37, 99, 235, 0.16); border: 1px solid rgba(59, 130, 246, 0.45); "
@@ -8400,7 +8410,7 @@ class HermesDesktop(QMainWindow):
         header_row.addWidget(summary_card)
         main_layout.addLayout(header_row)
 
-        sub_header = QLabel("Klip yang Berhasil Diekspor (Klik 🎵 TikTok pada kartu untuk Upload Langsung / Masuk Antrean FYP)")
+        sub_header = QLabel("Klip yang Berhasil Diekspor (Gunakan tombol TikTok pada kartu untuk Upload Langsung / Masuk Antrean)")
         sub_header.setStyleSheet("font-size: 13px; font-weight: 600; color: #E2E8F0;")
         main_layout.addWidget(sub_header)
 
@@ -8421,14 +8431,14 @@ class HermesDesktop(QMainWindow):
         btn_center_box.setSpacing(12)
         btn_center_box.addStretch()
 
-        self.open_results_button = QPushButton("📂 BUKA FOLDER HASIL")
+        self.open_results_button = QPushButton("Buka Folder Hasil")
         self.open_results_button.setObjectName("primary")
         self.open_results_button.setMinimumHeight(46)
         self.open_results_button.setStyleSheet("font-size: 13px; font-weight: 800; padding: 0 28px; border-radius: 10px;")
         self.open_results_button.clicked.connect(self.open_results_folder)
         btn_center_box.addWidget(self.open_results_button)
 
-        self.btn_batch_tiktok_queue = QPushButton("📅 Masukkan Semua ke Antrean TikTok (Jam Ramai)")
+        self.btn_batch_tiktok_queue = QPushButton("Masukkan Semua ke Antrean TikTok (Jam Ramai)")
         self.btn_batch_tiktok_queue.setMinimumHeight(46)
         self.btn_batch_tiktok_queue.setStyleSheet("""
             QPushButton {
@@ -8448,7 +8458,7 @@ class HermesDesktop(QMainWindow):
         self.btn_batch_tiktok_queue.clicked.connect(self.batch_queue_all_clips_to_tiktok)
         btn_center_box.addWidget(self.btn_batch_tiktok_queue)
 
-        self.btn_login_yt = QPushButton("🔑 Login YouTube Studio")
+        self.btn_login_yt = QPushButton("Login YouTube Studio")
         self.btn_login_yt.setMinimumHeight(46)
         self.btn_login_yt.setStyleSheet("""
             QPushButton {
@@ -8720,7 +8730,7 @@ class HermesDesktop(QMainWindow):
             self.set_review_unlocked(False)
         if hasattr(self, "review_lock_desc"):
             self.review_lock_desc.setText(
-                "⏳ <b>Sedang Memproses Pembuatan Klip di Studio Klip...</b><br>"
+                "<b>Sedang Memproses Pembuatan Klip di Studio Klip...</b><br>"
                 "Tunggu sebentar hingga proses pemotongan & pembuatan subtitle selesai, lalu halaman Review & Trim ini akan otomatis terbuka penuh."
             )
         self.tabs.setTabEnabled(4, False)
@@ -8762,7 +8772,7 @@ class HermesDesktop(QMainWindow):
             eff_export_pct = overall_pct if overall_pct > 0 else sub_pct
             self.animate_progress_bar(self.review_export_bar, eff_export_pct)
             self.review_export_pct_lbl.setText(f"{eff_export_pct}%")
-            self.review_export_status_lbl.setText(f"⏳ {msg}")
+            self.review_export_status_lbl.setText(msg)
             self.review_export_detail_lbl.setText(sub_msg or f"Progress render video: {eff_export_pct}% — Mohon tunggu hingga selesai...")
 
         if hasattr(self, "dl_progress_card") and self.dl_progress_card.isVisible():
@@ -8924,7 +8934,7 @@ class HermesDesktop(QMainWindow):
         manual_count = sum(1 for clip in job["clips"] if clip.get("source") == "manual")
         total_clips = len(job["clips"])
         self.review_clip_count_label.setText(f"{total_clips} Klip Siap Direview ({ai_count} Otomatis AI · {manual_count} Manual)")
-        self.review_status.setText(f"✨ {ai_count} klip AI & {manual_count} klip manual siap dirender")
+        self.review_status.setText(f"{ai_count} klip AI & {manual_count} klip manual siap dirender")
         self.active_transcript = self.build_timed_cues(job.get("transcript") or [])
         subtitles_available = bool(self.current_options and self.current_options.subtitle_style != "none")
         self.source_subtitle_overlay.setVisible(subtitles_available and bool(self.active_transcript))
@@ -9145,11 +9155,11 @@ class HermesDesktop(QMainWindow):
                 start_sec = clips[idx].get("start", 0.0)
                 self.seek_review_video(int(start_sec * 1000))
                 if hasattr(self, "review_status"):
-                    self.review_status.setText(f"⏮ Putaran dikembalikan ke awal klip #{idx + 1:02d} ({format_time(start_sec)})")
+                    self.review_status.setText(f"Putaran dikembalikan ke awal klip #{idx + 1:02d} ({format_time(start_sec)})")
                 return
         self.seek_review_video(0)
         if hasattr(self, "review_status"):
-            self.review_status.setText("⏮ Putaran dikembalikan ke detik 00:00")
+            self.review_status.setText("Putaran dikembalikan ke detik 00:00")
 
     def toggle_review_zoom(self) -> None:
         self.cycle_review_ratio()
@@ -9309,7 +9319,7 @@ class HermesDesktop(QMainWindow):
         if hasattr(self, "review_export_progress_card"):
             self.review_export_bar.setValue(0)
             self.review_export_pct_lbl.setText("0%")
-            self.review_export_status_lbl.setText("⏳ Menyiapkan Ekspor & Render Video Final...")
+            self.review_export_status_lbl.setText("Menyiapkan Ekspor & Render Video Final...")
             self.review_export_detail_lbl.setText("Menggabungkan pemotongan klip, framing kamera, dan subtitle ke file MP4...")
             self.review_export_progress_card.setVisible(True)
         self.set_create_inputs_locked(True)
@@ -9395,7 +9405,7 @@ class HermesDesktop(QMainWindow):
                 QMessageBox.information(
                     self,
                     "Antrean Jam Ramai TikTok",
-                    f"✅ {added_count} klip berhasil dimasukkan ke Antrean Jam Ramai FYP!\n\n"
+                    f"{added_count} klip berhasil dimasukkan ke Antrean Jam Ramai FYP!\n\n"
                     "Fitur otomatis yang diterapkan:\n"
                     "• Jadwal fleksibel mengikuti jam trafik tertinggi (Siang 11:30–13:30, Sore 16:30–18:15, Prime Time 19:15–22:30)\n"
                     "• Frame Sampul (Cover) otomatis di detik 1.8s\n"
@@ -9415,12 +9425,12 @@ class HermesDesktop(QMainWindow):
     def trigger_youtube_login(self) -> None:
         if hasattr(self, "btn_login_yt"):
             self.btn_login_yt.setEnabled(False)
-            self.btn_login_yt.setText("⏳ Membuka Login...")
+            self.btn_login_yt.setText("Membuka Login...")
         self._yt_login_worker = YouTubeLoginWorker()
         def on_done(ok: bool, msg: str):
             if hasattr(self, "btn_login_yt"):
                 self.btn_login_yt.setEnabled(True)
-                self.btn_login_yt.setText("🔑 Login YouTube Studio")
+                self.btn_login_yt.setText("Login YouTube Studio")
             if ok:
                 QMessageBox.information(self, "Login YouTube", msg)
             else:

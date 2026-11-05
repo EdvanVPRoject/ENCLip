@@ -1,6 +1,6 @@
 #define MyAppName "ENCLip Studio"
-#define MyAppVersion "2.0.0"
-#define MyAppPublisher "ENCLip"
+#define MyAppVersion "3.0.0"
+#define MyAppPublisher "Edvan"
 #define MyAppExeName "ENCLip.exe"
 #define SourceDir "D:\ProjekAntigravity\ENCLip\portable"
 
@@ -13,8 +13,9 @@ DefaultDirName={autopf}\{#MyAppName}
 UninstallDisplayIcon={app}\{#MyAppExeName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
+LicenseFile=D:\ProjekAntigravity\ENCLip\LICENSE
 OutputDir=D:\ProjekAntigravity\ENCLip\Native_Installer
-OutputBaseFilename=ENCLip_Setup_v2.0_Terbaru
+OutputBaseFilename=ENCLip_Setup_v3.0
 SetupIconFile=D:\ProjekAntigravity\ENCLip\Desktop_UI\icon.ico
 Compression=lzma2/fast
 SolidCompression=yes

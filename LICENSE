@@ -1,18 +1,23 @@
-Copyright (c) 2026 Edvan
+CUSTOM PROPRIETARY & ATTRIBUTION LICENSE
 
-PROPRIETARY SOFTWARE LICENSE
+Copyright (c) 2026 Edvan. All rights reserved.
 
-This repository and its original source code are proprietary.
+Perangkat lunak ini dimiliki secara eksklusif oleh Edvan ("Pemegang Hak Cipta").
 
-No permission is granted to copy, modify, merge, publish, distribute,
-sublicense, sell, or create derivative works from the original source code,
-whether in source or binary form, without prior written permission from the
-copyright holder.
+Dengan mengakses, mengunduh, melihat, atau menggunakan kode sumber maupun biner dari repositori ini, Anda menyetujui ketentuan berikut:
 
-Viewing the source code for personal evaluation and security review is
-permitted. Any other use requires written authorization from the copyright
-holder.
+1. KEPEMILIKAN EKSKLUSIF (EXCLUSIVE OWNERSHIP)
+Seluruh hak cipta, kepemilikan intelektual, dan kode orisinal dalam proyek ENCLip ini adalah hak milik tunggal Edvan.
 
-This license applies only to the original files in this repository. Third-party
-libraries, models, media codecs, and other external components remain subject
-to their own licenses and terms.
+2. PERSYARATAN PENGEMBANGAN & KARYA TURUNAN (DEVELOPMENT & ATTRIBUTION)
+Setiap pihak yang ingin mempelajari, menggunakan, memodifikasi, mengadaptasi, mengembangkan lebih lanjut, atau membuat karya turunan (fork / derivative works) dari perangkat lunak ini WAJIB memenuhi syarat mutlak berikut:
+- WAJIB mencantumkan nama "Edvan" secara jelas dan eksplisit sebagai pencipta orisinal (Original Creator / Author).
+- Atribusi nama Edvan dan teks lisensi ini WAJIB disertakan pada seluruh salinan kode sumber, berkas README, dokumentasi proyek, serta tampilan kredit/tentang pada antarmuka aplikasi.
+- Dilarang menghapus, mengaburkan, atau mengubah tanda hak cipta dan atribusi kepada Edvan.
+
+3. PEMBATASAN (RESTRICTIONS)
+- Dilarang mengklaim perangkat lunak ini atau bagian daripadanya sebagai karya orisinal milik pihak lain.
+- Distribusi ulang atau penggunaan komersial tanpa mencantumkan kredit kepada Edvan dilarang keras.
+
+4. PENAFIAN TANGGUNG JAWAB (DISCLAIMER)
+PERANGKAT LUNAK INI DISEDIAKAN "SEBAGAIMANA ADANYA" (AS IS), TANPA JAMINAN DALAM BENTUK APA PUN BAIK TERSURAT MAUPUN TERSIRAT. DALAM KEADAAN APA PUN, PEMEGANG HAK CIPTA (EDVAN) TIDAK BERTANGGUNG JAWAB ATAS KLAIM, KERUSAKAN, ATAU KEWAJIBAN LAINNYA YANG TIMBUL DARI PENGGUNAAN PERANGKAT LUNAK INI.

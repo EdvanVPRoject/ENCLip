@@ -151,11 +151,14 @@ ENCLip/
 ├── START_ENCLIP_APP.bat         # Pintasan peluncur aplikasi desktop
 ├── requirements.txt             # Daftar dependensi Python
 ├── .env.example                 # Template variabel lingkungan
-├── LICENSE                      # Lisensi open-source (MIT License)
+├── LICENSE                      # Lisensi kepemilikan eksklusif & atribusi (Edvan)
 └── README.md                    # Dokumentasi resmi proyek
 ```
 
 ---
 
-## Lisensi
-Proyek ini didistribusikan di bawah lisensi [MIT License](LICENSE). Bebas digunakan, dimodifikasi, dan dikembangkan untuk kebutuhan personal maupun komersial.
+## Lisensi & Atribusi
+
+Proyek ini dimiliki secara eksklusif oleh **Edvan**. Seluruh hak cipta dilindungi undang-undang.
+
+Jika Anda ingin menggunakan, memodifikasi, mengadaptasi, atau mengembangkan lebih lanjut proyek ini (fork / derivative works), Anda **wajib mencantumkan nama Edvan sebagai pencipta asli** di dalam kode sumber, dokumentasi, dan antarmuka aplikasi Anda. Rincian ketentuan lisensi dapat dilihat pada berkas [LICENSE](LICENSE).
